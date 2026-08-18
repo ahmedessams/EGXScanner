@@ -391,6 +391,68 @@ const FULL_MARKET_COLUMNS = [
   { key: 'eligible', label: 'Eligible', render: (r) => r.eligible ? '✓' : '—', sortKey: null },
 ];
 
+// Full Market's on-screen table above is intentionally a curated subset —
+// but the /stocks API (v_full_market) returns every indicator computed for
+// a stock, so CSV export uses this fuller list instead of the on-screen
+// columns for that tab (see exportCsv()).
+const FULL_MARKET_EXPORT_COLUMNS = [
+  { key: 'symbol', label: 'Symbol' },
+  { key: 'name', label: 'Name' },
+  { key: 'sector', label: 'Sector' },
+  { key: 'trading_date', label: 'Trading Date' },
+  { key: 'open', label: 'Open' },
+  { key: 'high', label: 'High' },
+  { key: 'low', label: 'Low' },
+  { key: 'close', label: 'Close' },
+  { key: 'change_pct', label: 'Chg %' },
+  { key: 'volume', label: 'Volume' },
+  { key: 'traded_value', label: 'Traded Value' },
+  { key: 'avg_volume20', label: 'Avg Vol 20' },
+  { key: 'rvol20', label: 'RVOL20' },
+  { key: 'rvol50', label: 'RVOL50' },
+  { key: 'rsi14', label: 'RSI14' },
+  { key: 'ema9', label: 'EMA9' },
+  { key: 'ema20', label: 'EMA20' },
+  { key: 'ema50', label: 'EMA50' },
+  { key: 'ema200', label: 'EMA200' },
+  { key: 'macd', label: 'MACD' },
+  { key: 'macd_signal', label: 'MACD Signal' },
+  { key: 'macd_histogram', label: 'MACD Histogram' },
+  { key: 'atr14', label: 'ATR14' },
+  { key: 'short_term_trend', label: 'Short-Term Trend' },
+  { key: 'medium_term_trend', label: 'Medium-Term Trend' },
+  { key: 'long_term_trend', label: 'Long-Term Trend' },
+  { key: 'support1', label: 'Support 1' },
+  { key: 'support2', label: 'Support 2' },
+  { key: 'support3', label: 'Support 3' },
+  { key: 'resistance1', label: 'Resistance 1' },
+  { key: 'resistance2', label: 'Resistance 2' },
+  { key: 'resistance3', label: 'Resistance 3' },
+  { key: 'accumulation_score', label: 'Accumulation Score' },
+  { key: 'breakout_score', label: 'Breakout Score' },
+  { key: 'momentum_score', label: 'Momentum Score' },
+  { key: 'pullback_score', label: 'Pullback Score' },
+  { key: 'reversal_score', label: 'Reversal Score' },
+  { key: 'overall_score', label: 'Overall Score' },
+  { key: 'setup_type', label: 'Setup' },
+  { key: 'overall_rank', label: 'Overall Rank' },
+  { key: 'eligible', label: 'Eligible' },
+  { key: 'entry_price', label: 'Entry' },
+  { key: 'invalidation_price', label: 'Invalidation' },
+  { key: 'target1', label: 'Target 1' },
+  { key: 'target2', label: 'Target 2' },
+  { key: 'target3', label: 'Target 3' },
+  { key: 'risk_reward_t1', label: 'R:R T1' },
+  { key: 'risk_reward_t2', label: 'R:R T2' },
+  { key: 'risk_reward_t3', label: 'R:R T3' },
+  { key: 'target1_gain_pct', label: 'Gain % T1' },
+  { key: 'target2_gain_pct', label: 'Gain % T2' },
+  { key: 'target3_gain_pct', label: 'Gain % T3' },
+  { key: 'target1_estimated_days', label: 'Est. Days T1' },
+  { key: 'target2_estimated_days', label: 'Est. Days T2' },
+  { key: 'target3_estimated_days', label: 'Est. Days T3' },
+];
+
 function esc(s) { return (s ?? '').toString().replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmt(v, d = 2) { return (v === null || v === undefined || v === '') ? '—' : Number(v).toFixed(d); }
 function fmtx(v) { return (v === null || v === undefined || v === '') ? '—' : Number(v).toFixed(2) + 'x'; }
@@ -573,7 +635,7 @@ function csvEscape(v) {
 }
 
 function exportCsv() {
-  const cols = visibleColumnsForTab();
+  const cols = state.tab === 'full' ? FULL_MARKET_EXPORT_COLUMNS : visibleColumnsForTab();
   const rows = filteredRows();
   const lines = [cols.map((c) => csvEscape(c.label)).join(',')];
   rows.forEach((r) => {
