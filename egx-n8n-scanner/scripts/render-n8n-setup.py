@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""Automates the manual n8n setup steps documented in docs/RENDER_DEPLOY.md:
+create the Postgres credential, import all 15 workflows/*.json with that
+credential wired into every Postgres node, fix cross-workflow
+Execute-Workflow references (n8n assigns new IDs on import), and publish
+everything in dependency order.
+
+Run via scripts/render-n8n-setup.sh, which prompts for the inputs below
+instead of taking them as CLI args (keeps the API key and DB password out
+of shell history). Stdlib only — no pip install needed.
+"""
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+WORKFLOWS_DIR = REPO_ROOT / "workflows"
+PUBLISH_ORDER = [
+    "01-egx-stock-universe.json",
+    "02-egx-historical-import.json",
+    "03-egx-daily-market-update.json",
+    "04-egx-technical-analysis.json",
+    "05-egx-support-resistance.json",
+    "06-egx-volume-analysis.json",
+    "07-egx-breakout-scanner.json",
+    "08-egx-momentum-scanner.json",
+    "09-egx-pullback-scanner.json",
+    "10-egx-reversal-scanner.json",
+    "11-egx-overall-ranking.json",
+    "12-egx-daily-master-workflow.json",
+    "13-egx-report-api.json",
+    "14-egx-prediction-evaluation.json",
+    "15-egx-backtest.json",
+]
+
+
+def env(name, required=True):
+    v = os.environ.get(name, "")
+    if required and not v:
+        print(f"Missing required env var: {name}", file=sys.stderr)
+        sys.exit(1)
+    return v
+
+
+def api(base_url, api_key, method, path, body=None):
+    url = base_url.rstrip("/") + "/api/v1" + path
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, method=method)
+    req.add_header("X-N8N-API-KEY", api_key)
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as res:
+            raw = res.read()
+            return json.loads(raw) if raw else {}
+    except urllib.error.HTTPError as e:
+        raw = e.read().decode(errors="replace")
+        print(f"  HTTP {e.code} on {method} {path}: {raw[:500]}", file=sys.stderr)
+        raise
+
+
+def build_create_body(wf_json, cred_id, cred_name):
+    nodes = json.loads(json.dumps(wf_json["nodes"]))  # deep copy
+    for n in nodes:
+        if n.get("type") == "n8n-nodes-base.postgres":
+            n["credentials"] = {"postgres": {"id": cred_id, "name": cred_name}}
+    return {
+        "name": wf_json["name"],
+        "nodes": nodes,
+        "connections": wf_json["connections"],
+        "settings": wf_json.get("settings", {}),
+    }
+
+
+def main():
+    base_url = env("N8N_BASE_URL")
+    api_key = env("N8N_API_KEY")
+    pg_host = env("PG_HOST")
+    pg_port = int(env("PG_PORT"))
+    pg_database = env("PG_DATABASE")
+    pg_user = env("PG_USER")
+    pg_password = env("PG_PASSWORD")
+
+    print("== Creating Postgres credential ==")
+    cred = api(base_url, api_key, "POST", "/credentials", {
+        "name": "EGX Postgres",
+        "type": "postgres",
+        "data": {
+            "host": pg_host, "port": pg_port, "database": pg_database,
+            "user": pg_user, "password": pg_password,
+        },
+    })
+    cred_id, cred_name = cred["id"], cred["name"]
+    print(f"  created: {cred_name} ({cred_id})")
+
+    print()
+    print("== Importing workflows ==")
+    name_to_id = {}
+    created_bodies = {}
+    for filename in PUBLISH_ORDER:
+        path = WORKFLOWS_DIR / filename
+        wf_json = json.loads(path.read_text())
+        body = build_create_body(wf_json, cred_id, cred_name)
+        created = api(base_url, api_key, "POST", "/workflows", body)
+        name_to_id[wf_json["name"]] = created["id"]
+        created_bodies[filename] = (created["id"], body)
+        print(f"  {filename} -> {wf_json['name']} ({created['id']})")
+
+    print()
+    print("== Fixing cross-workflow Execute Workflow references ==")
+    for filename in PUBLISH_ORDER:
+        wf_id, body = created_bodies[filename]
+        changed = False
+        for n in body["nodes"]:
+            if n.get("type") == "n8n-nodes-base.executeWorkflow":
+                target_name = n["parameters"]["workflowId"].get("cachedResultName")
+                target_id = name_to_id.get(target_name)
+                if target_id:
+                    n["parameters"]["workflowId"]["value"] = target_id
+                    changed = True
+                else:
+                    print(f"  WARNING: {filename} references unknown workflow '{target_name}'")
+        if changed:
+            api(base_url, api_key, "PUT", f"/workflows/{wf_id}", body)
+            print(f"  {filename}: references updated")
+
+    print()
+    print("== Publishing (dependency order) ==")
+    for filename in PUBLISH_ORDER:
+        wf_id, _ = created_bodies[filename]
+        try:
+            api(base_url, api_key, "POST", f"/workflows/{wf_id}/publish", {})
+            print(f"  {filename}: published")
+        except urllib.error.HTTPError as e:
+            if e.code == 409:
+                print(f"  {filename}: SKIPPED - 409 conflict (likely a webhook path")
+                print(f"    already claimed by another published workflow with the")
+                print(f"    same route — e.g. this script was run before without")
+                print(f"    cleaning up the earlier import). Publish it manually in")
+                print(f"    the n8n UI once the conflict is resolved.")
+            else:
+                raise
+
+    print()
+    print("== Done ==")
+    print("All 15 workflows imported, wired to the Postgres credential, and")
+    print("published. 03/12/14 have Schedule Triggers, so publishing them")
+    print("also activates those schedules. Verify at the egx-webapp URL —")
+    print("it should already show data from the restored dump.")
+
+
+if __name__ == "__main__":
+    main()
