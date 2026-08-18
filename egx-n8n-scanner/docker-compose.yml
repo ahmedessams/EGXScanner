@@ -1,0 +1,108 @@
+# EGX N8N Scanner - local stack (n8n + PostgreSQL)
+# Copy env.example.txt to .env and fill in values before running:
+#   docker compose up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: egx-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-egx_scanner}
+      POSTGRES_USER: ${POSTGRES_USER:-egx_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      TZ: ${TZ:-Africa/Cairo}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - egx_postgres_data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-egx_user} -d ${POSTGRES_DB:-egx_scanner}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: egx-n8n
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${N8N_PORT:-5678}:5678"
+    environment:
+      TZ: ${TZ:-Africa/Cairo}
+      GENERIC_TIMEZONE: ${TZ:-Africa/Cairo}
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:5678/}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?N8N_ENCRYPTION_KEY is required}
+      # NOTE: n8n >= 1.x ignores basic auth and always requires owner-account
+      # setup (email + password) on first launch via the UI or POST
+      # /rest/owner/setup — these two vars are kept for older/pinned n8n
+      # images but won't apply on current "latest".
+      N8N_BASIC_AUTH_ACTIVE: ${N8N_BASIC_AUTH_ACTIVE:-true}
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:?N8N_BASIC_AUTH_PASSWORD is required}
+      # REQUIRED: every Code node in this project reads configuration via
+      # $env.* (API_BATCH_SIZE, MIN_AVG_TRADED_VALUE, etc. — spec section 37).
+      # n8n blocks $env access inside Code nodes by default; without this,
+      # every Code node that touches $env fails with "access to env vars
+      # denied".
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+
+      # Scanner-specific environment variables consumed by workflow Code/HTTP nodes.
+      # See .env.example for the full list and documentation.
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-egx_scanner}
+      POSTGRES_USER: ${POSTGRES_USER:-egx_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+
+      MARKET_DATA_PROVIDER: ${MARKET_DATA_PROVIDER:-eodhd}
+      MARKET_API_BASE_URL: ${MARKET_API_BASE_URL:-}
+      MARKET_API_KEY: ${MARKET_API_KEY:-}
+      EGX_EXCHANGE_CODE: ${EGX_EXCHANGE_CODE:-EGX}
+
+      HISTORICAL_DAYS: ${HISTORICAL_DAYS:-750}
+      API_BATCH_SIZE: ${API_BATCH_SIZE:-10}
+      API_DELAY_MS: ${API_DELAY_MS:-500}
+
+      MIN_AVG_TRADED_VALUE: ${MIN_AVG_TRADED_VALUE:-500000}
+      MIN_AVG_VOLUME: ${MIN_AVG_VOLUME:-50000}
+      MIN_ACTIVE_DAYS_20: ${MIN_ACTIVE_DAYS_20:-15}
+
+      DAILY_SCAN_HOUR: ${DAILY_SCAN_HOUR:-15}
+      DAILY_SCAN_MINUTE: ${DAILY_SCAN_MINUTE:-30}
+
+      TOP_N: ${TOP_N:-10}
+
+      BREAKOUT_MIN_RVOL: ${BREAKOUT_MIN_RVOL:-1.5}
+      BREAKOUT_STRONG_RVOL: ${BREAKOUT_STRONG_RVOL:-2}
+      BREAKOUT_DISTANCE_PCT: ${BREAKOUT_DISTANCE_PCT:-1.5}
+
+      SUPPORT_RESISTANCE_LOOKBACK: ${SUPPORT_RESISTANCE_LOOKBACK:-150}
+
+      REPORT_WEBHOOK_SECRET: ${REPORT_WEBHOOK_SECRET:?REPORT_WEBHOOK_SECRET is required}
+    volumes:
+      - egx_n8n_data:/home/node/.n8n
+      - ./workflows:/home/node/workflows:ro
+      - ./code:/home/node/code:ro
+
+  webapp:
+    image: nginx:alpine
+    container_name: egx-webapp
+    restart: unless-stopped
+    depends_on:
+      - n8n
+    ports:
+      - "127.0.0.1:${WEBAPP_PORT:-8090}:80"
+    volumes:
+      - ./webapp:/usr/share/nginx/html:ro
+
+volumes:
+  egx_postgres_data:
+  egx_n8n_data:

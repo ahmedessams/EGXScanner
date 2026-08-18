@@ -1,0 +1,365 @@
+{
+  "name": "14 - EGX Prediction Evaluation",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -340
+      ],
+      "parameters": {
+        "content": "## 14 - EGX Prediction Evaluation\n\nFinds every scanner_results row that (a) hasn't been evaluated yet and (b) now HAS a subsequent trading session in `daily_prices` — i.e. only evaluates once the next session's real data exists, never before (spec section 30). Naturally idempotent and catches up on backlog regardless of when it's run, so schedule it daily alongside (or shortly after) the master workflow.\n\n`success` is defined as target1 reached without the invalidation price also being touched — daily OHLC can't tell us the INTRADAY order the two happened in, so this is a conservative best-effort reading, documented in docs/BACKTESTING.md.\n\nPass `{ \"runType\": \"BACKTEST\" }` when called from 15-egx-backtest to evaluate simulated runs instead of the default 'LIVE' runs.",
+        "height": 340,
+        "width": 520,
+        "color": 5
+      },
+      "id": "5d6eb9b4-0975-479d-8dd0-c5e78d59d33a"
+    },
+    {
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        0,
+        0
+      ],
+      "id": "c2bac4b0-85f5-4c67-b76a-76f5b7ca5e8c"
+    },
+    {
+      "name": "Schedule Trigger (Daily)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 22 * * 0-4"
+            }
+          ]
+        }
+      },
+      "position": [
+        260,
+        0
+      ],
+      "id": "7ae1cd63-d604-498f-a8c0-2275d3827a12"
+    },
+    {
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "position": [
+        520,
+        0
+      ],
+      "id": "660710f3-f5e3-4d72-b7a4-55e99986a157"
+    },
+    {
+      "name": "Resolve Run Type",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// the trigger lookup THROWS if that trigger never executed (e.g. this workflow\n// run via Manual Trigger alone) — confirmed via live E2E testing (this exact\n// node crashed the workflow the first time it was run this way). try/catch\n// makes \"never executed\" and \"executed with zero items\" behave the same.\nlet trigger = {};\ntry {\n  const triggerItems = $('When Executed by Another Workflow').all();\n  trigger = triggerItems.length ? triggerItems[0].json : {};\n} catch (e) { trigger = {}; }\nreturn [{ json: { runType: trigger.runType || 'LIVE' } }];"
+      },
+      "position": [
+        780,
+        0
+      ],
+      "id": "b94d3907-cf5e-4603-9680-73706109ddd2"
+    },
+    {
+      "name": "Load Evaluable Scanner Results",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT r.id AS scanner_result_id, r.stock_id, run.trading_date::text AS scan_date,\n       r.target1::float8 AS target1, r.target2::float8 AS target2, r.target3::float8 AS target3,\n       r.invalidation_price::float8 AS invalidation_price\nFROM scanner_results r\nJOIN scanner_runs run ON run.id = r.scanner_run_id\nLEFT JOIN prediction_evaluation pe ON pe.scanner_result_id = r.id\nWHERE pe.scanner_result_id IS NULL\n  AND run.run_type = $1\n  AND EXISTS (\n    SELECT 1 FROM daily_prices dp\n    WHERE dp.stock_id = r.stock_id AND dp.trading_date > run.trading_date\n  )\nORDER BY run.trading_date ASC\nLIMIT 5000;",
+        "options": {
+          "queryReplacement": "={{ [$json.runType] }}"
+        }
+      },
+      "executeOnce": true,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "3da5b7ee-4362-4ee5-8468-a20c03e5806c"
+    },
+    {
+      "name": "Load Next Session Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH next_session AS (\n  SELECT trading_date, open, high, low, close\n  FROM daily_prices WHERE stock_id = $1 AND trading_date > $2\n  ORDER BY trading_date ASC LIMIT 1\n),\nprev_close AS (\n  SELECT close FROM daily_prices WHERE stock_id = $1 AND trading_date = $2\n)\nSELECT ns.trading_date::text AS next_trading_date, ns.open::float8 AS next_open, ns.high::float8 AS next_high,\n       ns.low::float8 AS next_low, ns.close::float8 AS next_close, pc.close::float8 AS previous_close\nFROM next_session ns, prev_close pc;",
+        "options": {
+          "queryReplacement": "={{ [$json.stock_id, $json.scan_date] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1300,
+        0
+      ],
+      "id": "b5bb7065-5679-43eb-87f4-a62c18ad37ac"
+    },
+    {
+      "name": "Compute Evaluation Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "function isNumber(v) { return typeof v === 'number' && Number.isFinite(v); }\nfunction round(v, d) { return isNumber(v) ? Math.round(v * Math.pow(10, d)) / Math.pow(10, d) : null; }\nfunction pctChangeSafe(from, to) {\n  if (!isNumber(from) || !isNumber(to) || from === 0) return null;\n  return ((to - from) / from) * 100;\n}\n\n// Runs once for the WHOLE batch — one item per evaluable scanner_result\n// arrives here from \"Load Next Session Data\". Must loop $input.all()\n// explicitly (same bug pattern found and fixed across 04/05/06/07-10/11 via\n// live E2E testing). itemMatching(i) pairs each row back to its scanner_result.\n\nconst items = $input.all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  let original;\n  try { original = $('Load Evaluable Scanner Results').itemMatching(i).json; } catch (e) { continue; }\n  const row = items[i].json;\n\n  if (!row || !isNumber(row.next_close)) {\n    out.push({ json: { scannerResultId: original.scanner_result_id, _skip: true } });\n    continue;\n  }\n\n  const returnOpenToClosePct = round(pctChangeSafe(row.next_open, row.next_close), 4);\n  const returnPreviousCloseToClosePct = round(pctChangeSafe(row.previous_close, row.next_close), 4);\n  const mfePct = isNumber(row.previous_close) && row.previous_close > 0\n    ? round(((row.next_high - row.previous_close) / row.previous_close) * 100, 4) : null;\n  const maePct = isNumber(row.previous_close) && row.previous_close > 0\n    ? round(((row.next_low - row.previous_close) / row.previous_close) * 100, 4) : null;\n\n  const target1Hit = isNumber(original.target1) ? row.next_high >= original.target1 : null;\n  const target2Hit = isNumber(original.target2) ? row.next_high >= original.target2 : null;\n  const target3Hit = isNumber(original.target3) ? row.next_high >= original.target3 : null;\n  const stopHit = isNumber(original.invalidation_price) ? row.next_low <= original.invalidation_price : null;\n\n  const success = target1Hit !== null\n    ? (target1Hit === true && stopHit !== true)\n    : (returnPreviousCloseToClosePct !== null ? returnPreviousCloseToClosePct > 0 : null);\n\n  out.push({ json: {\n    scannerResultId: original.scanner_result_id,\n    nextTradingDate: row.next_trading_date,\n    nextOpen: row.next_open, nextHigh: row.next_high, nextLow: row.next_low, nextClose: row.next_close,\n    returnOpenToClosePct, returnPreviousCloseToClosePct, mfePct, maePct,\n    target1Hit, target2Hit, target3Hit, stopHit, success,\n    _skip: false,\n  } });\n}\n\nreturn out;"
+      },
+      "position": [
+        1560,
+        0
+      ],
+      "id": "7f7f2a07-1a1d-4722-975a-a2a85e851791"
+    },
+    {
+      "name": "Has Next Session Data?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "3cae2a02-30d6-45f2-936a-f4ed5deee366",
+              "leftValue": "={{ $json._skip }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1820,
+        0
+      ],
+      "id": "a51d4a28-ac96-4360-8a55-7cb38f932011"
+    },
+    {
+      "name": "Upsert Prediction Evaluation",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO prediction_evaluation (\n  scanner_result_id, next_trading_date, next_open, next_high, next_low, next_close,\n  return_open_to_close_pct, return_previous_close_to_close_pct,\n  maximum_favorable_excursion_pct, maximum_adverse_excursion_pct,\n  target1_hit, target2_hit, target3_hit, stop_hit, success, evaluated_at\n)\nVALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, now())\nON CONFLICT (scanner_result_id) DO UPDATE SET\n  next_trading_date = EXCLUDED.next_trading_date,\n  next_open = EXCLUDED.next_open, next_high = EXCLUDED.next_high,\n  next_low = EXCLUDED.next_low, next_close = EXCLUDED.next_close,\n  return_open_to_close_pct = EXCLUDED.return_open_to_close_pct,\n  return_previous_close_to_close_pct = EXCLUDED.return_previous_close_to_close_pct,\n  maximum_favorable_excursion_pct = EXCLUDED.maximum_favorable_excursion_pct,\n  maximum_adverse_excursion_pct = EXCLUDED.maximum_adverse_excursion_pct,\n  target1_hit = EXCLUDED.target1_hit, target2_hit = EXCLUDED.target2_hit, target3_hit = EXCLUDED.target3_hit,\n  stop_hit = EXCLUDED.stop_hit, success = EXCLUDED.success, evaluated_at = now();",
+        "options": {
+          "queryReplacement": "={{ [\n  $json.scannerResultId, $json.nextTradingDate, $json.nextOpen, $json.nextHigh, $json.nextLow, $json.nextClose,\n  $json.returnOpenToClosePct, $json.returnPreviousCloseToClosePct, $json.mfePct, $json.maePct,\n  $json.target1Hit, $json.target2Hit, $json.target3Hit, $json.stopHit, $json.success\n] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        2080,
+        0
+      ],
+      "id": "09df4d49-4654-4718-a061-a74984216c76"
+    },
+    {
+      "name": "Join Branches",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        2340,
+        0
+      ],
+      "id": "9b7df376-8c7c-4901-b3a5-2cdddcf7ab28"
+    },
+    {
+      "name": "Count Evaluated Rows",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*)::int AS evaluated_count FROM prediction_evaluation;",
+        "options": {}
+      },
+      "executeOnce": true,
+      "position": [
+        2600,
+        0
+      ],
+      "id": "80dfd348-5717-4dde-a506-73fcbf89510e"
+    },
+    {
+      "name": "Build Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const count = $input.first().json.evaluated_count;\nreturn [{ json: {\n  workflow: '14-egx-prediction-evaluation',\n  finishedAt: new Date().toISOString(),\n  totalEvaluatedRows: count,\n} }];"
+      },
+      "position": [
+        0,
+        200
+      ],
+      "id": "d4bbc6e5-a72d-44b1-bce9-d5ea6ee25d94"
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Resolve Run Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger (Daily)": {
+      "main": [
+        [
+          {
+            "node": "Resolve Run Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Resolve Run Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Run Type": {
+      "main": [
+        [
+          {
+            "node": "Load Evaluable Scanner Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Evaluable Scanner Results": {
+      "main": [
+        [
+          {
+            "node": "Load Next Session Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Next Session Data": {
+      "main": [
+        [
+          {
+            "node": "Compute Evaluation Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Evaluation Metrics": {
+      "main": [
+        [
+          {
+            "node": "Has Next Session Data?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Next Session Data?": {
+      "main": [
+        [
+          {
+            "node": "Upsert Prediction Evaluation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Join Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Prediction Evaluation": {
+      "main": [
+        [
+          {
+            "node": "Join Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Join Branches": {
+      "main": [
+        [
+          {
+            "node": "Count Evaluated Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Evaluated Rows": {
+      "main": [
+        [
+          {
+            "node": "Build Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "e5f20d6b-4b53-49fc-aee1-8398e916f99a",
+  "tags": []
+}

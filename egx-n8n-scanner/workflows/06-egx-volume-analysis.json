@@ -1,0 +1,360 @@
+{
+  "name": "06 - EGX Volume Analysis",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -300
+      ],
+      "parameters": {
+        "content": "## 06 - EGX Volume Analysis\n\nComputes volume_change_1d/20d/50d %, the accumulation score (code/volumeAnalysis.js), then cross-sectional market-wide rankings by raw volume, traded value, RVOL20 and RVOL50 (spec section 9). Requires 04-egx-technical-analysis to have already run for the same asOfDate (reads relative_volume20/50 + OBV from technical_analysis).\n\nPersists to `volume_analysis`, read by scanners 07-10 and 11-egx-overall-ranking.",
+        "height": 300,
+        "width": 480,
+        "color": 5
+      },
+      "id": "cd59aab2-b60f-42e7-85b7-d42974347df2"
+    },
+    {
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        0,
+        0
+      ],
+      "id": "de7ca2dd-64b3-459c-ad63-0ebcdefc5196"
+    },
+    {
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "position": [
+        260,
+        0
+      ],
+      "id": "f6381d0a-aa72-406e-9cbe-5742489d14d9"
+    },
+    {
+      "name": "Load Active Stocks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, symbol FROM stocks WHERE exchange = $1 AND active = TRUE ORDER BY symbol;",
+        "options": {
+          "queryReplacement": "={{ [$env.EGX_EXCHANGE_CODE || \"EGX\"] }}"
+        }
+      },
+      "executeOnce": true,
+      "position": [
+        520,
+        0
+      ],
+      "id": "df0d4052-0d58-449c-970b-d92c4567328c"
+    },
+    {
+      "name": "Attach As-Of Date",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// the trigger lookup THROWS if that trigger never executed (e.g. this workflow\n// run via Manual Trigger alone) — confirmed via live E2E testing. try/catch\n// makes \"never executed\" and \"executed with zero items\" behave the same.\nlet trigger = {};\ntry {\n  const triggerItems = $('When Executed by Another Workflow').all();\n  trigger = triggerItems.length ? triggerItems[0].json : {};\n} catch (e) { trigger = {}; }\nconst asOfDate = trigger.asOfDate || new Date().toISOString().slice(0, 10);\n\nreturn $input.all().map((item) => ({ json: { ...item.json, asOfDate } }));"
+      },
+      "position": [
+        780,
+        0
+      ],
+      "id": "8ce3a3f9-886d-46d8-a7c4-8df6d2a2b80f"
+    },
+    {
+      "name": "Load Per-Stock Volume Snapshot",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH window_rows AS (\n  SELECT dp.trading_date, dp.close, dp.high, dp.low, dp.volume, dp.traded_value, ta.obv\n  FROM daily_prices dp\n  LEFT JOIN technical_analysis ta ON ta.stock_id = dp.stock_id AND ta.trading_date = dp.trading_date\n  WHERE dp.stock_id = $1 AND dp.trading_date <= $2\n  ORDER BY dp.trading_date DESC\n  LIMIT 15\n),\ntoday AS (\n  SELECT dp.close, dp.volume, dp.traded_value,\n         ta.relative_volume20, ta.relative_volume50\n  FROM daily_prices dp\n  LEFT JOIN technical_analysis ta ON ta.stock_id = dp.stock_id AND ta.trading_date = dp.trading_date\n  WHERE dp.stock_id = $1 AND dp.trading_date = $2\n),\nyesterday AS (\n  SELECT dp.volume AS prev_volume\n  FROM daily_prices dp\n  WHERE dp.stock_id = $1 AND dp.trading_date < $2\n  ORDER BY dp.trading_date DESC LIMIT 1\n)\nSELECT\n  (SELECT json_agg(w.* ORDER BY w.trading_date ASC) FROM window_rows w) AS accumulation_window,\n  t.close::float8 AS close, t.volume::float8 AS volume, t.traded_value::float8 AS traded_value,\n  t.relative_volume20::float8 AS relative_volume20, t.relative_volume50::float8 AS relative_volume50,\n  y.prev_volume::float8 AS prev_volume\nFROM today t LEFT JOIN yesterday y ON TRUE;",
+        "options": {
+          "queryReplacement": "={{ [$json.id, $json.asOfDate] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1040,
+        0
+      ],
+      "id": "e265583d-1e45-4bb7-82c2-6af558b7dabc"
+    },
+    {
+      "name": "Compute Volume Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/**\n * helpers.js\n *\n * Shared low-level utilities used by every other module in /code and by the\n * equivalent n8n Code nodes. Pure functions only — no I/O, no n8n APIs — so\n * this file can be unit tested with plain `node` and pasted into a Code node\n * body unchanged (just drop the `module.exports` line).\n *\n * Candle shape (normalized, provider-agnostic — see docs/DATA_PROVIDER.md):\n * {\n *   symbol: \"COMI\",\n *   date: \"2026-08-18\",     // ISO date, trading session date\n *   open: 100.20,\n *   high: 103.10,\n *   low: 99.80,\n *   close: 102.70,\n *   volume: 12500000,\n *   tradedValue: 1270000000 // optional, derived if absent\n * }\n */\n\n/** Returns true if v is a finite, non-NaN number. */\nfunction isNumber(v) {\n  return typeof v === \"number\" && Number.isFinite(v);\n}\n\n/** Safe division: returns null instead of Infinity/NaN when denominator is unusable. */\nfunction safeDivide(numerator, denominator) {\n  if (!isNumber(numerator) || !isNumber(denominator) || denominator === 0) {\n    return null;\n  }\n  const result = numerator / denominator;\n  return Number.isFinite(result) ? result : null;\n}\n\n/** Rounds to `decimals` places, returns null for non-numeric input. */\nfunction round(value, decimals = 4) {\n  if (!isNumber(value)) return null;\n  const factor = Math.pow(10, decimals);\n  return Math.round(value * factor) / factor;\n}\n\n/** Percentage change from `from` to `to`. Returns null if from <= 0 or invalid. */\nfunction pctChange(from, to) {\n  if (!isNumber(from) || !isNumber(to) || from === 0) return null;\n  return ((to - from) / from) * 100;\n}\n\n/**\n * Validates a single raw candle. Returns { valid, errors[] }.\n * Mirrors the rules in spec section 31.\n */\nfunction validateCandle(candle) {\n  const errors = [];\n  if (!candle || typeof candle !== \"object\") {\n    return { valid: false, errors: [\"candle is not an object\"] };\n  }\n  const { symbol, date, open, high, low, close, volume } = candle;\n\n  if (!symbol || typeof symbol !== \"string\") errors.push(\"missing/invalid symbol\");\n  if (!date || Number.isNaN(Date.parse(date))) errors.push(\"missing/invalid date\");\n  if (!isNumber(open)) errors.push(\"open is not numeric\");\n  if (!isNumber(high)) errors.push(\"high is not numeric\");\n  if (!isNumber(low)) errors.push(\"low is not numeric\");\n  if (!isNumber(close)) errors.push(\"close is not numeric\");\n  if (!isNumber(volume)) errors.push(\"volume is not numeric\");\n\n  if (isNumber(open) && isNumber(high) && isNumber(low) && isNumber(close)) {\n    if (high < open) errors.push(\"high < open\");\n    if (high < close) errors.push(\"high < close\");\n    if (high < low) errors.push(\"high < low\");\n    if (low > open) errors.push(\"low > open\");\n    if (low > close) errors.push(\"low > close\");\n  }\n  if (isNumber(volume) && volume < 0) errors.push(\"negative volume\");\n  if (isNumber(close) && close <= 0) errors.push(\"close <= 0\");\n\n  return { valid: errors.length === 0, errors };\n}\n\n/**\n * Filters an array of raw candles into { valid[], invalid[] }.\n * `invalid` entries carry the original candle plus `.errors`.\n * Zero-volume candles are valid but flagged with a warning for downstream\n * consumers (suspicious, not necessarily wrong — EGX thin names do trade zero\n * volume on quiet sessions).\n */\nfunction validateCandles(candles) {\n  const valid = [];\n  const invalid = [];\n  for (const candle of candles || []) {\n    const { valid: ok, errors } = validateCandle(candle);\n    if (ok) {\n      valid.push({ ...candle, suspiciousZeroVolume: candle.volume === 0 });\n    } else {\n      invalid.push({ ...candle, errors });\n    }\n  }\n  return { valid, invalid };\n}\n\n/**\n * Removes duplicate candles (same symbol+date), keeping the last occurrence\n * (assumed most recent fetch / most authoritative).\n */\nfunction dedupeCandles(candles) {\n  const map = new Map();\n  for (const c of candles || []) {\n    map.set(`${c.symbol}::${c.date}`, c);\n  }\n  return Array.from(map.values());\n}\n\n/** Sorts candles ascending by date (oldest first) — mandatory before any TA calc. */\nfunction sortCandlesAscending(candles) {\n  return [...(candles || [])].sort((a, b) => new Date(a.date) - new Date(b.date));\n}\n\n/**\n * Derives tradedValue when the provider doesn't supply it directly.\n * Uses the session's typical price (H+L+C)/3 * volume as a reasonable proxy.\n */\nfunction deriveTradedValue(candle) {\n  if (isNumber(candle.tradedValue)) return candle.tradedValue;\n  if (!isNumber(candle.high) || !isNumber(candle.low) || !isNumber(candle.close) || !isNumber(candle.volume)) {\n    return null;\n  }\n  const typicalPrice = (candle.high + candle.low + candle.close) / 3;\n  return typicalPrice * candle.volume;\n}\n\n/** Simple mean of the last `n` numeric values in `arr` (nulls skipped). Returns null if insufficient data. */\nfunction meanOfLast(arr, n) {\n  if (!Array.isArray(arr) || arr.length < n) return null;\n  const slice = arr.slice(-n).filter(isNumber);\n  if (slice.length < n) return null;\n  return slice.reduce((a, b) => a + b, 0) / n;\n}\n\n/** Standard deviation of the last `n` numeric values. Returns null if insufficient data. */\nfunction stdDevOfLast(arr, n) {\n  const mean = meanOfLast(arr, n);\n  if (mean === null) return null;\n  const slice = arr.slice(-n);\n  const variance = slice.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / n;\n  return Math.sqrt(variance);\n}\n\n/** Clamps a number into [min, max]. */\nfunction clamp(value, min, max) {\n  if (!isNumber(value)) return min;\n  return Math.min(Math.max(value, min), max);\n}\n\n/**\n * Wraps arbitrary rows into n8n's expected item structure: [{ json: {...} }].\n * Accepts a single object or array of objects.\n */\nfunction toN8nItems(rows) {\n  const list = Array.isArray(rows) ? rows : [rows];\n  return list.map((json) => ({ json }));\n}\n\n/**\n * Reads all `json` payloads out of an n8n items array back into plain objects.\n */\nfunction fromN8nItems(items) {\n  return (items || []).map((item) => item.json);\n}\n\n// ---------------------------------------------------------------------\n\n/**\n * volumeAnalysis.js\n *\n * Volume-derived metrics that don't belong in the core indicators table:\n * day-over-day / vs-average volume change percentages, cross-sectional\n * market-wide rankings, and the accumulation signal (spec sections 9, 18).\n *\n * These operate on a \"market snapshot\" — an array of one row per stock for\n * the scan date, each row already carrying volume/rvol/OBV fields produced\n * by 04-egx-technical-analysis. Consumed by 06-egx-volume-analysis.\n */\n\n\n/**\n * Given a stock's own recent volume series (oldest -> newest, last element\n * = today), computes day-over-day and vs-N-day-average volume change %.\n * The N-day averages EXCLUDE today, matching the RVOL no-look-ahead rule.\n */\nfunction volumeChangeMetrics(volumes) {\n  const n = volumes.length;\n  if (n < 2) {\n    return { volumeChange1dPct: null, volumeChangeVs20dPct: null, volumeChangeVs50dPct: null };\n  }\n  const today = volumes[n - 1];\n  const yesterday = volumes[n - 2];\n  const volumeChange1dPct = round(pctChange(yesterday, today), 4);\n\n  const avg20 = averageExcludingLast(volumes, 20);\n  const avg50 = averageExcludingLast(volumes, 50);\n\n  return {\n    volumeChange1dPct,\n    volumeChangeVs20dPct: avg20 !== null ? round(pctChange(avg20, today), 4) : null,\n    volumeChangeVs50dPct: avg50 !== null ? round(pctChange(avg50, today), 4) : null,\n  };\n}\n\nfunction averageExcludingLast(values, period) {\n  const n = values.length;\n  if (n < period + 1) return null;\n  const window = values.slice(n - 1 - period, n - 1);\n  if (!window.every(isNumber)) return null;\n  return window.reduce((a, b) => a + b, 0) / period;\n}\n\n/**\n * Ranks a market snapshot by a numeric field, descending (rank 1 = highest).\n * Rows with a non-numeric value for `field` are ranked last (null rank).\n * Returns a NEW array (does not mutate input), each row gaining `<field>Rank`.\n */\nfunction rankBy(rows, field, rankFieldName = `${field}Rank`) {\n  const withValue = rows.filter((r) => isNumber(r[field]));\n  const withoutValue = rows.filter((r) => !isNumber(r[field]));\n\n  withValue.sort((a, b) => b[field] - a[field]);\n\n  const ranked = withValue.map((row, idx) => ({ ...row, [rankFieldName]: idx + 1 }));\n  const unranked = withoutValue.map((row) => ({ ...row, [rankFieldName]: null }));\n\n  return [...ranked, ...unranked];\n}\n\n/**\n * Produces the four ranking views required by spec section 9/36:\n * raw volume, traded value, RVOL20, RVOL50. Returns the same rows enriched\n * with all four rank fields simultaneously (single pass merge).\n */\nfunction buildVolumeRankings(rows) {\n  const byVolume = rankBy(rows, \"volume\", \"volumeRank\");\n  const byTradedValue = rankBy(rows, \"tradedValue\", \"tradedValueRank\");\n  const byRvol20 = rankBy(rows, \"relativeVolume20\", \"rvol20Rank\");\n  const byRvol50 = rankBy(rows, \"relativeVolume50\", \"rvol50Rank\");\n\n  const rankMap = new Map();\n  for (const row of rows) rankMap.set(row.stockId, { ...row });\n  for (const row of byVolume) rankMap.get(row.stockId).volumeRank = row.volumeRank;\n  for (const row of byTradedValue) rankMap.get(row.stockId).tradedValueRank = row.tradedValueRank;\n  for (const row of byRvol20) rankMap.get(row.stockId).rvol20Rank = row.rvol20Rank;\n  for (const row of byRvol50) rankMap.get(row.stockId).rvol50Rank = row.rvol50Rank;\n\n  return Array.from(rankMap.values());\n}\n\n/**\n * Accumulation score (spec section 18), 0-100. Rewards: rising OBV over the\n * lookback, relatively flat price action, expanding volume, closes near the\n * daily high, limited downside, and rising traded value. Every sub-factor is\n * normalized to [0,1] before weighting so the final score always lands in\n * [0,100] regardless of the instrument's price scale.\n *\n * `window` is an array of recent candles+obv (oldest -> newest), each shaped:\n * { close, high, low, volume, tradedValue, obv }. Needs >= 10 bars to be\n * meaningful; returns 0 with insufficient data rather than null, since\n * \"no evidence of accumulation\" is a valid, honest reading of thin data.\n */\nfunction calculateAccumulationScore(window) {\n  if (!Array.isArray(window) || window.length < 10) return 0;\n\n  const first = window[0];\n  const last = window[window.length - 1];\n\n  // 1) OBV trend: positive slope over the window is bullish accumulation.\n  const obvSlope = isNumber(first.obv) && isNumber(last.obv) && window.length > 1\n    ? (last.obv - first.obv) / window.length\n    : 0;\n  const obvScore = clamp(obvSlope > 0 ? 1 : 0, 0, 1);\n\n  // 2) Price flatness: small net price range relative to volatility suggests\n  // quiet absorption rather than a directional trend.\n  const closes = window.map((c) => c.close);\n  const priceRange = (Math.max(...closes) - Math.min(...closes)) / (closes[0] || 1);\n  const flatnessScore = clamp(1 - priceRange / 0.15, 0, 1); // <=15% range scores well\n\n  // 3) Volume expansion: compare first half vs second half average volume.\n  const mid = Math.floor(window.length / 2);\n  const firstHalfVol = average(window.slice(0, mid).map((c) => c.volume));\n  const secondHalfVol = average(window.slice(mid).map((c) => c.volume));\n  const volumeExpansionScore = firstHalfVol > 0\n    ? clamp((secondHalfVol - firstHalfVol) / firstHalfVol, 0, 1)\n    : 0;\n\n  // 4) Closes near daily high: average (close - low) / (high - low).\n  const closeStrengths = window\n    .filter((c) => c.high !== c.low)\n    .map((c) => (c.close - c.low) / (c.high - c.low));\n  const closeStrengthScore = closeStrengths.length\n    ? clamp(average(closeStrengths), 0, 1)\n    : 0.5;\n\n  // 5) Limited downside: fraction of bars that closed higher or flat vs prior bar.\n  let upOrFlatBars = 0;\n  for (let i = 1; i < window.length; i++) {\n    if (window[i].close >= window[i - 1].close) upOrFlatBars++;\n  }\n  const limitedDownsideScore = clamp(upOrFlatBars / (window.length - 1), 0, 1);\n\n  // 6) Traded value trend: rising average traded value across the window.\n  const firstHalfValue = average(window.slice(0, mid).map((c) => c.tradedValue || 0));\n  const secondHalfValue = average(window.slice(mid).map((c) => c.tradedValue || 0));\n  const tradedValueScore = firstHalfValue > 0\n    ? clamp((secondHalfValue - firstHalfValue) / firstHalfValue, 0, 1)\n    : 0;\n\n  const composite =\n    obvScore * 25 +\n    flatnessScore * 15 +\n    volumeExpansionScore * 25 +\n    closeStrengthScore * 15 +\n    limitedDownsideScore * 10 +\n    tradedValueScore * 10;\n\n  return round(clamp(composite, 0, 100), 2);\n}\n\nfunction average(arr) {\n  const valid = arr.filter(isNumber);\n  if (!valid.length) return 0;\n  return valid.reduce((a, b) => a + b, 0) / valid.length;\n}\n\n// Runs once for the WHOLE batch — one item per active stock arrives here\n// from \"Load Per-Stock Volume Snapshot\". Must loop $input.all() explicitly\n// (see 04-egx-technical-analysis for the same bug pattern, confirmed via\n// live E2E testing). itemMatching(i) pairs each row back to its stock.\n\nconst items = $input.all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  let original;\n  try { original = $('Attach As-Of Date').itemMatching(i).json; } catch (e) { continue; }\n  const stockId = original.id;\n  const symbol = original.symbol;\n  const asOfDate = original.asOfDate;\n\n  const row = items[i].json;\n  if (!row || row.volume === null || row.volume === undefined) {\n    out.push({ json: { stockId, symbol, tradingDate: asOfDate, skipped: true, reason: 'no price data for asOfDate' } });\n    continue;\n  }\n\n  const volumeChange1dPct = isNumber(row.prev_volume) ? round(pctChange(row.prev_volume, row.volume), 4) : null;\n  const volumeChangeVs20dPct = isNumber(row.relative_volume20) ? round((row.relative_volume20 - 1) * 100, 4) : null;\n  const volumeChangeVs50dPct = isNumber(row.relative_volume50) ? round((row.relative_volume50 - 1) * 100, 4) : null;\n\n  const window = (row.accumulation_window || []).map((c) => ({\n    close: c.close, high: c.high, low: c.low, volume: c.volume,\n    tradedValue: c.traded_value, obv: c.obv,\n  }));\n  const accumulationScore = calculateAccumulationScore(window);\n\n  out.push({ json: {\n    stockId, symbol, tradingDate: asOfDate,\n    volume: row.volume, tradedValue: row.traded_value,\n    relativeVolume20: row.relative_volume20, relativeVolume50: row.relative_volume50,\n    volumeChange1dPct, volumeChangeVs20dPct, volumeChangeVs50dPct,\n    accumulationScore, skipped: false,\n  } });\n}\n\nreturn out;"
+      },
+      "position": [
+        1300,
+        0
+      ],
+      "id": "8fbdbb93-77c0-4a08-b087-eff31ecbb1e8"
+    },
+    {
+      "name": "Build Market Rankings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/**\n * helpers.js\n *\n * Shared low-level utilities used by every other module in /code and by the\n * equivalent n8n Code nodes. Pure functions only — no I/O, no n8n APIs — so\n * this file can be unit tested with plain `node` and pasted into a Code node\n * body unchanged (just drop the `module.exports` line).\n *\n * Candle shape (normalized, provider-agnostic — see docs/DATA_PROVIDER.md):\n * {\n *   symbol: \"COMI\",\n *   date: \"2026-08-18\",     // ISO date, trading session date\n *   open: 100.20,\n *   high: 103.10,\n *   low: 99.80,\n *   close: 102.70,\n *   volume: 12500000,\n *   tradedValue: 1270000000 // optional, derived if absent\n * }\n */\n\n/** Returns true if v is a finite, non-NaN number. */\nfunction isNumber(v) {\n  return typeof v === \"number\" && Number.isFinite(v);\n}\n\n/** Safe division: returns null instead of Infinity/NaN when denominator is unusable. */\nfunction safeDivide(numerator, denominator) {\n  if (!isNumber(numerator) || !isNumber(denominator) || denominator === 0) {\n    return null;\n  }\n  const result = numerator / denominator;\n  return Number.isFinite(result) ? result : null;\n}\n\n/** Rounds to `decimals` places, returns null for non-numeric input. */\nfunction round(value, decimals = 4) {\n  if (!isNumber(value)) return null;\n  const factor = Math.pow(10, decimals);\n  return Math.round(value * factor) / factor;\n}\n\n/** Percentage change from `from` to `to`. Returns null if from <= 0 or invalid. */\nfunction pctChange(from, to) {\n  if (!isNumber(from) || !isNumber(to) || from === 0) return null;\n  return ((to - from) / from) * 100;\n}\n\n/**\n * Validates a single raw candle. Returns { valid, errors[] }.\n * Mirrors the rules in spec section 31.\n */\nfunction validateCandle(candle) {\n  const errors = [];\n  if (!candle || typeof candle !== \"object\") {\n    return { valid: false, errors: [\"candle is not an object\"] };\n  }\n  const { symbol, date, open, high, low, close, volume } = candle;\n\n  if (!symbol || typeof symbol !== \"string\") errors.push(\"missing/invalid symbol\");\n  if (!date || Number.isNaN(Date.parse(date))) errors.push(\"missing/invalid date\");\n  if (!isNumber(open)) errors.push(\"open is not numeric\");\n  if (!isNumber(high)) errors.push(\"high is not numeric\");\n  if (!isNumber(low)) errors.push(\"low is not numeric\");\n  if (!isNumber(close)) errors.push(\"close is not numeric\");\n  if (!isNumber(volume)) errors.push(\"volume is not numeric\");\n\n  if (isNumber(open) && isNumber(high) && isNumber(low) && isNumber(close)) {\n    if (high < open) errors.push(\"high < open\");\n    if (high < close) errors.push(\"high < close\");\n    if (high < low) errors.push(\"high < low\");\n    if (low > open) errors.push(\"low > open\");\n    if (low > close) errors.push(\"low > close\");\n  }\n  if (isNumber(volume) && volume < 0) errors.push(\"negative volume\");\n  if (isNumber(close) && close <= 0) errors.push(\"close <= 0\");\n\n  return { valid: errors.length === 0, errors };\n}\n\n/**\n * Filters an array of raw candles into { valid[], invalid[] }.\n * `invalid` entries carry the original candle plus `.errors`.\n * Zero-volume candles are valid but flagged with a warning for downstream\n * consumers (suspicious, not necessarily wrong — EGX thin names do trade zero\n * volume on quiet sessions).\n */\nfunction validateCandles(candles) {\n  const valid = [];\n  const invalid = [];\n  for (const candle of candles || []) {\n    const { valid: ok, errors } = validateCandle(candle);\n    if (ok) {\n      valid.push({ ...candle, suspiciousZeroVolume: candle.volume === 0 });\n    } else {\n      invalid.push({ ...candle, errors });\n    }\n  }\n  return { valid, invalid };\n}\n\n/**\n * Removes duplicate candles (same symbol+date), keeping the last occurrence\n * (assumed most recent fetch / most authoritative).\n */\nfunction dedupeCandles(candles) {\n  const map = new Map();\n  for (const c of candles || []) {\n    map.set(`${c.symbol}::${c.date}`, c);\n  }\n  return Array.from(map.values());\n}\n\n/** Sorts candles ascending by date (oldest first) — mandatory before any TA calc. */\nfunction sortCandlesAscending(candles) {\n  return [...(candles || [])].sort((a, b) => new Date(a.date) - new Date(b.date));\n}\n\n/**\n * Derives tradedValue when the provider doesn't supply it directly.\n * Uses the session's typical price (H+L+C)/3 * volume as a reasonable proxy.\n */\nfunction deriveTradedValue(candle) {\n  if (isNumber(candle.tradedValue)) return candle.tradedValue;\n  if (!isNumber(candle.high) || !isNumber(candle.low) || !isNumber(candle.close) || !isNumber(candle.volume)) {\n    return null;\n  }\n  const typicalPrice = (candle.high + candle.low + candle.close) / 3;\n  return typicalPrice * candle.volume;\n}\n\n/** Simple mean of the last `n` numeric values in `arr` (nulls skipped). Returns null if insufficient data. */\nfunction meanOfLast(arr, n) {\n  if (!Array.isArray(arr) || arr.length < n) return null;\n  const slice = arr.slice(-n).filter(isNumber);\n  if (slice.length < n) return null;\n  return slice.reduce((a, b) => a + b, 0) / n;\n}\n\n/** Standard deviation of the last `n` numeric values. Returns null if insufficient data. */\nfunction stdDevOfLast(arr, n) {\n  const mean = meanOfLast(arr, n);\n  if (mean === null) return null;\n  const slice = arr.slice(-n);\n  const variance = slice.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / n;\n  return Math.sqrt(variance);\n}\n\n/** Clamps a number into [min, max]. */\nfunction clamp(value, min, max) {\n  if (!isNumber(value)) return min;\n  return Math.min(Math.max(value, min), max);\n}\n\n/**\n * Wraps arbitrary rows into n8n's expected item structure: [{ json: {...} }].\n * Accepts a single object or array of objects.\n */\nfunction toN8nItems(rows) {\n  const list = Array.isArray(rows) ? rows : [rows];\n  return list.map((json) => ({ json }));\n}\n\n/**\n * Reads all `json` payloads out of an n8n items array back into plain objects.\n */\nfunction fromN8nItems(items) {\n  return (items || []).map((item) => item.json);\n}\n\n// ---------------------------------------------------------------------\n\n/**\n * volumeAnalysis.js\n *\n * Volume-derived metrics that don't belong in the core indicators table:\n * day-over-day / vs-average volume change percentages, cross-sectional\n * market-wide rankings, and the accumulation signal (spec sections 9, 18).\n *\n * These operate on a \"market snapshot\" — an array of one row per stock for\n * the scan date, each row already carrying volume/rvol/OBV fields produced\n * by 04-egx-technical-analysis. Consumed by 06-egx-volume-analysis.\n */\n\n\n/**\n * Given a stock's own recent volume series (oldest -> newest, last element\n * = today), computes day-over-day and vs-N-day-average volume change %.\n * The N-day averages EXCLUDE today, matching the RVOL no-look-ahead rule.\n */\nfunction volumeChangeMetrics(volumes) {\n  const n = volumes.length;\n  if (n < 2) {\n    return { volumeChange1dPct: null, volumeChangeVs20dPct: null, volumeChangeVs50dPct: null };\n  }\n  const today = volumes[n - 1];\n  const yesterday = volumes[n - 2];\n  const volumeChange1dPct = round(pctChange(yesterday, today), 4);\n\n  const avg20 = averageExcludingLast(volumes, 20);\n  const avg50 = averageExcludingLast(volumes, 50);\n\n  return {\n    volumeChange1dPct,\n    volumeChangeVs20dPct: avg20 !== null ? round(pctChange(avg20, today), 4) : null,\n    volumeChangeVs50dPct: avg50 !== null ? round(pctChange(avg50, today), 4) : null,\n  };\n}\n\nfunction averageExcludingLast(values, period) {\n  const n = values.length;\n  if (n < period + 1) return null;\n  const window = values.slice(n - 1 - period, n - 1);\n  if (!window.every(isNumber)) return null;\n  return window.reduce((a, b) => a + b, 0) / period;\n}\n\n/**\n * Ranks a market snapshot by a numeric field, descending (rank 1 = highest).\n * Rows with a non-numeric value for `field` are ranked last (null rank).\n * Returns a NEW array (does not mutate input), each row gaining `<field>Rank`.\n */\nfunction rankBy(rows, field, rankFieldName = `${field}Rank`) {\n  const withValue = rows.filter((r) => isNumber(r[field]));\n  const withoutValue = rows.filter((r) => !isNumber(r[field]));\n\n  withValue.sort((a, b) => b[field] - a[field]);\n\n  const ranked = withValue.map((row, idx) => ({ ...row, [rankFieldName]: idx + 1 }));\n  const unranked = withoutValue.map((row) => ({ ...row, [rankFieldName]: null }));\n\n  return [...ranked, ...unranked];\n}\n\n/**\n * Produces the four ranking views required by spec section 9/36:\n * raw volume, traded value, RVOL20, RVOL50. Returns the same rows enriched\n * with all four rank fields simultaneously (single pass merge).\n */\nfunction buildVolumeRankings(rows) {\n  const byVolume = rankBy(rows, \"volume\", \"volumeRank\");\n  const byTradedValue = rankBy(rows, \"tradedValue\", \"tradedValueRank\");\n  const byRvol20 = rankBy(rows, \"relativeVolume20\", \"rvol20Rank\");\n  const byRvol50 = rankBy(rows, \"relativeVolume50\", \"rvol50Rank\");\n\n  const rankMap = new Map();\n  for (const row of rows) rankMap.set(row.stockId, { ...row });\n  for (const row of byVolume) rankMap.get(row.stockId).volumeRank = row.volumeRank;\n  for (const row of byTradedValue) rankMap.get(row.stockId).tradedValueRank = row.tradedValueRank;\n  for (const row of byRvol20) rankMap.get(row.stockId).rvol20Rank = row.rvol20Rank;\n  for (const row of byRvol50) rankMap.get(row.stockId).rvol50Rank = row.rvol50Rank;\n\n  return Array.from(rankMap.values());\n}\n\n/**\n * Accumulation score (spec section 18), 0-100. Rewards: rising OBV over the\n * lookback, relatively flat price action, expanding volume, closes near the\n * daily high, limited downside, and rising traded value. Every sub-factor is\n * normalized to [0,1] before weighting so the final score always lands in\n * [0,100] regardless of the instrument's price scale.\n *\n * `window` is an array of recent candles+obv (oldest -> newest), each shaped:\n * { close, high, low, volume, tradedValue, obv }. Needs >= 10 bars to be\n * meaningful; returns 0 with insufficient data rather than null, since\n * \"no evidence of accumulation\" is a valid, honest reading of thin data.\n */\nfunction calculateAccumulationScore(window) {\n  if (!Array.isArray(window) || window.length < 10) return 0;\n\n  const first = window[0];\n  const last = window[window.length - 1];\n\n  // 1) OBV trend: positive slope over the window is bullish accumulation.\n  const obvSlope = isNumber(first.obv) && isNumber(last.obv) && window.length > 1\n    ? (last.obv - first.obv) / window.length\n    : 0;\n  const obvScore = clamp(obvSlope > 0 ? 1 : 0, 0, 1);\n\n  // 2) Price flatness: small net price range relative to volatility suggests\n  // quiet absorption rather than a directional trend.\n  const closes = window.map((c) => c.close);\n  const priceRange = (Math.max(...closes) - Math.min(...closes)) / (closes[0] || 1);\n  const flatnessScore = clamp(1 - priceRange / 0.15, 0, 1); // <=15% range scores well\n\n  // 3) Volume expansion: compare first half vs second half average volume.\n  const mid = Math.floor(window.length / 2);\n  const firstHalfVol = average(window.slice(0, mid).map((c) => c.volume));\n  const secondHalfVol = average(window.slice(mid).map((c) => c.volume));\n  const volumeExpansionScore = firstHalfVol > 0\n    ? clamp((secondHalfVol - firstHalfVol) / firstHalfVol, 0, 1)\n    : 0;\n\n  // 4) Closes near daily high: average (close - low) / (high - low).\n  const closeStrengths = window\n    .filter((c) => c.high !== c.low)\n    .map((c) => (c.close - c.low) / (c.high - c.low));\n  const closeStrengthScore = closeStrengths.length\n    ? clamp(average(closeStrengths), 0, 1)\n    : 0.5;\n\n  // 5) Limited downside: fraction of bars that closed higher or flat vs prior bar.\n  let upOrFlatBars = 0;\n  for (let i = 1; i < window.length; i++) {\n    if (window[i].close >= window[i - 1].close) upOrFlatBars++;\n  }\n  const limitedDownsideScore = clamp(upOrFlatBars / (window.length - 1), 0, 1);\n\n  // 6) Traded value trend: rising average traded value across the window.\n  const firstHalfValue = average(window.slice(0, mid).map((c) => c.tradedValue || 0));\n  const secondHalfValue = average(window.slice(mid).map((c) => c.tradedValue || 0));\n  const tradedValueScore = firstHalfValue > 0\n    ? clamp((secondHalfValue - firstHalfValue) / firstHalfValue, 0, 1)\n    : 0;\n\n  const composite =\n    obvScore * 25 +\n    flatnessScore * 15 +\n    volumeExpansionScore * 25 +\n    closeStrengthScore * 15 +\n    limitedDownsideScore * 10 +\n    tradedValueScore * 10;\n\n  return round(clamp(composite, 0, 100), 2);\n}\n\nfunction average(arr) {\n  const valid = arr.filter(isNumber);\n  if (!valid.length) return 0;\n  return valid.reduce((a, b) => a + b, 0) / valid.length;\n}\n\nconst all = $input.all().map((i) => i.json);\nconst usable = all.filter((r) => !r.skipped);\nconst skipped = all.filter((r) => r.skipped);\n\nconst ranked = buildVolumeRankings(usable);\n\nreturn [...ranked, ...skipped].map((json) => ({ json }));"
+      },
+      "position": [
+        1560,
+        0
+      ],
+      "id": "29e7ead4-2053-4040-a508-b45b259e811c"
+    },
+    {
+      "name": "Has Data?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "925d138d-ef2b-4889-846a-00b9f18d15f7",
+              "leftValue": "={{ $json.skipped }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1820,
+        0
+      ],
+      "id": "36cb548a-864f-4628-9da5-34b17f4a3ab9"
+    },
+    {
+      "name": "Upsert Volume Analysis",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO volume_analysis (\n  stock_id, trading_date, volume_change_1d_pct, volume_change_vs_20d_pct, volume_change_vs_50d_pct,\n  volume_rank, traded_value_rank, relative_volume20_rank, relative_volume50_rank, accumulation_score\n)\nVALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)\nON CONFLICT (stock_id, trading_date) DO UPDATE SET\n  volume_change_1d_pct = EXCLUDED.volume_change_1d_pct,\n  volume_change_vs_20d_pct = EXCLUDED.volume_change_vs_20d_pct,\n  volume_change_vs_50d_pct = EXCLUDED.volume_change_vs_50d_pct,\n  volume_rank = EXCLUDED.volume_rank, traded_value_rank = EXCLUDED.traded_value_rank,\n  relative_volume20_rank = EXCLUDED.relative_volume20_rank,\n  relative_volume50_rank = EXCLUDED.relative_volume50_rank,\n  accumulation_score = EXCLUDED.accumulation_score;",
+        "options": {
+          "queryReplacement": "={{ [\n  $json.stockId, $json.tradingDate, $json.volumeChange1dPct, $json.volumeChangeVs20dPct, $json.volumeChangeVs50dPct,\n  $json.volumeRank, $json.tradedValueRank, $json.rvol20Rank, $json.rvol50Rank, $json.accumulationScore\n] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        2080,
+        0
+      ],
+      "id": "2555c912-d5c6-4d02-9af3-798b48c19c70"
+    },
+    {
+      "name": "Join Branches",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        2340,
+        0
+      ],
+      "id": "09b60d2d-c2a9-4017-8e61-daa588dbafd6"
+    },
+    {
+      "name": "Count Volume Analysis Rows",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*)::int AS volume_analysis_row_count FROM volume_analysis;",
+        "options": {}
+      },
+      "executeOnce": true,
+      "position": [
+        2600,
+        0
+      ],
+      "id": "770d0215-cdd0-414b-b925-2a5a5efc510a"
+    },
+    {
+      "name": "Build Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const count = $input.first().json.volume_analysis_row_count;\nreturn [{ json: {\n  workflow: '06-egx-volume-analysis',\n  finishedAt: new Date().toISOString(),\n  volumeAnalysisRowCount: count,\n} }];"
+      },
+      "position": [
+        0,
+        200
+      ],
+      "id": "563837b4-89b1-4191-b56e-ce8c9d1e094d"
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Active Stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Load Active Stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Active Stocks": {
+      "main": [
+        [
+          {
+            "node": "Attach As-Of Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach As-Of Date": {
+      "main": [
+        [
+          {
+            "node": "Load Per-Stock Volume Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Per-Stock Volume Snapshot": {
+      "main": [
+        [
+          {
+            "node": "Compute Volume Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Volume Metrics": {
+      "main": [
+        [
+          {
+            "node": "Build Market Rankings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Market Rankings": {
+      "main": [
+        [
+          {
+            "node": "Has Data?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Data?": {
+      "main": [
+        [
+          {
+            "node": "Upsert Volume Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Join Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Volume Analysis": {
+      "main": [
+        [
+          {
+            "node": "Join Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Join Branches": {
+      "main": [
+        [
+          {
+            "node": "Count Volume Analysis Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Volume Analysis Rows": {
+      "main": [
+        [
+          {
+            "node": "Build Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "3ae22bca-ce2c-4de7-91b1-860192585989",
+  "tags": []
+}

@@ -1,0 +1,455 @@
+{
+  "name": "11 - EGX Overall Ranking",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -320
+      ],
+      "parameters": {
+        "content": "## 11 - EGX Overall Ranking\n\nCombines the four scanner scores + accumulation score into overall_score using CONFIGURABLE weights from `scoring_weights` (code/overallScore.js), classifies the dominant setup_type, applies the liquidity eligibility filter (section 19), builds the entry/invalidation/target trade structure (code/riskReward.js), assigns overall_rank, and computes the market-wide regime (code/marketRegime.js) which closes out the scanner_run.\n\nRequires 07, 08, 09, 10 (and 06 for accumulation_score) to have already run for the same scanner_run_id/asOfDate — run this LAST.",
+        "height": 340,
+        "width": 480,
+        "color": 5
+      },
+      "id": "b264d0d4-5eb4-4621-86c5-fbaeafdc3a00"
+    },
+    {
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        0,
+        0
+      ],
+      "id": "03bcfe6c-f97d-4af3-a648-c151889975fe"
+    },
+    {
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "position": [
+        260,
+        0
+      ],
+      "id": "e82653e7-447b-4c72-930b-36b06bed0449"
+    },
+    {
+      "name": "Attach As-Of Date",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Reading the trigger lookup on a trigger node that never fired THROWS in\n// this n8n version (confirmed via live E2E testing: running this workflow\n// via Manual Trigger alone, with Execute Workflow Trigger never executing,\n// crashed here) — wrap in try/catch so both \"never executed\" and \"executed\n// with zero items\" degrade to the same safe default.\nlet trigger = {};\ntry {\n  const triggerItems = $('When Executed by Another Workflow').all();\n  trigger = triggerItems.length ? triggerItems[0].json : {};\n} catch (e) { trigger = {}; }\nconst asOfDate = trigger.asOfDate || new Date().toISOString().slice(0, 10);\nconst runType = trigger.runType || 'LIVE';\nreturn [{ json: { asOfDate, runType } }];"
+      },
+      "position": [
+        520,
+        0
+      ],
+      "id": "1f32a506-d328-49c8-a849-09b9b47167db"
+    },
+    {
+      "name": "Get or Create Scanner Run",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO scanner_runs (trading_date, run_type, status, started_at)\nVALUES ($1, $2, 'RUNNING', now())\nON CONFLICT (trading_date, run_type) DO UPDATE SET trading_date = EXCLUDED.trading_date\nRETURNING id, trading_date;",
+        "options": {
+          "queryReplacement": "={{ [$json.asOfDate, $json.runType] }}"
+        }
+      },
+      "executeOnce": true,
+      "position": [
+        780,
+        0
+      ],
+      "id": "74d4208f-fd7e-4b4c-8a06-5dd21ed048b8"
+    },
+    {
+      "name": "Load Scoring Weights",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT factor, weight FROM scoring_weights WHERE profile_name = 'default' AND active = TRUE;",
+        "options": {}
+      },
+      "executeOnce": true,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "73f3a34c-53d4-4b58-9856-ab67247418bd"
+    },
+    {
+      "name": "Build Weights Map",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const weights = {};\nfor (const item of $input.all()) {\n  weights[item.json.factor] = Number(item.json.weight);\n}\nreturn [{ json: { weights } }];"
+      },
+      "position": [
+        1300,
+        0
+      ],
+      "id": "0d8acb6d-494f-4d3e-83ea-2b205c1be92b"
+    },
+    {
+      "name": "Load Active Stocks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, symbol FROM stocks WHERE exchange = $1 AND active = TRUE ORDER BY symbol;",
+        "options": {
+          "queryReplacement": "={{ [$env.EGX_EXCHANGE_CODE || \"EGX\"] }}"
+        }
+      },
+      "executeOnce": true,
+      "position": [
+        1560,
+        0
+      ],
+      "id": "13881c33-0e28-4008-8601-ef3d4523b624"
+    },
+    {
+      "name": "Attach Ranking Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const asOfDate = $('Attach As-Of Date').first().json.asOfDate;\nconst scannerRunId = $('Get or Create Scanner Run').first().json.id;\nconst weights = $('Build Weights Map').first().json.weights;\nreturn $input.all().map((item) => ({\n  json: { ...item.json, asOfDate, scannerRunId, weights },\n}));"
+      },
+      "position": [
+        1820,
+        0
+      ],
+      "id": "9f56508c-5005-4a1d-9771-67ce5d958708"
+    },
+    {
+      "name": "Load Ranking Inputs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH liquidity AS (\n  SELECT AVG(volume)::numeric AS avg_volume20, AVG(traded_value)::numeric AS avg_traded_value20,\n         COUNT(*) FILTER (WHERE volume > 0) AS active_days20\n  FROM (\n    SELECT volume, traded_value FROM daily_prices\n    WHERE stock_id = $1 AND trading_date <= $2 ORDER BY trading_date DESC LIMIT 20\n  ) w\n),\nclose20 AS (\n  SELECT close FROM daily_prices WHERE stock_id = $1 AND trading_date <= $2\n  ORDER BY trading_date DESC OFFSET 20 LIMIT 1\n),\npx AS (SELECT close FROM daily_prices WHERE stock_id = $1 AND trading_date = $2),\nta AS (\n  SELECT atr14, data_confidence, macd_histogram, relative_volume20, medium_term_trend\n  FROM technical_analysis WHERE stock_id = $1 AND trading_date = $2\n),\nsr AS (\n  SELECT resistance1, resistance2, resistance3, support1, support2, support3,\n         nearest_resistance_distance_pct, nearest_support_distance_pct\n  FROM support_resistance WHERE stock_id = $1 AND trading_date = $2\n),\nva AS (SELECT accumulation_score FROM volume_analysis WHERE stock_id = $1 AND trading_date = $2),\nres AS (\n  SELECT breakout_score, momentum_score, pullback_score, reversal_score\n  FROM scanner_results WHERE scanner_run_id = $3 AND stock_id = $1\n)\nSELECT\n  (SELECT avg_volume20 FROM liquidity)::float8 AS avg_volume20,\n  (SELECT avg_traded_value20 FROM liquidity)::float8 AS avg_traded_value20,\n  (SELECT active_days20 FROM liquidity)::float8 AS active_days20,\n  (SELECT close FROM close20)::float8 AS close20d_ago,\n  (SELECT close FROM px)::float8 AS close,\n  (SELECT atr14 FROM ta)::float8 AS atr14,\n  (SELECT data_confidence FROM ta)::float8 AS data_confidence,\n  (SELECT macd_histogram FROM ta)::float8 AS macd_histogram,\n  (SELECT relative_volume20 FROM ta)::float8 AS relative_volume20,\n  (SELECT medium_term_trend FROM ta) AS medium_term_trend,\n  (SELECT resistance1 FROM sr)::float8 AS resistance1, (SELECT resistance2 FROM sr)::float8 AS resistance2, (SELECT resistance3 FROM sr)::float8 AS resistance3,\n  (SELECT support1 FROM sr)::float8 AS support1, (SELECT support2 FROM sr)::float8 AS support2, (SELECT support3 FROM sr)::float8 AS support3,\n  (SELECT nearest_resistance_distance_pct FROM sr)::float8 AS nearest_resistance_distance_pct,\n  (SELECT nearest_support_distance_pct FROM sr)::float8 AS nearest_support_distance_pct,\n  (SELECT accumulation_score FROM va)::float8 AS accumulation_score,\n  (SELECT breakout_score FROM res)::float8 AS breakout_score,\n  (SELECT momentum_score FROM res)::float8 AS momentum_score,\n  (SELECT pullback_score FROM res)::float8 AS pullback_score,\n  (SELECT reversal_score FROM res)::float8 AS reversal_score;",
+        "options": {
+          "queryReplacement": "={{ [$json.id, $json.asOfDate, $json.scannerRunId] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        2080,
+        0
+      ],
+      "id": "c5ed2b0d-75e0-4314-a6a4-8d3792dbcbeb"
+    },
+    {
+      "name": "Compute Overall Score & Trade Structure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/**\n * helpers.js\n *\n * Shared low-level utilities used by every other module in /code and by the\n * equivalent n8n Code nodes. Pure functions only — no I/O, no n8n APIs — so\n * this file can be unit tested with plain `node` and pasted into a Code node\n * body unchanged (just drop the `module.exports` line).\n *\n * Candle shape (normalized, provider-agnostic — see docs/DATA_PROVIDER.md):\n * {\n *   symbol: \"COMI\",\n *   date: \"2026-08-18\",     // ISO date, trading session date\n *   open: 100.20,\n *   high: 103.10,\n *   low: 99.80,\n *   close: 102.70,\n *   volume: 12500000,\n *   tradedValue: 1270000000 // optional, derived if absent\n * }\n */\n\n/** Returns true if v is a finite, non-NaN number. */\nfunction isNumber(v) {\n  return typeof v === \"number\" && Number.isFinite(v);\n}\n\n/** Safe division: returns null instead of Infinity/NaN when denominator is unusable. */\nfunction safeDivide(numerator, denominator) {\n  if (!isNumber(numerator) || !isNumber(denominator) || denominator === 0) {\n    return null;\n  }\n  const result = numerator / denominator;\n  return Number.isFinite(result) ? result : null;\n}\n\n/** Rounds to `decimals` places, returns null for non-numeric input. */\nfunction round(value, decimals = 4) {\n  if (!isNumber(value)) return null;\n  const factor = Math.pow(10, decimals);\n  return Math.round(value * factor) / factor;\n}\n\n/** Percentage change from `from` to `to`. Returns null if from <= 0 or invalid. */\nfunction pctChange(from, to) {\n  if (!isNumber(from) || !isNumber(to) || from === 0) return null;\n  return ((to - from) / from) * 100;\n}\n\n/**\n * Validates a single raw candle. Returns { valid, errors[] }.\n * Mirrors the rules in spec section 31.\n */\nfunction validateCandle(candle) {\n  const errors = [];\n  if (!candle || typeof candle !== \"object\") {\n    return { valid: false, errors: [\"candle is not an object\"] };\n  }\n  const { symbol, date, open, high, low, close, volume } = candle;\n\n  if (!symbol || typeof symbol !== \"string\") errors.push(\"missing/invalid symbol\");\n  if (!date || Number.isNaN(Date.parse(date))) errors.push(\"missing/invalid date\");\n  if (!isNumber(open)) errors.push(\"open is not numeric\");\n  if (!isNumber(high)) errors.push(\"high is not numeric\");\n  if (!isNumber(low)) errors.push(\"low is not numeric\");\n  if (!isNumber(close)) errors.push(\"close is not numeric\");\n  if (!isNumber(volume)) errors.push(\"volume is not numeric\");\n\n  if (isNumber(open) && isNumber(high) && isNumber(low) && isNumber(close)) {\n    if (high < open) errors.push(\"high < open\");\n    if (high < close) errors.push(\"high < close\");\n    if (high < low) errors.push(\"high < low\");\n    if (low > open) errors.push(\"low > open\");\n    if (low > close) errors.push(\"low > close\");\n  }\n  if (isNumber(volume) && volume < 0) errors.push(\"negative volume\");\n  if (isNumber(close) && close <= 0) errors.push(\"close <= 0\");\n\n  return { valid: errors.length === 0, errors };\n}\n\n/**\n * Filters an array of raw candles into { valid[], invalid[] }.\n * `invalid` entries carry the original candle plus `.errors`.\n * Zero-volume candles are valid but flagged with a warning for downstream\n * consumers (suspicious, not necessarily wrong — EGX thin names do trade zero\n * volume on quiet sessions).\n */\nfunction validateCandles(candles) {\n  const valid = [];\n  const invalid = [];\n  for (const candle of candles || []) {\n    const { valid: ok, errors } = validateCandle(candle);\n    if (ok) {\n      valid.push({ ...candle, suspiciousZeroVolume: candle.volume === 0 });\n    } else {\n      invalid.push({ ...candle, errors });\n    }\n  }\n  return { valid, invalid };\n}\n\n/**\n * Removes duplicate candles (same symbol+date), keeping the last occurrence\n * (assumed most recent fetch / most authoritative).\n */\nfunction dedupeCandles(candles) {\n  const map = new Map();\n  for (const c of candles || []) {\n    map.set(`${c.symbol}::${c.date}`, c);\n  }\n  return Array.from(map.values());\n}\n\n/** Sorts candles ascending by date (oldest first) — mandatory before any TA calc. */\nfunction sortCandlesAscending(candles) {\n  return [...(candles || [])].sort((a, b) => new Date(a.date) - new Date(b.date));\n}\n\n/**\n * Derives tradedValue when the provider doesn't supply it directly.\n * Uses the session's typical price (H+L+C)/3 * volume as a reasonable proxy.\n */\nfunction deriveTradedValue(candle) {\n  if (isNumber(candle.tradedValue)) return candle.tradedValue;\n  if (!isNumber(candle.high) || !isNumber(candle.low) || !isNumber(candle.close) || !isNumber(candle.volume)) {\n    return null;\n  }\n  const typicalPrice = (candle.high + candle.low + candle.close) / 3;\n  return typicalPrice * candle.volume;\n}\n\n/** Simple mean of the last `n` numeric values in `arr` (nulls skipped). Returns null if insufficient data. */\nfunction meanOfLast(arr, n) {\n  if (!Array.isArray(arr) || arr.length < n) return null;\n  const slice = arr.slice(-n).filter(isNumber);\n  if (slice.length < n) return null;\n  return slice.reduce((a, b) => a + b, 0) / n;\n}\n\n/** Standard deviation of the last `n` numeric values. Returns null if insufficient data. */\nfunction stdDevOfLast(arr, n) {\n  const mean = meanOfLast(arr, n);\n  if (mean === null) return null;\n  const slice = arr.slice(-n);\n  const variance = slice.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / n;\n  return Math.sqrt(variance);\n}\n\n/** Clamps a number into [min, max]. */\nfunction clamp(value, min, max) {\n  if (!isNumber(value)) return min;\n  return Math.min(Math.max(value, min), max);\n}\n\n/**\n * Wraps arbitrary rows into n8n's expected item structure: [{ json: {...} }].\n * Accepts a single object or array of objects.\n */\nfunction toN8nItems(rows) {\n  const list = Array.isArray(rows) ? rows : [rows];\n  return list.map((json) => ({ json }));\n}\n\n/**\n * Reads all `json` payloads out of an n8n items array back into plain objects.\n */\nfunction fromN8nItems(items) {\n  return (items || []).map((item) => item.json);\n}\n\n// ---------------------------------------------------------------------\n\n/**\n * overallScore.js\n *\n * Composes the final 0-100 overall_score from the independent sub-scores\n * using CONFIGURABLE weights (spec section 21 — never a flat average across\n * setup types, since a strong breakout and a strong pullback aren't\n * comparable on the same raw scale). Also performs setup classification\n * (section 22) and setup/data confidence (section 44).\n *\n * Weights are read from the `scoring_weights` table (profile 'default'\n * unless overridden) by the ranking workflow's Postgres node and passed in\n * as `weights` here — this module has no DB access of its own.\n */\n\n\nconst DEFAULT_WEIGHTS = {\n  trend: 20,\n  volume: 20,\n  momentum: 15,\n  breakout: 15,\n  price_structure: 10,\n  macd: 5,\n  rsi: 5,\n  relative_strength: 5,\n  risk_reward: 5,\n};\n\n/**\n * `factors` — normalized 0-100 sub-scores for each weighted dimension:\n * { trend, volume, momentum, breakout, priceStructure, macd, rsi, relativeStrength, riskReward }\n * `subScores` — the four setup scanner outputs: { breakoutScore, momentumScore, pullbackScore, reversalScore, accumulationScore }\n * `weights` — optional override of DEFAULT_WEIGHTS (same keys, snake_case, from scoring_weights table)\n */\nfunction calculateOverallScore(factors, weights = DEFAULT_WEIGHTS) {\n  const w = { ...DEFAULT_WEIGHTS, ...weights };\n  const weightSum = Object.values(w).reduce((a, b) => a + (isNumber(b) ? b : 0), 0) || 100;\n\n  const contributions = {\n    trend: safeFactor(factors.trend) * (w.trend / weightSum),\n    volume: safeFactor(factors.volume) * (w.volume / weightSum),\n    momentum: safeFactor(factors.momentum) * (w.momentum / weightSum),\n    breakout: safeFactor(factors.breakout) * (w.breakout / weightSum),\n    priceStructure: safeFactor(factors.priceStructure) * (w.price_structure / weightSum),\n    macd: safeFactor(factors.macd) * (w.macd / weightSum),\n    rsi: safeFactor(factors.rsi) * (w.rsi / weightSum),\n    relativeStrength: safeFactor(factors.relativeStrength) * (w.relative_strength / weightSum),\n    riskReward: safeFactor(factors.riskReward) * (w.risk_reward / weightSum),\n  };\n\n  const overallScore = clamp(\n    round(Object.values(contributions).reduce((a, b) => a + b, 0), 2),\n    0,\n    100\n  );\n\n  return { overallScore, contributions };\n}\n\nfunction safeFactor(v) {\n  return isNumber(v) ? clamp(v, 0, 100) : 0;\n}\n\n/**\n * Setup classification (spec section 22). Picks the single dominant\n * sub-score above a minimum bar; if nothing clears the bar, classifies\n * NEUTRAL, or AVOID when the stock is fundamentally disqualified\n * (illiquid / insufficient data), which callers pass explicitly.\n */\nfunction classifySetupType(subScores, { eligible = true, minScore = 55 } = {}) {\n  if (!eligible) return \"AVOID\";\n\n  const candidates = [\n    { type: \"BREAKOUT\", score: subScores.breakoutScore },\n    { type: \"MOMENTUM\", score: subScores.momentumScore },\n    { type: \"PULLBACK\", score: subScores.pullbackScore },\n    { type: \"REVERSAL\", score: subScores.reversalScore },\n    { type: \"ACCUMULATION\", score: subScores.accumulationScore },\n  ].filter((c) => isNumber(c.score));\n\n  if (!candidates.length) return \"NEUTRAL\";\n\n  candidates.sort((a, b) => b.score - a.score);\n  const top = candidates[0];\n\n  return top.score >= minScore ? top.type : \"NEUTRAL\";\n}\n\n/**\n * Setup confidence (section 44): how much we trust the classification itself\n * — driven by the margin between the winning sub-score and the runner-up\n * (a clean win is more trustworthy than a narrow one) and the winning\n * sub-score's absolute strength.\n */\nfunction calculateSetupConfidence(subScores) {\n  const scores = [\n    subScores.breakoutScore,\n    subScores.momentumScore,\n    subScores.pullbackScore,\n    subScores.reversalScore,\n    subScores.accumulationScore,\n  ].filter(isNumber).sort((a, b) => b - a);\n\n  if (!scores.length) return 0;\n  const top = scores[0];\n  const runnerUp = scores[1] ?? 0;\n  const margin = top - runnerUp;\n\n  const confidence = clamp(top * 0.6 + Math.min(margin, 40) * 1.0, 0, 100);\n  return round(confidence, 2);\n}\n\n// ---------------------------------------------------------------------\n\n/**\n * riskReward.js\n *\n * Derives entry/invalidation/target trade structure from real support/\n * resistance/ATR/close inputs (spec section 20). Never invents arbitrary\n * \"guaranteed\" targets — targets are always resistance levels, support\n * levels, or ATR multiples actually present in the data. Rejects any\n * risk/reward calculation where risk <= 0.\n */\n\n\n/**\n * `close`, `atr14` — latest bar values.\n * `resistances` — [resistance1, resistance2, resistance3] (nulls allowed).\n * `supports` — [support1, support2, support3] (nulls allowed).\n * `setupType` — one of BREAKOUT | MOMENTUM | PULLBACK | REVERSAL | ACCUMULATION.\n *\n * Returns { entry, invalidation, target1, target2, target3, riskRewardT1/2/3 }.\n * Any field that cannot be derived from real structure is left null rather\n * than guessed.\n */\nfunction buildTradeStructure({ close, atr14, resistances = [], supports = [], setupType }) {\n  if (!isNumber(close)) {\n    return emptyStructure();\n  }\n\n  const [r1, r2, r3] = resistances;\n  const [s1, s2, s3] = supports;\n  const atr = isNumber(atr14) ? atr14 : null;\n\n  let entry = null;\n  let invalidation = null;\n\n  switch (setupType) {\n    case \"BREAKOUT\":\n      // Entry triggers on a confirmed break above resistance1 (small buffer);\n      // invalidation sits just below the breakout level / recent support.\n      entry = isNumber(r1) ? r1 * 1.002 : close;\n      invalidation = isNumber(s1) ? s1 : (atr ? close - atr * 1.5 : null);\n      break;\n\n    case \"MOMENTUM\":\n      entry = close;\n      invalidation = atr ? close - atr * 1.5 : (isNumber(s1) ? s1 : null);\n      break;\n\n    case \"PULLBACK\":\n      entry = isNumber(s1) ? Math.max(s1, close) : close;\n      invalidation = isNumber(s1) ? s1 * 0.985 : (atr ? close - atr * 1.2 : null);\n      break;\n\n    case \"REVERSAL\":\n      entry = close;\n      invalidation = isNumber(s1) ? s1 * 0.985 : (atr ? close - atr * 1.2 : null);\n      break;\n\n    default:\n      entry = close;\n      invalidation = atr ? close - atr * 1.5 : null;\n  }\n\n  const targets = deriveTargets({ entry: entry ?? close, close, atr, resistances: [r1, r2, r3] });\n  const risk = isNumber(entry) && isNumber(invalidation) ? entry - invalidation : null;\n\n  const withRR = targets.map((t) => ({\n    target: t,\n    riskReward: computeRiskReward(entry, invalidation, t),\n    gainPct: calculateGainPct(entry, t),\n    estimatedDays: estimateDaysToTarget(entry, t, atr),\n  }));\n\n  return {\n    entry: round(entry, 6),\n    invalidation: round(invalidation, 6),\n    target1: round(withRR[0]?.target ?? null, 6),\n    target2: round(withRR[1]?.target ?? null, 6),\n    target3: round(withRR[2]?.target ?? null, 6),\n    riskRewardT1: round(withRR[0]?.riskReward ?? null, 4),\n    riskRewardT2: round(withRR[1]?.riskReward ?? null, 4),\n    riskRewardT3: round(withRR[2]?.riskReward ?? null, 4),\n    riskAmount: isNumber(risk) && risk > 0 ? round(risk, 6) : null,\n    target1GainPct: round(withRR[0]?.gainPct ?? null, 4),\n    target2GainPct: round(withRR[1]?.gainPct ?? null, 4),\n    target3GainPct: round(withRR[2]?.gainPct ?? null, 4),\n    target1EstimatedDays: withRR[0]?.estimatedDays ?? null,\n    target2EstimatedDays: withRR[1]?.estimatedDays ?? null,\n    target3EstimatedDays: withRR[2]?.estimatedDays ?? null,\n  };\n}\n\n/**\n * Potential gain (%) from entry to a target, IF that target is reached.\n * This is arithmetic on real entry/target prices, not a forecast — it says\n * nothing about whether or when the target will actually be hit.\n */\nfunction calculateGainPct(entry, target) {\n  if (!isNumber(entry) || !isNumber(target) || entry <= 0) return null;\n  return ((target - entry) / entry) * 100;\n}\n\n/**\n * Rough projection of trading sessions to cover the distance to a target,\n * using the stock's own ATR14 (average daily true range) as the only speed\n * reference available. Deliberately conservative: assumes the stock closes\n * roughly HALF its average daily range in net progress toward the target\n * each session (ATR measures full high-low range, not net directional\n * movement, and price rarely trends in a straight line) — a 0.5x factor,\n * not tuned or backtested. This is a same-order-of-magnitude estimate for\n * \"how far is this, in this stock's own volatility terms\", not a forecast\n * of when the target will be hit, and not derived from any historical\n * track record. Returns null when there isn't enough data to estimate from.\n */\nfunction estimateDaysToTarget(entry, target, atr14) {\n  if (!isNumber(entry) || !isNumber(target) || !isNumber(atr14) || atr14 <= 0) return null;\n  const distance = target - entry;\n  if (distance <= 0) return null;\n  const assumedDailyProgress = atr14 * 0.5;\n  return Math.max(1, Math.ceil(distance / assumedDailyProgress));\n}\n\n/**\n * Targets prefer real resistance levels above entry; when a resistance slot\n * is missing/already passed, falls back to an ATR multiple projection\n * (1.5x / 2.5x / 3.5x ATR from entry) so a target is still an evidence-based\n * projection, never a fixed arbitrary percentage.\n */\nfunction deriveTargets({ entry, close, atr, resistances }) {\n  const candidates = resistances.filter((r) => isNumber(r) && r > entry);\n  const targets = [];\n\n  for (let i = 0; i < 3; i++) {\n    if (candidates[i] !== undefined) {\n      targets.push(candidates[i]);\n    } else if (isNumber(atr)) {\n      const multiple = [1.5, 2.5, 3.5][i];\n      targets.push(entry + atr * multiple);\n    } else {\n      targets.push(null);\n    }\n  }\n  return targets;\n}\n\nfunction computeRiskReward(entry, invalidation, target) {\n  if (!isNumber(entry) || !isNumber(invalidation) || !isNumber(target)) return null;\n  const risk = entry - invalidation;\n  const reward = target - entry;\n  if (risk <= 0) return null; // invalid: invalidation must be below entry\n  return safeDivide(reward, risk);\n}\n\nfunction emptyStructure() {\n  return {\n    entry: null,\n    invalidation: null,\n    target1: null,\n    target2: null,\n    target3: null,\n    riskRewardT1: null,\n    riskRewardT2: null,\n    riskRewardT3: null,\n    riskAmount: null,\n    target1GainPct: null,\n    target2GainPct: null,\n    target3GainPct: null,\n    target1EstimatedDays: null,\n    target2EstimatedDays: null,\n    target3EstimatedDays: null,\n  };\n}\n\n// Runs once for the WHOLE batch — one item per active stock arrives here\n// from \"Load Ranking Inputs\". Must loop $input.all() explicitly (confirmed\n// as a real bug via live E2E testing against 20 real EGX stocks:\n// $input.first() silently only ranked the first stock). itemMatching(i)\n// pairs each row back to its stock.\n\nconst minAvgTradedValue = Number($env.MIN_AVG_TRADED_VALUE) || 0;\nconst minAvgVolume = Number($env.MIN_AVG_VOLUME) || 0;\nconst minActiveDays20 = Number($env.MIN_ACTIVE_DAYS_20) || 15;\n\nfunction scoreOneStock(row, weights) {\n  if (!isNumber(row.close)) {\n    return {\n      eligible: false, eligibilityReason: 'No price data for scan date',\n      overallScore: 0, setupType: 'AVOID', dataConfidence: 0, setupConfidence: 0,\n      entry: null, invalidation: null, target1: null, target2: null, target3: null,\n      riskRewardT1: null, riskRewardT2: null, riskRewardT3: null, accumulationScore: 0,\n      target1GainPct: null, target2GainPct: null, target3GainPct: null,\n      target1EstimatedDays: null, target2EstimatedDays: null, target3EstimatedDays: null,\n    };\n  }\n\n  const reasons = [];\n  let eligible = true;\n  if (!isNumber(row.avg_traded_value20) || row.avg_traded_value20 < minAvgTradedValue) {\n    eligible = false; reasons.push('avg traded value below MIN_AVG_TRADED_VALUE');\n  }\n  if (!isNumber(row.avg_volume20) || row.avg_volume20 < minAvgVolume) {\n    eligible = false; reasons.push('avg volume below MIN_AVG_VOLUME');\n  }\n  if (!isNumber(row.active_days20) || row.active_days20 < minActiveDays20) {\n    eligible = false; reasons.push('fewer than MIN_ACTIVE_DAYS_20 traded sessions in the last 20');\n  }\n  const eligibilityReason = eligible ? null : reasons.join('; ');\n\n  const trendMap = { STRONG_BULLISH: 100, BULLISH: 75, NEUTRAL: 50, BEARISH: 25, STRONG_BEARISH: 0 };\n  const trendFactor = trendMap[row.medium_term_trend] ?? 50;\n\n  const volumeFactor = isNumber(row.relative_volume20) ? clamp((row.relative_volume20 / 3) * 100, 0, 100) : 0;\n\n  const macdFactor = isNumber(row.macd_histogram)\n    ? clamp(50 + row.macd_histogram * 200, 0, 100)\n    : 50;\n\n  // RSI isn't directly in this query (already spent on the scanners); use\n  // momentum_score as a stand-in signal for \"is momentum/RSI supportive\" —\n  // documented approximation, see docs/SCORING.md.\n  const rsiFactor = isNumber(row.momentum_score) ? row.momentum_score : 50;\n\n  const priceStructureFactor = isNumber(row.nearest_resistance_distance_pct)\n    ? clamp(100 - Math.min(100, row.nearest_resistance_distance_pct * 10), 0, 100)\n    : 50;\n\n  const return20d = isNumber(row.close20d_ago) && row.close20d_ago > 0\n    ? ((row.close - row.close20d_ago) / row.close20d_ago) * 100\n    : null;\n  const relativeStrengthFactor = isNumber(return20d) ? clamp(50 + return20d * 3, 0, 100) : 50;\n\n  const subScores = {\n    breakoutScore: row.breakout_score || 0,\n    momentumScore: row.momentum_score || 0,\n    pullbackScore: row.pullback_score || 0,\n    reversalScore: row.reversal_score || 0,\n    accumulationScore: row.accumulation_score || 0,\n  };\n\n  const setupType = classifySetupType(subScores, { eligible });\n  const setupConfidence = calculateSetupConfidence(subScores);\n\n  // Provisional risk/reward factor needs a trade structure — build it first\n  // with a rough entry (close), then feed the resulting riskRewardT1 back in.\n  const tradeStructure = buildTradeStructure({\n    close: row.close, atr14: row.atr14,\n    resistances: [row.resistance1, row.resistance2, row.resistance3],\n    supports: [row.support1, row.support2, row.support3],\n    setupType,\n  });\n  const riskRewardFactor = isNumber(tradeStructure.riskRewardT1)\n    ? clamp(tradeStructure.riskRewardT1 * 30, 0, 100)\n    : 0;\n\n  const { overallScore } = calculateOverallScore({\n    trend: trendFactor,\n    volume: volumeFactor,\n    momentum: subScores.momentumScore,\n    breakout: subScores.breakoutScore,\n    priceStructure: priceStructureFactor,\n    macd: macdFactor,\n    rsi: rsiFactor,\n    relativeStrength: relativeStrengthFactor,\n    riskReward: riskRewardFactor,\n  }, weights);\n\n  return {\n    eligible, eligibilityReason,\n    overallScore,\n    setupType,\n    dataConfidence: row.data_confidence,\n    setupConfidence,\n    accumulationScore: subScores.accumulationScore,\n    entry: tradeStructure.entry,\n    invalidation: tradeStructure.invalidation,\n    target1: tradeStructure.target1,\n    target2: tradeStructure.target2,\n    target3: tradeStructure.target3,\n    riskRewardT1: tradeStructure.riskRewardT1,\n    riskRewardT2: tradeStructure.riskRewardT2,\n    riskRewardT3: tradeStructure.riskRewardT3,\n    target1GainPct: tradeStructure.target1GainPct,\n    target2GainPct: tradeStructure.target2GainPct,\n    target3GainPct: tradeStructure.target3GainPct,\n    target1EstimatedDays: tradeStructure.target1EstimatedDays,\n    target2EstimatedDays: tradeStructure.target2EstimatedDays,\n    target3EstimatedDays: tradeStructure.target3EstimatedDays,\n  };\n}\n\nconst items = $input.all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  let original;\n  try { original = $('Attach Ranking Context').itemMatching(i).json; } catch (e) { continue; }\n  const stockId = original.id;\n  const scannerRunId = original.scannerRunId;\n  const weights = original.weights;\n\n  const row = items[i].json;\n  const scored = scoreOneStock(row, weights);\n\n  out.push({ json: { stockId, scannerRunId, ...scored } });\n}\n\nreturn out;"
+      },
+      "position": [
+        2340,
+        0
+      ],
+      "id": "8be97c05-651d-4c9f-a2ab-9b7402b34869"
+    },
+    {
+      "name": "Upsert Overall Ranking",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO scanner_results (\n  scanner_run_id, stock_id, accumulation_score, overall_score, setup_type, eligible, eligibility_reason, data_confidence, setup_confidence, entry_price, invalidation_price, target1, target2, target3, risk_reward_t1, risk_reward_t2, risk_reward_t3, target1_gain_pct, target2_gain_pct, target3_gain_pct, target1_estimated_days, target2_estimated_days, target3_estimated_days\n)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)\nON CONFLICT (scanner_run_id, stock_id) DO UPDATE SET\n  accumulation_score = EXCLUDED.accumulation_score,\n  overall_score = EXCLUDED.overall_score,\n  setup_type = EXCLUDED.setup_type,\n  eligible = EXCLUDED.eligible,\n  eligibility_reason = EXCLUDED.eligibility_reason,\n  data_confidence = EXCLUDED.data_confidence,\n  setup_confidence = EXCLUDED.setup_confidence,\n  entry_price = EXCLUDED.entry_price,\n  invalidation_price = EXCLUDED.invalidation_price,\n  target1 = EXCLUDED.target1,\n  target2 = EXCLUDED.target2,\n  target3 = EXCLUDED.target3,\n  risk_reward_t1 = EXCLUDED.risk_reward_t1,\n  risk_reward_t2 = EXCLUDED.risk_reward_t2,\n  risk_reward_t3 = EXCLUDED.risk_reward_t3,\n  target1_gain_pct = EXCLUDED.target1_gain_pct,\n  target2_gain_pct = EXCLUDED.target2_gain_pct,\n  target3_gain_pct = EXCLUDED.target3_gain_pct,\n  target1_estimated_days = EXCLUDED.target1_estimated_days,\n  target2_estimated_days = EXCLUDED.target2_estimated_days,\n  target3_estimated_days = EXCLUDED.target3_estimated_days;",
+        "options": {
+          "queryReplacement": "={{ [\n  $json.scannerRunId,\n  $json.stockId,\n  $json.accumulationScore,\n  $json.overallScore,\n  $json.setupType,\n  $json.eligible,\n  $json.eligibilityReason,\n  $json.dataConfidence,\n  $json.setupConfidence,\n  $json.entry,\n  $json.invalidation,\n  $json.target1,\n  $json.target2,\n  $json.target3,\n  $json.riskRewardT1,\n  $json.riskRewardT2,\n  $json.riskRewardT3,\n  $json.target1GainPct,\n  $json.target2GainPct,\n  $json.target3GainPct,\n  $json.target1EstimatedDays,\n  $json.target2EstimatedDays,\n  $json.target3EstimatedDays\n] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        2600,
+        0
+      ],
+      "id": "cd5d880b-fce1-487d-ad1f-f30de20ecf3f"
+    },
+    {
+      "name": "Assign Overall Rank",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE scanner_results sr SET overall_rank = ranked.rnk\nFROM (\n  SELECT id, RANK() OVER (ORDER BY overall_score DESC) AS rnk\n  FROM scanner_results WHERE scanner_run_id = $1\n) ranked\nWHERE sr.id = ranked.id;",
+        "options": {
+          "queryReplacement": "={{ [$('Get or Create Scanner Run').first().json.id] }}"
+        }
+      },
+      "executeOnce": true,
+      "position": [
+        0,
+        200
+      ],
+      "id": "402bf75a-187f-4c9c-828c-79131621dc6f"
+    },
+    {
+      "name": "Load Market-Wide Rows",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  (SELECT json_agg(x.*) FROM (\n    SELECT\n      ROUND((((dp.close - prev.close) / NULLIF(prev.close, 0)) * 100)::numeric, 4) AS \"changePct\",\n      dp.close, ta.ema20, ta.ema50, ta.ema200, ta.relative_volume20 AS \"relativeVolume20\"\n    FROM daily_prices dp\n    JOIN stocks s ON s.id = dp.stock_id\n    LEFT JOIN technical_analysis ta ON ta.stock_id = dp.stock_id AND ta.trading_date = dp.trading_date\n    LEFT JOIN LATERAL (\n      SELECT close FROM daily_prices p2\n      WHERE p2.stock_id = dp.stock_id AND p2.trading_date < dp.trading_date\n      ORDER BY p2.trading_date DESC LIMIT 1\n    ) prev ON TRUE\n    WHERE s.exchange = $1 AND s.active = TRUE AND dp.trading_date = $2\n  ) x) AS rows,\n  (SELECT json_agg(y.* ORDER BY y.trading_date ASC) FROM (\n    SELECT trading_date, close FROM index_prices\n    WHERE index_code = 'EGX30' AND trading_date <= $2\n    ORDER BY trading_date DESC LIMIT 60\n  ) y) AS index_closes;",
+        "options": {
+          "queryReplacement": "={{ [$env.EGX_EXCHANGE_CODE || 'EGX', $('Attach As-Of Date').first().json.asOfDate] }}"
+        }
+      },
+      "executeOnce": true,
+      "position": [
+        260,
+        200
+      ],
+      "id": "ec52f7e9-9320-4e76-9abe-118f8a5f59e3"
+    },
+    {
+      "name": "Compute Market Regime",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/**\n * helpers.js\n *\n * Shared low-level utilities used by every other module in /code and by the\n * equivalent n8n Code nodes. Pure functions only — no I/O, no n8n APIs — so\n * this file can be unit tested with plain `node` and pasted into a Code node\n * body unchanged (just drop the `module.exports` line).\n *\n * Candle shape (normalized, provider-agnostic — see docs/DATA_PROVIDER.md):\n * {\n *   symbol: \"COMI\",\n *   date: \"2026-08-18\",     // ISO date, trading session date\n *   open: 100.20,\n *   high: 103.10,\n *   low: 99.80,\n *   close: 102.70,\n *   volume: 12500000,\n *   tradedValue: 1270000000 // optional, derived if absent\n * }\n */\n\n/** Returns true if v is a finite, non-NaN number. */\nfunction isNumber(v) {\n  return typeof v === \"number\" && Number.isFinite(v);\n}\n\n/** Safe division: returns null instead of Infinity/NaN when denominator is unusable. */\nfunction safeDivide(numerator, denominator) {\n  if (!isNumber(numerator) || !isNumber(denominator) || denominator === 0) {\n    return null;\n  }\n  const result = numerator / denominator;\n  return Number.isFinite(result) ? result : null;\n}\n\n/** Rounds to `decimals` places, returns null for non-numeric input. */\nfunction round(value, decimals = 4) {\n  if (!isNumber(value)) return null;\n  const factor = Math.pow(10, decimals);\n  return Math.round(value * factor) / factor;\n}\n\n/** Percentage change from `from` to `to`. Returns null if from <= 0 or invalid. */\nfunction pctChange(from, to) {\n  if (!isNumber(from) || !isNumber(to) || from === 0) return null;\n  return ((to - from) / from) * 100;\n}\n\n/**\n * Validates a single raw candle. Returns { valid, errors[] }.\n * Mirrors the rules in spec section 31.\n */\nfunction validateCandle(candle) {\n  const errors = [];\n  if (!candle || typeof candle !== \"object\") {\n    return { valid: false, errors: [\"candle is not an object\"] };\n  }\n  const { symbol, date, open, high, low, close, volume } = candle;\n\n  if (!symbol || typeof symbol !== \"string\") errors.push(\"missing/invalid symbol\");\n  if (!date || Number.isNaN(Date.parse(date))) errors.push(\"missing/invalid date\");\n  if (!isNumber(open)) errors.push(\"open is not numeric\");\n  if (!isNumber(high)) errors.push(\"high is not numeric\");\n  if (!isNumber(low)) errors.push(\"low is not numeric\");\n  if (!isNumber(close)) errors.push(\"close is not numeric\");\n  if (!isNumber(volume)) errors.push(\"volume is not numeric\");\n\n  if (isNumber(open) && isNumber(high) && isNumber(low) && isNumber(close)) {\n    if (high < open) errors.push(\"high < open\");\n    if (high < close) errors.push(\"high < close\");\n    if (high < low) errors.push(\"high < low\");\n    if (low > open) errors.push(\"low > open\");\n    if (low > close) errors.push(\"low > close\");\n  }\n  if (isNumber(volume) && volume < 0) errors.push(\"negative volume\");\n  if (isNumber(close) && close <= 0) errors.push(\"close <= 0\");\n\n  return { valid: errors.length === 0, errors };\n}\n\n/**\n * Filters an array of raw candles into { valid[], invalid[] }.\n * `invalid` entries carry the original candle plus `.errors`.\n * Zero-volume candles are valid but flagged with a warning for downstream\n * consumers (suspicious, not necessarily wrong — EGX thin names do trade zero\n * volume on quiet sessions).\n */\nfunction validateCandles(candles) {\n  const valid = [];\n  const invalid = [];\n  for (const candle of candles || []) {\n    const { valid: ok, errors } = validateCandle(candle);\n    if (ok) {\n      valid.push({ ...candle, suspiciousZeroVolume: candle.volume === 0 });\n    } else {\n      invalid.push({ ...candle, errors });\n    }\n  }\n  return { valid, invalid };\n}\n\n/**\n * Removes duplicate candles (same symbol+date), keeping the last occurrence\n * (assumed most recent fetch / most authoritative).\n */\nfunction dedupeCandles(candles) {\n  const map = new Map();\n  for (const c of candles || []) {\n    map.set(`${c.symbol}::${c.date}`, c);\n  }\n  return Array.from(map.values());\n}\n\n/** Sorts candles ascending by date (oldest first) — mandatory before any TA calc. */\nfunction sortCandlesAscending(candles) {\n  return [...(candles || [])].sort((a, b) => new Date(a.date) - new Date(b.date));\n}\n\n/**\n * Derives tradedValue when the provider doesn't supply it directly.\n * Uses the session's typical price (H+L+C)/3 * volume as a reasonable proxy.\n */\nfunction deriveTradedValue(candle) {\n  if (isNumber(candle.tradedValue)) return candle.tradedValue;\n  if (!isNumber(candle.high) || !isNumber(candle.low) || !isNumber(candle.close) || !isNumber(candle.volume)) {\n    return null;\n  }\n  const typicalPrice = (candle.high + candle.low + candle.close) / 3;\n  return typicalPrice * candle.volume;\n}\n\n/** Simple mean of the last `n` numeric values in `arr` (nulls skipped). Returns null if insufficient data. */\nfunction meanOfLast(arr, n) {\n  if (!Array.isArray(arr) || arr.length < n) return null;\n  const slice = arr.slice(-n).filter(isNumber);\n  if (slice.length < n) return null;\n  return slice.reduce((a, b) => a + b, 0) / n;\n}\n\n/** Standard deviation of the last `n` numeric values. Returns null if insufficient data. */\nfunction stdDevOfLast(arr, n) {\n  const mean = meanOfLast(arr, n);\n  if (mean === null) return null;\n  const slice = arr.slice(-n);\n  const variance = slice.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / n;\n  return Math.sqrt(variance);\n}\n\n/** Clamps a number into [min, max]. */\nfunction clamp(value, min, max) {\n  if (!isNumber(value)) return min;\n  return Math.min(Math.max(value, min), max);\n}\n\n/**\n * Wraps arbitrary rows into n8n's expected item structure: [{ json: {...} }].\n * Accepts a single object or array of objects.\n */\nfunction toN8nItems(rows) {\n  const list = Array.isArray(rows) ? rows : [rows];\n  return list.map((json) => ({ json }));\n}\n\n/**\n * Reads all `json` payloads out of an n8n items array back into plain objects.\n */\nfunction fromN8nItems(items) {\n  return (items || []).map((item) => item.json);\n}\n\n// ---------------------------------------------------------------------\n\n/**\n * indicators.js\n *\n * Pure technical-indicator calculations. Every function takes candles/values\n * already sorted OLDEST -> NEWEST (see helpers.sortCandlesAscending) and\n * returns an array aligned index-for-index with the input, using `null`\n * wherever there isn't enough history yet. No indicator here ever looks\n * ahead — index i only ever uses data at indices <= i (see docs/BACKTESTING.md\n * \"no look-ahead\" rule, spec section 30).\n */\n\n\n/** Simple Moving Average over `period` closes. */\nfunction sma(values, period) {\n  const out = new Array(values.length).fill(null);\n  let windowSum = 0;\n  for (let i = 0; i < values.length; i++) {\n    const v = values[i];\n    windowSum += isNumber(v) ? v : 0;\n    if (i >= period) {\n      const dropped = values[i - period];\n      windowSum -= isNumber(dropped) ? dropped : 0;\n    }\n    if (i >= period - 1) {\n      const slice = values.slice(i - period + 1, i + 1);\n      if (slice.every(isNumber)) {\n        out[i] = windowSum / period;\n      }\n    }\n  }\n  return out;\n}\n\n/** Exponential Moving Average, seeded with the SMA of the first `period` values. */\nfunction ema(values, period) {\n  const out = new Array(values.length).fill(null);\n  const k = 2 / (period + 1);\n  const seed = sma(values, period);\n  let prevEma = null;\n  for (let i = 0; i < values.length; i++) {\n    if (!isNumber(values[i])) continue;\n    if (prevEma === null) {\n      if (seed[i] !== null) {\n        prevEma = seed[i];\n        out[i] = prevEma;\n      }\n      continue;\n    }\n    prevEma = values[i] * k + prevEma * (1 - k);\n    out[i] = prevEma;\n  }\n  return out;\n}\n\n/** RSI (Wilder smoothing), period defaults to 14. */\nfunction rsi(closes, period = 14) {\n  const out = new Array(closes.length).fill(null);\n  if (closes.length < period + 1) return out;\n\n  let avgGain = 0;\n  let avgLoss = 0;\n  for (let i = 1; i <= period; i++) {\n    const change = closes[i] - closes[i - 1];\n    if (change > 0) avgGain += change;\n    else avgLoss += Math.abs(change);\n  }\n  avgGain /= period;\n  avgLoss /= period;\n  out[period] = computeRsiFromAverages(avgGain, avgLoss);\n\n  for (let i = period + 1; i < closes.length; i++) {\n    const change = closes[i] - closes[i - 1];\n    const gain = change > 0 ? change : 0;\n    const loss = change < 0 ? Math.abs(change) : 0;\n    avgGain = (avgGain * (period - 1) + gain) / period;\n    avgLoss = (avgLoss * (period - 1) + loss) / period;\n    out[i] = computeRsiFromAverages(avgGain, avgLoss);\n  }\n  return out;\n}\n\nfunction computeRsiFromAverages(avgGain, avgLoss) {\n  if (avgLoss === 0) return 100;\n  const rs = avgGain / avgLoss;\n  return 100 - 100 / (1 + rs);\n}\n\n/** MACD: { macdLine[], signalLine[], histogram[] }. Defaults 12/26/9. */\nfunction macd(closes, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {\n  const fastEma = ema(closes, fastPeriod);\n  const slowEma = ema(closes, slowPeriod);\n  const macdLine = closes.map((_, i) =>\n    isNumber(fastEma[i]) && isNumber(slowEma[i]) ? fastEma[i] - slowEma[i] : null\n  );\n  // signal line is an EMA of the MACD line itself; ema() skips nulls safely\n  // because it only advances prevEma on numeric inputs.\n  const signalInput = macdLine.map((v) => (v === null ? NaN : v)).map((v) => (Number.isNaN(v) ? null : v));\n  const signalLine = emaSkippingNulls(signalInput, signalPeriod);\n  const histogram = closes.map((_, i) =>\n    isNumber(macdLine[i]) && isNumber(signalLine[i]) ? macdLine[i] - signalLine[i] : null\n  );\n  return { macdLine, signalLine, histogram };\n}\n\n/** Like ema() but the seed window only counts from the first non-null value. */\nfunction emaSkippingNulls(values, period) {\n  const firstValidIndex = values.findIndex(isNumber);\n  const out = new Array(values.length).fill(null);\n  if (firstValidIndex === -1) return out;\n  const compact = values.slice(firstValidIndex).filter(isNumber);\n  if (compact.length < period) return out;\n  const compactEma = ema(compact, period);\n  let compactIdx = 0;\n  for (let i = firstValidIndex; i < values.length; i++) {\n    if (!isNumber(values[i])) continue;\n    out[i] = compactEma[compactIdx];\n    compactIdx++;\n  }\n  return out;\n}\n\n/** Average True Range (Wilder smoothing), period defaults to 14. */\nfunction atr(candles, period = 14) {\n  const out = new Array(candles.length).fill(null);\n  if (candles.length < period + 1) return out;\n\n  const trueRanges = candles.map((c, i) => {\n    if (i === 0) return c.high - c.low;\n    const prevClose = candles[i - 1].close;\n    return Math.max(\n      c.high - c.low,\n      Math.abs(c.high - prevClose),\n      Math.abs(c.low - prevClose)\n    );\n  });\n\n  let avgTr = trueRanges.slice(1, period + 1).reduce((a, b) => a + b, 0) / period;\n  out[period] = avgTr;\n  for (let i = period + 1; i < candles.length; i++) {\n    avgTr = (avgTr * (period - 1) + trueRanges[i]) / period;\n    out[i] = avgTr;\n  }\n  return out;\n}\n\n/** On-Balance Volume, cumulative. First bar seeds at 0. */\nfunction obv(candles) {\n  const out = new Array(candles.length).fill(null);\n  if (candles.length === 0) return out;\n  out[0] = 0;\n  for (let i = 1; i < candles.length; i++) {\n    const prev = out[i - 1];\n    const volume = isNumber(candles[i].volume) ? candles[i].volume : 0;\n    if (candles[i].close > candles[i - 1].close) out[i] = prev + volume;\n    else if (candles[i].close < candles[i - 1].close) out[i] = prev - volume;\n    else out[i] = prev;\n  }\n  return out;\n}\n\n/** Rate of Change (%) over `period` sessions. */\nfunction roc(closes, period) {\n  return closes.map((v, i) => {\n    if (i < period) return null;\n    return safeDivide(v - closes[i - period], closes[i - period]) === null\n      ? null\n      : ((v - closes[i - period]) / closes[i - period]) * 100;\n  });\n}\n\n/** Rolling max of `high` over the trailing `period` sessions, inclusive of current. */\nfunction rollingHigh(candles, period) {\n  return candles.map((_, i) => {\n    if (i < period - 1) return null;\n    const slice = candles.slice(i - period + 1, i + 1);\n    return Math.max(...slice.map((c) => c.high));\n  });\n}\n\n/** Rolling min of `low` over the trailing `period` sessions, inclusive of current. */\nfunction rollingLow(candles, period) {\n  return candles.map((_, i) => {\n    if (i < period - 1) return null;\n    const slice = candles.slice(i - period + 1, i + 1);\n    return Math.min(...slice.map((c) => c.low));\n  });\n}\n\n/** Simple moving average of volume (same mechanics as sma()). */\nfunction averageVolume(volumes, period) {\n  return sma(volumes, period);\n}\n\n/**\n * Relative volume at index i = volume[i] / average(volume[i-period .. i-1]).\n * CRITICAL: today's volume must NEVER be included in its own denominator\n * (spec section 9 / 30). The average window ends the bar BEFORE i.\n */\nfunction relativeVolume(volumes, period) {\n  return volumes.map((v, i) => {\n    if (i < period) return null;\n    const priorWindow = volumes.slice(i - period, i);\n    if (!priorWindow.every(isNumber)) return null;\n    const avg = priorWindow.reduce((a, b) => a + b, 0) / period;\n    return safeDivide(v, avg);\n  });\n}\n\n/**\n * Computes the full technical_analysis row set for every bar of a sorted\n * candle series. Returns an array aligned with `candles`; each element is\n * either null (insufficient history at that index for ANY indicator we still\n * want to attempt) or a flat object matching the technical_analysis table.\n *\n * This is the function the \"04-egx-technical-analysis\" workflow's Code node\n * mirrors. It is intentionally tolerant: partial indicator sets (e.g. no\n * SMA200 yet for a newly listed stock) still produce a row with nulls for the\n * fields that aren't computable yet, rather than skipping the bar entirely.\n */\nfunction calculateAllIndicators(candles) {\n  if (!Array.isArray(candles) || candles.length === 0) return [];\n\n  const closes = candles.map((c) => c.close);\n  const volumes = candles.map((c) => c.volume);\n\n  const sma20 = sma(closes, 20);\n  const sma50 = sma(closes, 50);\n  const sma100 = sma(closes, 100);\n  const sma200 = sma(closes, 200);\n\n  const ema9 = ema(closes, 9);\n  const ema20 = ema(closes, 20);\n  const ema50 = ema(closes, 50);\n  const ema100 = ema(closes, 100);\n  const ema200 = ema(closes, 200);\n\n  const rsi14 = rsi(closes, 14);\n  const { macdLine, signalLine, histogram } = macd(closes, 12, 26, 9);\n  const atr14 = atr(candles, 14);\n  const obvSeries = obv(candles);\n\n  const volumeSma20 = averageVolume(volumes, 20);\n  const volumeSma50 = averageVolume(volumes, 50);\n  const rvol20 = relativeVolume(volumes, 20);\n  const rvol50 = relativeVolume(volumes, 50);\n\n  const roc5 = roc(closes, 5);\n  const roc10 = roc(closes, 10);\n  const roc20 = roc(closes, 20);\n\n  const high20 = rollingHigh(candles, 20);\n  const high50 = rollingHigh(candles, 50);\n  const high252 = rollingHigh(candles, 252);\n  const low20 = rollingLow(candles, 20);\n  const low50 = rollingLow(candles, 50);\n  const low252 = rollingLow(candles, 252);\n\n  return candles.map((c, i) => {\n    const distance52wHigh = isNumber(high252[i]) ? ((c.close - high252[i]) / high252[i]) * 100 : null;\n    const distance52wLow = isNumber(low252[i]) ? ((c.close - low252[i]) / low252[i]) * 100 : null;\n\n    const trend = classifyTrend({\n      close: c.close,\n      ema9: ema9[i],\n      ema20: ema20[i],\n      ema50: ema50[i],\n      ema200: ema200[i],\n    });\n\n    // History-length based data confidence (section 44): scales up to 100\n    // once 252 sessions of prior data are available; never inflated for\n    // thin history even if all indicators happen to compute.\n    const barsOfHistory = i + 1;\n    const dataConfidence = round(Math.min(100, (barsOfHistory / 252) * 100), 2);\n\n    return {\n      symbol: c.symbol,\n      tradingDate: c.date,\n      shortTermTrend: trend.shortTerm,\n      mediumTermTrend: trend.mediumTerm,\n      longTermTrend: trend.longTerm,\n      dataConfidence,\n\n      sma20: round(sma20[i], 6),\n      sma50: round(sma50[i], 6),\n      sma100: round(sma100[i], 6),\n      sma200: round(sma200[i], 6),\n\n      ema9: round(ema9[i], 6),\n      ema20: round(ema20[i], 6),\n      ema50: round(ema50[i], 6),\n      ema100: round(ema100[i], 6),\n      ema200: round(ema200[i], 6),\n\n      rsi14: round(rsi14[i], 4),\n\n      macd: round(macdLine[i], 6),\n      macdSignal: round(signalLine[i], 6),\n      macdHistogram: round(histogram[i], 6),\n\n      atr14: round(atr14[i], 6),\n      obv: obvSeries[i],\n\n      volumeSma20: round(volumeSma20[i], 4),\n      volumeSma50: round(volumeSma50[i], 4),\n\n      relativeVolume20: round(rvol20[i], 4),\n      relativeVolume50: round(rvol50[i], 4),\n\n      roc5: round(roc5[i], 4),\n      roc10: round(roc10[i], 4),\n      roc20: round(roc20[i], 4),\n\n      high20: high20[i],\n      high50: high50[i],\n      high252: high252[i],\n      low20: low20[i],\n      low50: low50[i],\n      low252: low252[i],\n\n      distance52wHigh: round(distance52wHigh, 4),\n      distance52wLow: round(distance52wLow, 4),\n    };\n  });\n}\n\n/**\n * Classifies short/medium/long-term trend from EMA structure (spec section 11).\n * Deliberately does NOT require EMA200 for the medium-term read, since newer\n * EGX listings may not have 200 sessions of history yet — long-term trend\n * degrades to null (not BEARISH) when EMA200 is unavailable, so a thin\n * history never gets penalized as if it were structurally weak.\n *\n * close, ema9, ema20, ema50, ema200 are the latest bar's values (numbers or null).\n */\nfunction classifyTrend({ close, ema9, ema20, ema50, ema200 }) {\n  const result = { shortTerm: \"NEUTRAL\", mediumTerm: \"NEUTRAL\", longTerm: null };\n\n  if (isNumber(close) && isNumber(ema9) && isNumber(ema20)) {\n    if (close > ema9 && ema9 > ema20) result.shortTerm = \"STRONG_BULLISH\";\n    else if (close > ema9 || close > ema20) result.shortTerm = \"BULLISH\";\n    else if (close < ema9 && ema9 < ema20) result.shortTerm = \"STRONG_BEARISH\";\n    else if (close < ema9 || close < ema20) result.shortTerm = \"BEARISH\";\n  }\n\n  if (isNumber(ema20) && isNumber(ema50) && isNumber(close)) {\n    if (close > ema20 && ema20 > ema50) result.mediumTerm = \"STRONG_BULLISH\";\n    else if (close > ema50) result.mediumTerm = \"BULLISH\";\n    else if (close < ema20 && ema20 < ema50) result.mediumTerm = \"STRONG_BEARISH\";\n    else if (close < ema50) result.mediumTerm = \"BEARISH\";\n  }\n\n  if (isNumber(ema50) && isNumber(ema200) && isNumber(close)) {\n    if (close > ema50 && ema50 > ema200) result.longTerm = \"STRONG_BULLISH\";\n    else if (close > ema200) result.longTerm = \"BULLISH\";\n    else if (close < ema50 && ema50 < ema200) result.longTerm = \"STRONG_BEARISH\";\n    else if (close < ema200) result.longTerm = \"BEARISH\";\n    else result.longTerm = \"NEUTRAL\";\n  }\n\n  return result;\n}\n\n// ---------------------------------------------------------------------\n\n/**\n * marketRegime.js\n *\n * Market-wide breadth analysis (spec section 23). Consumes the full daily\n * snapshot (one row per active, liquid-enough stock) plus optional EGX30\n * index candles, and produces a single market_score (0-100) and\n * market_regime classification used both for the daily report header and,\n * optionally, as a contextual input to individual scanner scores.\n */\n\n\nconst REGIME_THRESHOLDS = {\n  strongBullish: 75,\n  bullish: 60,\n  neutral: 40,\n  bearish: 25,\n};\n\n/**\n * `rows`: array of { changePct, close, ema20, ema50, ema200, relativeVolume20 }\n * for every stock included in today's scan (already liquidity-filtered\n * upstream is fine, but this function itself applies no filtering).\n *\n * `index`: optional { changePct, close, ema20, ema50 } for EGX30 (or the\n * configured benchmark). Pass null when index data isn't available yet —\n * the score still computes from breadth alone, just without the index\n * component.\n */\nfunction calculateMarketRegime(rows, index = null) {\n  const valid = (rows || []).filter((r) => isNumber(r.changePct));\n  const total = valid.length;\n\n  if (total === 0) {\n    return {\n      advancing: 0,\n      declining: 0,\n      unchanged: 0,\n      pctAboveEma20: null,\n      pctAboveEma50: null,\n      pctAboveEma200: null,\n      countRvolAbove1_5: 0,\n      countRvolAbove2: 0,\n      averageDailyReturn: null,\n      medianDailyReturn: null,\n      marketScore: null,\n      marketRegime: \"NEUTRAL\",\n    };\n  }\n\n  const advancing = valid.filter((r) => r.changePct > 0).length;\n  const declining = valid.filter((r) => r.changePct < 0).length;\n  const unchanged = total - advancing - declining;\n\n  const aboveEma20 = rows.filter((r) => isNumber(r.close) && isNumber(r.ema20) && r.close > r.ema20).length;\n  const aboveEma50 = rows.filter((r) => isNumber(r.close) && isNumber(r.ema50) && r.close > r.ema50).length;\n  const withEma200 = rows.filter((r) => isNumber(r.close) && isNumber(r.ema200));\n  const aboveEma200 = withEma200.filter((r) => r.close > r.ema200).length;\n\n  const countRvolAbove1_5 = rows.filter((r) => isNumber(r.relativeVolume20) && r.relativeVolume20 > 1.5).length;\n  const countRvolAbove2 = rows.filter((r) => isNumber(r.relativeVolume20) && r.relativeVolume20 > 2).length;\n\n  const returns = valid.map((r) => r.changePct).sort((a, b) => a - b);\n  const averageDailyReturn = returns.reduce((a, b) => a + b, 0) / returns.length;\n  const medianDailyReturn = median(returns);\n\n  const pctAboveEma20 = (aboveEma20 / total) * 100;\n  const pctAboveEma50 = (aboveEma50 / total) * 100;\n  const pctAboveEma200 = withEma200.length ? (aboveEma200 / withEma200.length) * 100 : null;\n\n  const breadthScore =\n    clamp(advancing / total, 0, 1) * 30 +\n    clamp(pctAboveEma20 / 100, 0, 1) * 20 +\n    clamp(pctAboveEma50 / 100, 0, 1) * 20 +\n    (pctAboveEma200 !== null ? clamp(pctAboveEma200 / 100, 0, 1) * 15 : 7.5) +\n    clamp(countRvolAbove1_5 / total / 0.3, 0, 1) * 15; // 30%+ of names hot = full marks\n\n  let indexScore = null;\n  if (index && isNumber(index.changePct)) {\n    let s = 50 + clamp(index.changePct * 10, -30, 30);\n    if (isNumber(index.close) && isNumber(index.ema20) && index.close > index.ema20) s += 10;\n    if (isNumber(index.close) && isNumber(index.ema50) && index.close > index.ema50) s += 10;\n    indexScore = clamp(s, 0, 100);\n  }\n\n  const marketScore = round(\n    indexScore !== null ? breadthScore * 0.7 + indexScore * 0.3 : breadthScore,\n    2\n  );\n\n  return {\n    advancing,\n    declining,\n    unchanged,\n    pctAboveEma20: round(pctAboveEma20, 2),\n    pctAboveEma50: round(pctAboveEma50, 2),\n    pctAboveEma200: pctAboveEma200 !== null ? round(pctAboveEma200, 2) : null,\n    countRvolAbove1_5: countRvolAbove1_5,\n    countRvolAbove2: countRvolAbove2,\n    averageDailyReturn: round(averageDailyReturn, 4),\n    medianDailyReturn: round(medianDailyReturn, 4),\n    marketScore,\n    marketRegime: classifyRegime(marketScore),\n  };\n}\n\nfunction classifyRegime(score) {\n  if (!isNumber(score)) return \"NEUTRAL\";\n  if (score >= REGIME_THRESHOLDS.strongBullish) return \"STRONG_BULLISH\";\n  if (score >= REGIME_THRESHOLDS.bullish) return \"BULLISH\";\n  if (score >= REGIME_THRESHOLDS.neutral) return \"NEUTRAL\";\n  if (score >= REGIME_THRESHOLDS.bearish) return \"BEARISH\";\n  return \"STRONG_BEARISH\";\n}\n\nfunction median(sortedValues) {\n  const n = sortedValues.length;\n  if (n === 0) return null;\n  const mid = Math.floor(n / 2);\n  return n % 2 === 0 ? (sortedValues[mid - 1] + sortedValues[mid]) / 2 : sortedValues[mid];\n}\n\nconst row = $input.first().json;\nconst rows = row.rows || [];\nconst indexCloses = (row.index_closes || []).map((r) => r.close).filter(isNumber);\n\nlet index = null;\nif (indexCloses.length >= 2) {\n  const ema20series = ema(indexCloses, 20);\n  const ema50series = ema(indexCloses, 50);\n  const last = indexCloses.length - 1;\n  index = {\n    changePct: pctChange(indexCloses[last - 1], indexCloses[last]),\n    close: indexCloses[last],\n    ema20: ema20series[last],\n    ema50: ema50series[last],\n  };\n}\n\nconst regime = calculateMarketRegime(rows, index);\nreturn [{ json: regime }];"
+      },
+      "position": [
+        520,
+        200
+      ],
+      "id": "09d8e4d9-eec4-4383-9764-f360d09a310e"
+    },
+    {
+      "name": "Finalize Scanner Run",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE scanner_runs SET\n  market_score = $2,\n  market_regime = $3,\n  stocks_scanned = (SELECT COUNT(*) FROM scanner_results WHERE scanner_run_id = $1),\n  eligible_stocks = (SELECT COUNT(*) FROM scanner_results WHERE scanner_run_id = $1 AND eligible = TRUE),\n  status = 'COMPLETED',\n  finished_at = now()\nWHERE id = $1;",
+        "options": {
+          "queryReplacement": "={{ [$('Get or Create Scanner Run').first().json.id, $json.marketScore, $json.marketRegime] }}"
+        }
+      },
+      "executeOnce": true,
+      "position": [
+        780,
+        200
+      ],
+      "id": "0856808d-45fb-4d16-897d-b38369eedd0b"
+    },
+    {
+      "name": "Build Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const regime = $input.first().json;\nreturn [{ json: {\n  workflow: '11-egx-overall-ranking',\n  finishedAt: new Date().toISOString(),\n  scannerRunId: $('Get or Create Scanner Run').first().json.id,\n  tradingDate: $('Attach As-Of Date').first().json.asOfDate,\n  marketScore: regime.marketScore,\n  marketRegime: regime.marketRegime,\n  advancing: regime.advancing,\n  declining: regime.declining,\n} }];"
+      },
+      "position": [
+        1040,
+        200
+      ],
+      "id": "7fb135a7-343c-463a-8905-4f3a635e78db"
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Attach As-Of Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Attach As-Of Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach As-Of Date": {
+      "main": [
+        [
+          {
+            "node": "Get or Create Scanner Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get or Create Scanner Run": {
+      "main": [
+        [
+          {
+            "node": "Load Scoring Weights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Scoring Weights": {
+      "main": [
+        [
+          {
+            "node": "Build Weights Map",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Weights Map": {
+      "main": [
+        [
+          {
+            "node": "Load Active Stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Active Stocks": {
+      "main": [
+        [
+          {
+            "node": "Attach Ranking Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Ranking Context": {
+      "main": [
+        [
+          {
+            "node": "Load Ranking Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Ranking Inputs": {
+      "main": [
+        [
+          {
+            "node": "Compute Overall Score & Trade Structure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Overall Score & Trade Structure": {
+      "main": [
+        [
+          {
+            "node": "Upsert Overall Ranking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Overall Ranking": {
+      "main": [
+        [
+          {
+            "node": "Assign Overall Rank",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assign Overall Rank": {
+      "main": [
+        [
+          {
+            "node": "Load Market-Wide Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Market-Wide Rows": {
+      "main": [
+        [
+          {
+            "node": "Compute Market Regime",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Market Regime": {
+      "main": [
+        [
+          {
+            "node": "Finalize Scanner Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Scanner Run": {
+      "main": [
+        [
+          {
+            "node": "Build Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "3e120ce1-2d28-482c-9b3b-138ee70b5908",
+  "tags": []
+}

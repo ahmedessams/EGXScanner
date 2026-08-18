@@ -1,0 +1,776 @@
+{
+  "name": "15 - EGX Backtest",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -420
+      ],
+      "parameters": {
+        "content": "## 15 - EGX Backtest\n\nReplays the scanner pipeline (04-11) once per historical trading date between startDate and endDate, tagging every simulated run as scanner_runs.run_type = 'BACKTEST' so it never collides with real daily runs. Each date is processed sequentially and only ever touches data with trading_date <= that date — the same point-in-time workflows used for live scanning, so there is no separate 'backtest scoring logic' to drift out of sync with production (spec section 30).\n\nParameters (pass via Execute Workflow, or edit 'Resolve Backtest Parameters' defaults for a Manual Trigger run):\n`startDate`, `endDate`, `minimumScore` (default 0), `setupType` (default 'ANY'), `topN` (default 10).\n\n**Expensive**: runs the full pipeline once PER trading day in range. A 90-day backtest over ~250 stocks is a lot of Postgres round-trips — expect this to take a while. Start with a short date range.",
+        "height": 420,
+        "width": 560,
+        "color": 5
+      },
+      "id": "6caee655-6294-418f-81d4-b9c69a53fea2"
+    },
+    {
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        0,
+        0
+      ],
+      "id": "d40b10cf-3b41-4bc0-aad3-fb7566bc6ec0"
+    },
+    {
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "position": [
+        260,
+        0
+      ],
+      "id": "31bbf9ba-c19a-4ce6-ab11-361772ecb9d7"
+    },
+    {
+      "name": "Resolve Backtest Parameters",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// the trigger lookup THROWS if that trigger never executed (e.g. this workflow\n// run via Manual Trigger alone) — confirmed via live E2E testing. try/catch\n// makes \"never executed\" and \"executed with zero items\" behave the same.\nlet trigger = {};\ntry {\n  const triggerItems = $('When Executed by Another Workflow').all();\n  trigger = triggerItems.length ? triggerItems[0].json : {};\n} catch (e) { trigger = {}; }\n\nconst today = new Date();\nconst defaultEnd = new Date(today);\ndefaultEnd.setDate(defaultEnd.getDate() - 1);\nconst defaultStart = new Date(defaultEnd);\ndefaultStart.setDate(defaultStart.getDate() - 90);\n\nconst startDate = trigger.startDate || defaultStart.toISOString().slice(0, 10);\nconst endDate = trigger.endDate || defaultEnd.toISOString().slice(0, 10);\nconst minimumScore = isFinite(Number(trigger.minimumScore)) ? Number(trigger.minimumScore) : 0;\nconst setupType = trigger.setupType || 'ANY';\nconst topN = Number(trigger.topN) || Number($env.TOP_N) || 10;\n\nreturn [{ json: { startDate, endDate, minimumScore, setupType, topN } }];"
+      },
+      "position": [
+        520,
+        0
+      ],
+      "id": "3f461233-efe8-4387-9047-8cba57644d11"
+    },
+    {
+      "name": "Get Trading Dates In Range",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT DISTINCT trading_date::text AS trading_date FROM daily_prices\nWHERE trading_date BETWEEN $1 AND $2\nORDER BY trading_date ASC;",
+        "options": {
+          "queryReplacement": "={{ [$json.startDate, $json.endDate] }}"
+        }
+      },
+      "executeOnce": true,
+      "position": [
+        780,
+        0
+      ],
+      "id": "03fd6a20-dc4a-4b1f-a679-22316d7168e4"
+    },
+    {
+      "name": "Loop Over Trading Dates",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "position": [
+        1040,
+        0
+      ],
+      "id": "73faa247-936d-446b-baf9-2b5ea1a707cd"
+    },
+    {
+      "name": "Capture Current Date",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const params = $('Resolve Backtest Parameters').first().json;\nconst dateRow = $input.first().json;\nreturn [{ json: {\n  asOfDate: dateRow.trading_date,\n  runType: 'BACKTEST',\n  minimumScore: params.minimumScore,\n  setupType: params.setupType,\n  topN: params.topN,\n} }];"
+      },
+      "position": [
+        1300,
+        0
+      ],
+      "id": "a24612cb-9bdd-48b3-a1fb-383805cae315"
+    },
+    {
+      "name": "Prep for 04 Technical Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType } }];"
+      },
+      "position": [
+        1560,
+        0
+      ],
+      "id": "1378e435-216f-43da-bad7-2f91fd2a1989"
+    },
+    {
+      "name": "Execute: 04 Technical Analysis",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "04 - EGX Technical Analysis"
+        },
+        "options": {}
+      },
+      "position": [
+        1820,
+        0
+      ],
+      "id": "3ea8e6fb-f5ea-4fa1-8b33-499762a87ceb"
+    },
+    {
+      "name": "Prep for 05 Support Resistance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType } }];"
+      },
+      "position": [
+        2080,
+        0
+      ],
+      "id": "73951c73-1721-429e-8881-5cafca7a7293"
+    },
+    {
+      "name": "Execute: 05 Support Resistance",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "05 - EGX Support Resistance"
+        },
+        "options": {}
+      },
+      "position": [
+        2340,
+        0
+      ],
+      "id": "4426aa8c-bbd7-4673-9c50-917ab82f0941"
+    },
+    {
+      "name": "Prep for 06 Volume Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType } }];"
+      },
+      "position": [
+        2600,
+        0
+      ],
+      "id": "0f2e1a81-f3c8-4392-a9ae-5d114d2d8102"
+    },
+    {
+      "name": "Execute: 06 Volume Analysis",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "06 - EGX Volume Analysis"
+        },
+        "options": {}
+      },
+      "position": [
+        0,
+        200
+      ],
+      "id": "7accc148-52d4-4230-a67d-58ad945b5b55"
+    },
+    {
+      "name": "Prep for 07 Breakout Scanner",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType } }];"
+      },
+      "position": [
+        260,
+        200
+      ],
+      "id": "d73b2124-e078-48b4-9baf-2dcd2c1b4244"
+    },
+    {
+      "name": "Execute: 07 Breakout Scanner",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "07 - EGX Breakout Scanner"
+        },
+        "options": {}
+      },
+      "position": [
+        520,
+        200
+      ],
+      "id": "5caf5a2d-2dc7-469f-8ec1-8e8c92bbb3a1"
+    },
+    {
+      "name": "Prep for 08 Momentum Scanner",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType } }];"
+      },
+      "position": [
+        780,
+        200
+      ],
+      "id": "054ad589-60ff-45b8-a403-37dc574c1073"
+    },
+    {
+      "name": "Execute: 08 Momentum Scanner",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "08 - EGX Momentum Scanner"
+        },
+        "options": {}
+      },
+      "position": [
+        1040,
+        200
+      ],
+      "id": "8a1e5e2f-046c-427e-adb0-7cb30caded96"
+    },
+    {
+      "name": "Prep for 09 Pullback Scanner",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType } }];"
+      },
+      "position": [
+        1300,
+        200
+      ],
+      "id": "ea42f311-5ba2-4379-a63a-804ba16554c8"
+    },
+    {
+      "name": "Execute: 09 Pullback Scanner",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "09 - EGX Pullback Scanner"
+        },
+        "options": {}
+      },
+      "position": [
+        1560,
+        200
+      ],
+      "id": "7e92ac02-d86e-4d45-bf33-54fb8c3f903d"
+    },
+    {
+      "name": "Prep for 10 Reversal Scanner",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType } }];"
+      },
+      "position": [
+        1820,
+        200
+      ],
+      "id": "a15762be-6b7b-4eda-bf83-9829740d8c69"
+    },
+    {
+      "name": "Execute: 10 Reversal Scanner",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "10 - EGX Reversal Scanner"
+        },
+        "options": {}
+      },
+      "position": [
+        2080,
+        200
+      ],
+      "id": "4e7e811e-d58d-4e7e-b94a-1867de483934"
+    },
+    {
+      "name": "Prep for 11 Overall Ranking",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType } }];"
+      },
+      "position": [
+        2340,
+        200
+      ],
+      "id": "cbed9945-de0f-48d3-b446-6fdc46cf305e"
+    },
+    {
+      "name": "Execute: 11 Overall Ranking",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "11 - EGX Overall Ranking"
+        },
+        "options": {}
+      },
+      "position": [
+        2600,
+        200
+      ],
+      "id": "dd994401-4faa-4f17-918b-2b4cfb5e33dc"
+    },
+    {
+      "name": "Brief Pause Between Dates",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 0.2,
+        "unit": "seconds"
+      },
+      "position": [
+        0,
+        400
+      ],
+      "id": "4fd12e32-9131-46d0-9329-7dd3a225a560"
+    },
+    {
+      "name": "Prep for 14",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: { runType: 'BACKTEST' } }];"
+      },
+      "position": [
+        260,
+        400
+      ],
+      "id": "4623ffc7-17ec-47c0-a4ec-1a59eb831763"
+    },
+    {
+      "name": "Execute: 14 Prediction Evaluation",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "14 - EGX Prediction Evaluation"
+        },
+        "options": {}
+      },
+      "position": [
+        520,
+        400
+      ],
+      "id": "bf43aafd-d406-49f4-ac40-4365ca6570aa"
+    },
+    {
+      "name": "Aggregate Backtest Metrics",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  COUNT(*)::float8 AS sample_size,\n  ROUND(AVG(CASE WHEN pe.return_previous_close_to_close_pct > 0 THEN 1 ELSE 0 END) * 100, 2)::float8 AS positive_close_rate_pct,\n  ROUND(AVG(pe.return_previous_close_to_close_pct)::numeric, 4)::float8 AS avg_return_pct,\n  ROUND((PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY pe.return_previous_close_to_close_pct))::numeric, 4)::float8 AS median_return_pct,\n  ROUND(AVG(pe.maximum_favorable_excursion_pct)::numeric, 4)::float8 AS avg_mfe_pct,\n  ROUND(AVG(pe.maximum_adverse_excursion_pct)::numeric, 4)::float8 AS avg_mae_pct,\n  ROUND(AVG(CASE WHEN pe.target1_hit THEN 1 ELSE 0 END) * 100, 2)::float8 AS target1_hit_rate_pct,\n  ROUND(AVG(CASE WHEN pe.target2_hit THEN 1 ELSE 0 END) * 100, 2)::float8 AS target2_hit_rate_pct,\n  ROUND(AVG(CASE WHEN pe.stop_hit THEN 1 ELSE 0 END) * 100, 2)::float8 AS stop_hit_rate_pct\nFROM prediction_evaluation pe\nJOIN scanner_results r ON r.id = pe.scanner_result_id\nJOIN scanner_runs run ON run.id = r.scanner_run_id\nWHERE run.run_type = 'BACKTEST'\n  AND run.trading_date BETWEEN $1 AND $2\n  AND r.overall_score >= $3\n  AND r.eligible = TRUE\n  AND ($4 = 'ANY' OR r.setup_type = $4)\n  AND r.overall_rank <= $5;",
+        "options": {
+          "queryReplacement": "={{ [\n  $('Resolve Backtest Parameters').first().json.startDate,\n  $('Resolve Backtest Parameters').first().json.endDate,\n  $('Resolve Backtest Parameters').first().json.minimumScore,\n  $('Resolve Backtest Parameters').first().json.setupType,\n  $('Resolve Backtest Parameters').first().json.topN\n] }}"
+        }
+      },
+      "executeOnce": true,
+      "position": [
+        780,
+        400
+      ],
+      "id": "4b8fc519-5936-48f4-a063-261bc9d054ec"
+    },
+    {
+      "name": "Build Backtest Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const params = $('Resolve Backtest Parameters').first().json;\nconst metrics = $input.first().json;\nreturn [{ json: {\n  workflow: '15-egx-backtest',\n  finishedAt: new Date().toISOString(),\n  parameters: params,\n  metrics: {\n    sampleSize: Number(metrics.sample_size) || 0,\n    positiveCloseRatePct: metrics.positive_close_rate_pct,\n    avgReturnPct: metrics.avg_return_pct,\n    medianReturnPct: metrics.median_return_pct,\n    avgMfePct: metrics.avg_mfe_pct,\n    avgMaePct: metrics.avg_mae_pct,\n    target1HitRatePct: metrics.target1_hit_rate_pct,\n    target2HitRatePct: metrics.target2_hit_rate_pct,\n    stopHitRatePct: metrics.stop_hit_rate_pct,\n  },\n  disclaimer: 'Historical Probability derived from simulated point-in-time scans. Past performance does not guarantee future results.',\n} }];"
+      },
+      "position": [
+        1040,
+        400
+      ],
+      "id": "998a1214-e578-45bf-98d8-2650ec4d2896"
+    }
+  ],
+  "connections": {
+    "Capture Current Date": {
+      "main": [
+        [
+          {
+            "node": "Prep for 04 Technical Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 04 Technical Analysis": {
+      "main": [
+        [
+          {
+            "node": "Execute: 04 Technical Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 04 Technical Analysis": {
+      "main": [
+        [
+          {
+            "node": "Prep for 05 Support Resistance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 05 Support Resistance": {
+      "main": [
+        [
+          {
+            "node": "Execute: 05 Support Resistance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 05 Support Resistance": {
+      "main": [
+        [
+          {
+            "node": "Prep for 06 Volume Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 06 Volume Analysis": {
+      "main": [
+        [
+          {
+            "node": "Execute: 06 Volume Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 06 Volume Analysis": {
+      "main": [
+        [
+          {
+            "node": "Prep for 07 Breakout Scanner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 07 Breakout Scanner": {
+      "main": [
+        [
+          {
+            "node": "Execute: 07 Breakout Scanner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 07 Breakout Scanner": {
+      "main": [
+        [
+          {
+            "node": "Prep for 08 Momentum Scanner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 08 Momentum Scanner": {
+      "main": [
+        [
+          {
+            "node": "Execute: 08 Momentum Scanner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 08 Momentum Scanner": {
+      "main": [
+        [
+          {
+            "node": "Prep for 09 Pullback Scanner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 09 Pullback Scanner": {
+      "main": [
+        [
+          {
+            "node": "Execute: 09 Pullback Scanner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 09 Pullback Scanner": {
+      "main": [
+        [
+          {
+            "node": "Prep for 10 Reversal Scanner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 10 Reversal Scanner": {
+      "main": [
+        [
+          {
+            "node": "Execute: 10 Reversal Scanner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 10 Reversal Scanner": {
+      "main": [
+        [
+          {
+            "node": "Prep for 11 Overall Ranking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 11 Overall Ranking": {
+      "main": [
+        [
+          {
+            "node": "Execute: 11 Overall Ranking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 11 Overall Ranking": {
+      "main": [
+        [
+          {
+            "node": "Brief Pause Between Dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Brief Pause Between Dates": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Trading Dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Resolve Backtest Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Resolve Backtest Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Backtest Parameters": {
+      "main": [
+        [
+          {
+            "node": "Get Trading Dates In Range",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Trading Dates In Range": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Trading Dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Trading Dates": {
+      "main": [
+        [
+          {
+            "node": "Prep for 14",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capture Current Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 14": {
+      "main": [
+        [
+          {
+            "node": "Execute: 14 Prediction Evaluation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 14 Prediction Evaluation": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Backtest Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Backtest Metrics": {
+      "main": [
+        [
+          {
+            "node": "Build Backtest Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "40fe777c-2771-4430-a85e-c6b058f73c13",
+  "tags": []
+}

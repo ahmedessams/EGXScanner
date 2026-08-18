@@ -1,0 +1,9 @@
+# Real secrets — never commit
+.env
+
+# OS / editor cruft
+.DS_Store
+*.swp
+
+# claude-mem auto-generated activity logs, not real project docs
+CLAUDE.md

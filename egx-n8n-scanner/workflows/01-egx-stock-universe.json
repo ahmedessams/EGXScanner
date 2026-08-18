@@ -1,0 +1,377 @@
+{
+  "name": "01 - EGX Stock Universe",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -260
+      ],
+      "parameters": {
+        "content": "## 01 - EGX Stock Universe\n\nFetches the full list of symbols listed on EGX and upserts them into `stocks`.\n\n**Run this first**, before historical import or any daily scan.\n\nTrigger manually for testing, or call it from 12-egx-daily-master-workflow via Execute Workflow.\n\nEnv vars used: MARKET_API_BASE_URL, MARKET_API_KEY, MARKET_DATA_PROVIDER, EGX_EXCHANGE_CODE.",
+        "height": 300,
+        "width": 460,
+        "color": 5
+      },
+      "id": "37eb2f2b-d686-4a61-b2f8-5896cd970a86"
+    },
+    {
+      "name": "Configure Endpoint Warning",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        520,
+        -260
+      ],
+      "parameters": {
+        "content": "### ⚠️ CONFIGURE BEFORE USE\n\nThe exact 'list all symbols on an exchange' endpoint differs per provider and isn't guaranteed stable enough to hardcode. Edit the URL on the HTTP Request node below to match your provider's current documented endpoint for listing exchange constituents (e.g. EODHD's exchange-symbol-list, Twelve Data's /stocks?exchange=...).\n\nSee docs/DATA_PROVIDER.md for the normalization contract the next Code node expects.",
+        "height": 260,
+        "width": 460,
+        "color": 7
+      },
+      "id": "7784eba6-e1fd-4dce-ae98-79e2209cbb53"
+    },
+    {
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        0,
+        0
+      ],
+      "id": "3849391e-92a6-4550-b93b-012583c7f17b"
+    },
+    {
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "position": [
+        260,
+        0
+      ],
+      "id": "63f46438-860e-46f5-a68f-70c49a05f9da"
+    },
+    {
+      "name": "Fetch EGX Universe (CONFIGURE ENDPOINT)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.MARKET_API_BASE_URL }}/CONFIGURE-EXCHANGE-SYMBOL-LIST-ENDPOINT",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "api_token",
+              "value": "={{ $env.MARKET_API_KEY }}"
+            },
+            {
+              "name": "exchange",
+              "value": "={{ $env.EGX_EXCHANGE_CODE }}"
+            },
+            {
+              "name": "fmt",
+              "value": "json"
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        520,
+        0
+      ],
+      "id": "feb6b43b-6717-4974-9d21-2d821fffab88"
+    },
+    {
+      "name": "Normalize Universe Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Normalizes a raw provider response into the internal stock-universe row shape:\n// { symbol, name, isin, sector, exchange, currency, _valid, errors[] }\n// Tolerant of shape differences between providers (array directly, or wrapped in\n// a \"data\"/\"symbols\" property) since the exact provider contract varies.\n//\n// IMPORTANT: n8n's HTTP Request node auto-splits a top-level JSON ARRAY\n// response into one item per element — confirmed via live E2E testing\n// against EODHD's exchange-symbol-list endpoint (241 real tickers arrived\n// as 241 separate items, not one item holding a 241-element array). Must\n// use $input.all(), not $input.first().\nconst exchange = $env.EGX_EXCHANGE_CODE || 'EGX';\nconst items = $input.all().map((i) => i.json);\n\nfunction looksLikeSymbolRecord(v) {\n  return v && typeof v === 'object' && !Array.isArray(v)\n    && (v.Code || v.symbol || v.Symbol || v.ticker);\n}\n\nlet list;\nif (items.length > 1 || looksLikeSymbolRecord(items[0])) {\n  // Auto-split case: every item IS already one symbol object (also covers\n  // the single-ticker edge case, detected by shape rather than count).\n  list = items;\n} else {\n  // Single-item case wrapping an array, e.g. { data: [...] }.\n  const raw = items[0];\n  list = raw;\n  if (!Array.isArray(list)) {\n    list = (raw && (raw.data || raw.symbols || raw.results)) || [];\n  }\n}\nif (!Array.isArray(list)) {\n  throw new Error('Provider response for the stock universe was not a recognizable list. Check the HTTP Request node URL/response shape.');\n}\n\nconst rows = list.map((entry) => {\n  const symbol = entry.Code || entry.symbol || entry.Symbol || entry.ticker || null;\n  const name = entry.Name || entry.name || entry.CompanyName || null;\n  const isin = entry.Isin || entry.isin || null;\n  const sector = entry.Sector || entry.sector || null;\n  const currency = entry.Currency || entry.currency || 'EGP';\n\n  const errors = [];\n  if (!symbol || typeof symbol !== 'string') errors.push('missing/invalid symbol');\n  if (!name || typeof name !== 'string') errors.push('missing/invalid name');\n\n  return {\n    symbol: symbol ? String(symbol).trim().toUpperCase() : null,\n    name: name ? String(name).trim() : null,\n    isin: isin || null,\n    sector: sector || null,\n    exchange,\n    currency,\n    _valid: errors.length === 0,\n    errors,\n  };\n});\n\n// De-duplicate by symbol, keeping the last occurrence.\nconst bySymbol = new Map();\nfor (const row of rows) {\n  const key = row.symbol || `__invalid_${Math.random()}`;\n  bySymbol.set(key, row);\n}\n\nreturn Array.from(bySymbol.values()).map((json) => ({ json }));"
+      },
+      "position": [
+        780,
+        0
+      ],
+      "id": "1ac3eb3e-bc91-473f-8db5-aee17d8ae067"
+    },
+    {
+      "name": "Is Valid Row?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "214eaab5-a322-41dc-97cc-0877d8e62adc",
+              "leftValue": "={{ $json._valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1040,
+        0
+      ],
+      "id": "191e7791-10d0-4dcc-ac0e-d87781002192"
+    },
+    {
+      "name": "Upsert Stock",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO stocks (symbol, name, isin, sector, exchange, currency, active, first_seen, last_seen)\nVALUES ($1, $2, $3, $4, $5, $6, TRUE, CURRENT_DATE, CURRENT_DATE)\nON CONFLICT (exchange, symbol) DO UPDATE SET\n  name = EXCLUDED.name,\n  isin = EXCLUDED.isin,\n  sector = EXCLUDED.sector,\n  currency = EXCLUDED.currency,\n  active = TRUE,\n  last_seen = CURRENT_DATE,\n  updated_at = now();",
+        "options": {
+          "queryReplacement": "={{ [$json.symbol, $json.name, $json.isin, $json.sector, $json.exchange, $json.currency] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1300,
+        0
+      ],
+      "id": "dcc23406-1d86-412f-9d11-0228c7a3605d"
+    },
+    {
+      "name": "Log Invalid Row",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_errors (workflow_name, symbol, error_message, payload)\nVALUES ('01-egx-stock-universe', $1, $2, $3::jsonb);",
+        "options": {
+          "queryReplacement": "={{ [$json.symbol, ($json.errors || []).join('; '), JSON.stringify($json)] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1560,
+        0
+      ],
+      "id": "34ee9e75-60e5-4a97-b26a-9731471e7d08"
+    },
+    {
+      "name": "Join Branches",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        1820,
+        0
+      ],
+      "id": "aa14c0df-fdb0-4cf9-9534-50a29dc62d39"
+    },
+    {
+      "name": "Deactivate Stale Stocks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE stocks SET active = FALSE, updated_at = now()\nWHERE exchange = $1 AND (last_seen IS NULL OR last_seen < CURRENT_DATE) AND active = TRUE;",
+        "options": {
+          "queryReplacement": "={{ [$env.EGX_EXCHANGE_CODE || \"EGX\"] }}"
+        }
+      },
+      "executeOnce": true,
+      "position": [
+        2080,
+        0
+      ],
+      "id": "040be246-8e19-4cb0-ac1a-f3914ca9d318"
+    },
+    {
+      "name": "Count Active Stocks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*)::int AS active_stock_count FROM stocks WHERE exchange = $1 AND active = TRUE;",
+        "options": {
+          "queryReplacement": "={{ [$env.EGX_EXCHANGE_CODE || \"EGX\"] }}"
+        }
+      },
+      "executeOnce": true,
+      "position": [
+        2340,
+        0
+      ],
+      "id": "65090ec6-3675-4a0a-8720-b8021c2cdfc9"
+    },
+    {
+      "name": "Build Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const count = $input.first().json.active_stock_count;\nreturn [{ json: {\n  workflow: '01-egx-stock-universe',\n  finishedAt: new Date().toISOString(),\n  activeStockCount: count,\n  message: `Stock universe refreshed. ${count} active EGX stocks.`,\n} }];"
+      },
+      "position": [
+        2600,
+        0
+      ],
+      "id": "e3d4fa49-a96e-41f3-bddb-bad6d9011f65"
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch EGX Universe (CONFIGURE ENDPOINT)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Fetch EGX Universe (CONFIGURE ENDPOINT)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch EGX Universe (CONFIGURE ENDPOINT)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Universe Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Universe Response": {
+      "main": [
+        [
+          {
+            "node": "Is Valid Row?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Valid Row?": {
+      "main": [
+        [
+          {
+            "node": "Upsert Stock",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Invalid Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Stock": {
+      "main": [
+        [
+          {
+            "node": "Join Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Invalid Row": {
+      "main": [
+        [
+          {
+            "node": "Join Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Join Branches": {
+      "main": [
+        [
+          {
+            "node": "Deactivate Stale Stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deactivate Stale Stocks": {
+      "main": [
+        [
+          {
+            "node": "Count Active Stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Active Stocks": {
+      "main": [
+        [
+          {
+            "node": "Build Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "801c37d2-226c-47a2-996a-0c96a52326e8",
+  "tags": []
+}

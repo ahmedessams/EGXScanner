@@ -1,0 +1,763 @@
+{
+  "name": "12 - EGX Daily Master Workflow",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -400
+      ],
+      "parameters": {
+        "content": "## 12 - EGX Daily Master Workflow\n\nOrchestrates the full daily pipeline in order: universe -> daily update -> (trading-day gate) -> technical analysis -> support/resistance -> volume analysis -> breakout/momentum/pullback/reversal scanners -> overall ranking -> report.\n\nRuns on a schedule (default 21:00 Africa/Cairo, Sun-Thu — EGX's trading week) or on demand via the Manual Trigger ('Run EGX Scanner Now', spec section 35). Pushed later than the ~14:30 close because EODHD's EGX EOD publish time lags and varies (confirmed via live testing: not yet published even at 17:00) — 03's own retry schedule (16:00-20:30, every 30 min) is what actually catches the data as soon as it's live; 21:00 gives that window time to close before the full scan runs.\n\n**Note on scheduling:** n8n's Schedule Trigger cron expression is evaluated at workflow-registration time, not per-execution, so it can't read DAILY_SCAN_HOUR/DAILY_SCAN_MINUTE at runtime. If you change those env vars, also edit the Schedule Trigger node's cron expression to match.\n\n**Before first use:** open every Execute Workflow node below and reselect the target sub-workflow from the dropdown — n8n assigns new workflow IDs on import, so these references start unset (see docs/IMPORT-N8N.md).",
+        "height": 420,
+        "width": 560,
+        "color": 5
+      },
+      "id": "c9f7982a-f623-4616-98c3-122cc85e6be6"
+    },
+    {
+      "name": "Schedule Trigger (Daily After Close)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 21 * * 0-4"
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        0
+      ],
+      "id": "cd5291b6-9ca2-4280-8caa-ed2577766758"
+    },
+    {
+      "name": "Manual Trigger (Run EGX Scanner Now)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        260,
+        0
+      ],
+      "id": "c50c10ab-ed30-498b-a037-eb4b1ea7045a"
+    },
+    {
+      "name": "Compute Trading Date",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: { asOfDate: new Date().toISOString().slice(0, 10) } }];"
+      },
+      "position": [
+        520,
+        0
+      ],
+      "id": "b02c1afa-20d9-4ad8-b30a-9a1287390030"
+    },
+    {
+      "name": "Execute: 01 Stock Universe",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "01 - EGX Stock Universe"
+        },
+        "options": {}
+      },
+      "position": [
+        780,
+        0
+      ],
+      "id": "df556a3b-2678-43a5-b960-cd1841c83701"
+    },
+    {
+      "name": "Prep for 03",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+      },
+      "position": [
+        1040,
+        0
+      ],
+      "id": "9763d071-40dd-4154-b78e-b8e63a814991"
+    },
+    {
+      "name": "Execute: 03 Daily Market Update",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "03 - EGX Daily Market Update"
+        },
+        "options": {}
+      },
+      "position": [
+        1300,
+        0
+      ],
+      "id": "ffd92925-aee4-4afa-bb39-d790b0911c95"
+    },
+    {
+      "name": "Is Trading Day?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "14f276ce-e8f8-4f2b-b44c-615111dc01a8",
+              "leftValue": "={{ $json.isTradingDay }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1560,
+        0
+      ],
+      "id": "8ca41e36-e330-4912-a3d3-17cc0900233e"
+    },
+    {
+      "name": "Skip - Non-Trading Day",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        1820,
+        0
+      ],
+      "id": "25aa162c-ca8b-4813-9e0b-0e110d379934"
+    },
+    {
+      "name": "Prep for 04",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+      },
+      "position": [
+        2080,
+        0
+      ],
+      "id": "4b4e021d-a078-4d26-b959-bed99cf59bb1"
+    },
+    {
+      "name": "Execute: 04 Technical Analysis",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "04 - EGX Technical Analysis"
+        },
+        "options": {}
+      },
+      "position": [
+        2340,
+        0
+      ],
+      "id": "ccaea7b8-4803-401b-8d08-bf064b484a8e"
+    },
+    {
+      "name": "Prep for 05",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+      },
+      "position": [
+        2600,
+        0
+      ],
+      "id": "8e4d5283-96bc-40e6-814a-85778d2f3404"
+    },
+    {
+      "name": "Execute: 05 Support Resistance",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "05 - EGX Support Resistance"
+        },
+        "options": {}
+      },
+      "position": [
+        0,
+        200
+      ],
+      "id": "8853199f-5c6c-46bc-a069-aa84bf5ff105"
+    },
+    {
+      "name": "Prep for 06",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+      },
+      "position": [
+        260,
+        200
+      ],
+      "id": "7eeaa7b2-91a0-4664-849b-2e9b76fa1d3b"
+    },
+    {
+      "name": "Execute: 06 Volume Analysis",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "06 - EGX Volume Analysis"
+        },
+        "options": {}
+      },
+      "position": [
+        520,
+        200
+      ],
+      "id": "740a150e-08f7-4f07-a6f1-dabfaf0f0e7c"
+    },
+    {
+      "name": "Prep for 07",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+      },
+      "position": [
+        780,
+        200
+      ],
+      "id": "9bf5bbe8-7859-4d3e-beb3-92de84d915e8"
+    },
+    {
+      "name": "Execute: 07 Breakout Scanner",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "07 - EGX Breakout Scanner"
+        },
+        "options": {}
+      },
+      "position": [
+        1040,
+        200
+      ],
+      "id": "4bf7607e-8e9a-46f5-a626-c1552f815abe"
+    },
+    {
+      "name": "Prep for 08",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+      },
+      "position": [
+        1300,
+        200
+      ],
+      "id": "8b131b83-804d-429b-985b-378df3be8dc1"
+    },
+    {
+      "name": "Execute: 08 Momentum Scanner",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "08 - EGX Momentum Scanner"
+        },
+        "options": {}
+      },
+      "position": [
+        1560,
+        200
+      ],
+      "id": "3770691a-53d9-4251-8127-b43502dc4df5"
+    },
+    {
+      "name": "Prep for 09",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+      },
+      "position": [
+        1820,
+        200
+      ],
+      "id": "6d747a73-99e1-43a0-a019-a8f70b92bb70"
+    },
+    {
+      "name": "Execute: 09 Pullback Scanner",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "09 - EGX Pullback Scanner"
+        },
+        "options": {}
+      },
+      "position": [
+        2080,
+        200
+      ],
+      "id": "42b27ed0-9ae4-403e-aa17-8a19f590248f"
+    },
+    {
+      "name": "Prep for 10",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+      },
+      "position": [
+        2340,
+        200
+      ],
+      "id": "4583e609-b9a5-4d62-8f80-d6336c56ccd8"
+    },
+    {
+      "name": "Execute: 10 Reversal Scanner",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "10 - EGX Reversal Scanner"
+        },
+        "options": {}
+      },
+      "position": [
+        2600,
+        200
+      ],
+      "id": "d556aa4e-c204-4d32-bbcd-7c8f1eb630d8"
+    },
+    {
+      "name": "Prep for 11",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+      },
+      "position": [
+        0,
+        400
+      ],
+      "id": "d2121488-071f-4e2d-be5f-7173a919bcd1"
+    },
+    {
+      "name": "Execute: 11 Overall Ranking",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "11 - EGX Overall Ranking"
+        },
+        "options": {}
+      },
+      "position": [
+        260,
+        400
+      ],
+      "id": "8ced2ff5-4b9b-4ded-9c15-ff43743d4c62"
+    },
+    {
+      "name": "Load Report Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  run.trading_date::text AS trading_date, run.market_score::float8 AS market_score, run.market_regime,\n  run.stocks_scanned::float8 AS stocks_scanned, run.eligible_stocks::float8 AS eligible_stocks,\n  (SELECT json_agg(top.* ORDER BY top.overall_rank ASC) FROM (\n    SELECT r.overall_rank, s.symbol, s.name, r.overall_score, r.setup_type,\n           r.entry_price, r.invalidation_price, r.target1, r.target2, r.risk_reward_t2,\n           ta.rsi14, sr.support1, sr.resistance1, va.relative_volume20_rank,\n           ta.relative_volume20 AS rvol20\n    FROM scanner_results r\n    JOIN stocks s ON s.id = r.stock_id\n    LEFT JOIN technical_analysis ta ON ta.stock_id = r.stock_id AND ta.trading_date = run.trading_date\n    LEFT JOIN support_resistance sr ON sr.stock_id = r.stock_id AND sr.trading_date = run.trading_date\n    LEFT JOIN volume_analysis va ON va.stock_id = r.stock_id AND va.trading_date = run.trading_date\n    WHERE r.scanner_run_id = run.id AND r.eligible = TRUE\n    ORDER BY r.overall_rank ASC LIMIT 10\n  ) top) AS top10\nFROM scanner_runs run WHERE run.id = $1;",
+        "options": {
+          "queryReplacement": "={{ [$json.scannerRunId] }}"
+        }
+      },
+      "executeOnce": true,
+      "position": [
+        520,
+        400
+      ],
+      "id": "3513f32d-0f2d-467b-baaa-40bc36c72838"
+    },
+    {
+      "name": "Generate Daily Report Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const row = $input.first().json;\nconst top10 = row.top10 || [];\n\nconst lines = [];\nlines.push('EGX DAILY SCANNER');\nlines.push('Trading Date: ' + row.trading_date);\nlines.push('');\nlines.push('MARKET');\nlines.push('--------------------------------');\nlines.push('Market Regime: ' + row.market_regime);\nlines.push('Market Score: ' + row.market_score + '/100');\nlines.push('Stocks Scanned: ' + row.stocks_scanned);\nlines.push('Eligible Stocks: ' + row.eligible_stocks);\nlines.push('');\nlines.push('OVERALL TOP 10 (Bullish Setup Score)');\nlines.push('--------------------------------');\n\nif (!top10.length) {\n  lines.push('No eligible stocks scored above the ranking threshold today.');\n} else {\n  for (const t of top10) {\n    lines.push(`${t.overall_rank}. ${t.symbol} - ${t.name}`);\n    lines.push(`   Score: ${t.overall_score}  Setup: ${t.setup_type}  RVOL: ${t.rvol20 ?? 'n/a'}x  RSI: ${t.rsi14 ?? 'n/a'}`);\n    lines.push(`   Support: ${t.support1 ?? 'n/a'}  Resistance: ${t.resistance1 ?? 'n/a'}`);\n    lines.push(`   Entry Trigger: ${t.entry_price ?? 'n/a'}  Invalidation: ${t.invalidation_price ?? 'n/a'}`);\n    lines.push(`   Target 1: ${t.target1 ?? 'n/a'}  Target 2: ${t.target2 ?? 'n/a'}  R:R T2: ${t.risk_reward_t2 ?? 'n/a'}`);\n    lines.push('');\n  }\n}\n\nlines.push('This is a quantitative Scanner Rank based on Historical Probability, not a');\nlines.push('guaranteed prediction. See docs/SCORING.md for methodology.');\n\nreturn [{ json: {\n  workflow: '12-egx-daily-master-workflow',\n  finishedAt: new Date().toISOString(),\n  tradingDate: row.trading_date,\n  marketRegime: row.market_regime,\n  marketScore: row.market_score,\n  top10Count: top10.length,\n  reportText: lines.join('\\n'),\n} }];"
+      },
+      "position": [
+        780,
+        400
+      ],
+      "id": "1ae65e58-e5fa-4f28-a5b8-3437dbaf1171"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (Daily After Close)": {
+      "main": [
+        [
+          {
+            "node": "Compute Trading Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger (Run EGX Scanner Now)": {
+      "main": [
+        [
+          {
+            "node": "Compute Trading Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Trading Date": {
+      "main": [
+        [
+          {
+            "node": "Execute: 01 Stock Universe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 01 Stock Universe": {
+      "main": [
+        [
+          {
+            "node": "Prep for 03",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 03": {
+      "main": [
+        [
+          {
+            "node": "Execute: 03 Daily Market Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 03 Daily Market Update": {
+      "main": [
+        [
+          {
+            "node": "Is Trading Day?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Trading Day?": {
+      "main": [
+        [
+          {
+            "node": "Prep for 04",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip - Non-Trading Day",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 04": {
+      "main": [
+        [
+          {
+            "node": "Execute: 04 Technical Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 04 Technical Analysis": {
+      "main": [
+        [
+          {
+            "node": "Prep for 05",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 05": {
+      "main": [
+        [
+          {
+            "node": "Execute: 05 Support Resistance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 05 Support Resistance": {
+      "main": [
+        [
+          {
+            "node": "Prep for 06",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 06": {
+      "main": [
+        [
+          {
+            "node": "Execute: 06 Volume Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 06 Volume Analysis": {
+      "main": [
+        [
+          {
+            "node": "Prep for 07",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 07": {
+      "main": [
+        [
+          {
+            "node": "Execute: 07 Breakout Scanner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 07 Breakout Scanner": {
+      "main": [
+        [
+          {
+            "node": "Prep for 08",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 08": {
+      "main": [
+        [
+          {
+            "node": "Execute: 08 Momentum Scanner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 08 Momentum Scanner": {
+      "main": [
+        [
+          {
+            "node": "Prep for 09",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 09": {
+      "main": [
+        [
+          {
+            "node": "Execute: 09 Pullback Scanner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 09 Pullback Scanner": {
+      "main": [
+        [
+          {
+            "node": "Prep for 10",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 10": {
+      "main": [
+        [
+          {
+            "node": "Execute: 10 Reversal Scanner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 10 Reversal Scanner": {
+      "main": [
+        [
+          {
+            "node": "Prep for 11",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 11": {
+      "main": [
+        [
+          {
+            "node": "Execute: 11 Overall Ranking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: 11 Overall Ranking": {
+      "main": [
+        [
+          {
+            "node": "Load Report Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Report Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Daily Report Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "7b25ee5d-0f35-4095-84ee-490d29116aec",
+  "tags": []
+}

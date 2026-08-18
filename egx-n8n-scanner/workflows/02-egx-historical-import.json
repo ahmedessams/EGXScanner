@@ -1,0 +1,467 @@
+{
+  "name": "02 - EGX Historical Import",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -280
+      ],
+      "parameters": {
+        "content": "## 02 - EGX Historical Import\n\nOne-time (or periodic re-backfill) import of ~HISTORICAL_DAYS trading sessions per active stock. Batches requests (API_BATCH_SIZE) with a delay between batches (API_DELAY_MS) to respect provider rate limits. A single bad symbol is logged to `workflow_errors` and does NOT stop the import.\n\nRun 01-egx-stock-universe first so `stocks` is populated.",
+        "height": 300,
+        "width": 460,
+        "color": 5
+      },
+      "id": "408c6e0c-74c6-4916-af17-4ea8f8723dea"
+    },
+    {
+      "name": "Configure Endpoint Warning",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        520,
+        -280
+      ],
+      "parameters": {
+        "content": "### ⚠️ CONFIGURE BEFORE USE\n\nEdit the HTTP Request node's URL to your provider's documented EOD/historical candles endpoint. This node deliberately ships with a placeholder path — see docs/DATA_PROVIDER.md for the normalization contract the Normalize node expects (date/open/high/low/close/volume in some form).",
+        "height": 240,
+        "width": 460,
+        "color": 7
+      },
+      "id": "ec034526-8725-4e04-9f14-92cff53c04a0"
+    },
+    {
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        0,
+        0
+      ],
+      "id": "e44a9bec-12ad-437e-bf2b-cee919ba7f78"
+    },
+    {
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "position": [
+        260,
+        0
+      ],
+      "id": "b1f6fe56-b277-4637-a379-6fbb801867d3"
+    },
+    {
+      "name": "Load Active Stocks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, symbol FROM stocks WHERE exchange = $1 AND active = TRUE ORDER BY symbol;",
+        "options": {
+          "queryReplacement": "={{ [$env.EGX_EXCHANGE_CODE || \"EGX\"] }}"
+        }
+      },
+      "executeOnce": true,
+      "position": [
+        520,
+        0
+      ],
+      "id": "ff4f8894-00c8-4d24-847c-7e841a7b2851"
+    },
+    {
+      "name": "Loop Over Stocks (Batch)",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "parameters": {
+        "batchSize": "={{ Number($env.API_BATCH_SIZE) || 10 }}",
+        "options": {}
+      },
+      "position": [
+        780,
+        0
+      ],
+      "id": "1f65eaf9-d9ff-46a3-bee6-5493c799423b"
+    },
+    {
+      "name": "Fetch Historical OHLCV (CONFIGURE ENDPOINT)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.MARKET_API_BASE_URL }}/CONFIGURE-EOD-ENDPOINT/{{ $json.symbol }}.{{ $env.EGX_EXCHANGE_CODE }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "api_token",
+              "value": "={{ $env.MARKET_API_KEY }}"
+            },
+            {
+              "name": "period",
+              "value": "d"
+            },
+            {
+              "name": "fmt",
+              "value": "json"
+            },
+            {
+              "name": "from",
+              "value": "={{ $now.minus({ days: Number($env.HISTORICAL_DAYS) || 750 }).toFormat('yyyy-LL-dd') }}"
+            },
+            {
+              "name": "to",
+              "value": "={{ $now.toFormat('yyyy-LL-dd') }}"
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1040,
+        0
+      ],
+      "id": "4510f32f-d972-479e-94ec-1e4236e28b64"
+    },
+    {
+      "name": "Normalize OHLCV Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Maps the raw provider response for a batch of stocks into the internal\n// normalized candle shape, one n8n item per candle (spec section 6/32).\n//\n// IMPORTANT: n8n's HTTP Request node auto-splits a top-level JSON ARRAY\n// response into one item per array element — so by the time this node runs,\n// $input holds many items already (one per candle, for EVERY stock in the\n// batch), not one item per stock. This handles that shape (and the\n// alternative wrapped-object shape some providers use) using itemMatching()\n// for correct per-candle pairing back to its originating stock.\nfunction numOrNull(v) {\n  const n = Number(v);\n  return Number.isFinite(n) ? n : null;\n}\n\nfunction toCandle(entry, symbol, stockId) {\n  return {\n    symbol, stockId,\n    date: entry.date || entry.Date || entry.datetime || null,\n    open: numOrNull(entry.open ?? entry.Open),\n    high: numOrNull(entry.high ?? entry.High),\n    low: numOrNull(entry.low ?? entry.Low),\n    close: numOrNull(entry.close ?? entry.Close ?? entry.adjusted_close),\n    volume: numOrNull(entry.volume ?? entry.Volume),\n  };\n}\n\nconst out = [];\nconst items = $input.all();\n\nfor (let i = 0; i < items.length; i++) {\n  const raw = items[i].json;\n\n  let original = null;\n  try { original = $('Loop Over Stocks (Batch)').itemMatching(i).json; } catch (e) { original = null; }\n  const symbol = original ? original.symbol : null;\n  const stockId = original ? original.id : null;\n\n  if (raw && raw.error) {\n    out.push({ symbol, stockId, date: null, _valid: false, errors: ['fetch failed: ' + JSON.stringify(raw.error).slice(0, 500)] });\n    continue;\n  }\n\n  // Case A: this item IS already one candle (top-level array auto-split by n8n).\n  const looksLikeCandle = raw && (raw.date || raw.Date || raw.datetime)\n    && (raw.close !== undefined || raw.Close !== undefined || raw.adjusted_close !== undefined);\n  if (looksLikeCandle) {\n    out.push(toCandle(raw, symbol, stockId));\n    continue;\n  }\n\n  // Case B: this item wraps an array the provider didn't split (e.g. { data: [...] }).\n  let list = raw;\n  if (!Array.isArray(list)) list = (raw && (raw.data || raw.results)) || [];\n  if (!Array.isArray(list) || list.length === 0) {\n    out.push({ symbol, stockId, date: null, _valid: false, errors: ['provider response contained no recognizable candles'] });\n    continue;\n  }\n  for (const entry of list) out.push(toCandle(entry, symbol, stockId));\n}\n\nreturn out.map((json) => ({ json }));"
+      },
+      "position": [
+        1300,
+        0
+      ],
+      "id": "92009e70-7e32-4d53-9a2e-25d2e21873f6"
+    },
+    {
+      "name": "Validate, Dedupe & Derive Traded Value",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/**\n * helpers.js\n *\n * Shared low-level utilities used by every other module in /code and by the\n * equivalent n8n Code nodes. Pure functions only — no I/O, no n8n APIs — so\n * this file can be unit tested with plain `node` and pasted into a Code node\n * body unchanged (just drop the `module.exports` line).\n *\n * Candle shape (normalized, provider-agnostic — see docs/DATA_PROVIDER.md):\n * {\n *   symbol: \"COMI\",\n *   date: \"2026-08-18\",     // ISO date, trading session date\n *   open: 100.20,\n *   high: 103.10,\n *   low: 99.80,\n *   close: 102.70,\n *   volume: 12500000,\n *   tradedValue: 1270000000 // optional, derived if absent\n * }\n */\n\n/** Returns true if v is a finite, non-NaN number. */\nfunction isNumber(v) {\n  return typeof v === \"number\" && Number.isFinite(v);\n}\n\n/** Safe division: returns null instead of Infinity/NaN when denominator is unusable. */\nfunction safeDivide(numerator, denominator) {\n  if (!isNumber(numerator) || !isNumber(denominator) || denominator === 0) {\n    return null;\n  }\n  const result = numerator / denominator;\n  return Number.isFinite(result) ? result : null;\n}\n\n/** Rounds to `decimals` places, returns null for non-numeric input. */\nfunction round(value, decimals = 4) {\n  if (!isNumber(value)) return null;\n  const factor = Math.pow(10, decimals);\n  return Math.round(value * factor) / factor;\n}\n\n/** Percentage change from `from` to `to`. Returns null if from <= 0 or invalid. */\nfunction pctChange(from, to) {\n  if (!isNumber(from) || !isNumber(to) || from === 0) return null;\n  return ((to - from) / from) * 100;\n}\n\n/**\n * Validates a single raw candle. Returns { valid, errors[] }.\n * Mirrors the rules in spec section 31.\n */\nfunction validateCandle(candle) {\n  const errors = [];\n  if (!candle || typeof candle !== \"object\") {\n    return { valid: false, errors: [\"candle is not an object\"] };\n  }\n  const { symbol, date, open, high, low, close, volume } = candle;\n\n  if (!symbol || typeof symbol !== \"string\") errors.push(\"missing/invalid symbol\");\n  if (!date || Number.isNaN(Date.parse(date))) errors.push(\"missing/invalid date\");\n  if (!isNumber(open)) errors.push(\"open is not numeric\");\n  if (!isNumber(high)) errors.push(\"high is not numeric\");\n  if (!isNumber(low)) errors.push(\"low is not numeric\");\n  if (!isNumber(close)) errors.push(\"close is not numeric\");\n  if (!isNumber(volume)) errors.push(\"volume is not numeric\");\n\n  if (isNumber(open) && isNumber(high) && isNumber(low) && isNumber(close)) {\n    if (high < open) errors.push(\"high < open\");\n    if (high < close) errors.push(\"high < close\");\n    if (high < low) errors.push(\"high < low\");\n    if (low > open) errors.push(\"low > open\");\n    if (low > close) errors.push(\"low > close\");\n  }\n  if (isNumber(volume) && volume < 0) errors.push(\"negative volume\");\n  if (isNumber(close) && close <= 0) errors.push(\"close <= 0\");\n\n  return { valid: errors.length === 0, errors };\n}\n\n/**\n * Filters an array of raw candles into { valid[], invalid[] }.\n * `invalid` entries carry the original candle plus `.errors`.\n * Zero-volume candles are valid but flagged with a warning for downstream\n * consumers (suspicious, not necessarily wrong — EGX thin names do trade zero\n * volume on quiet sessions).\n */\nfunction validateCandles(candles) {\n  const valid = [];\n  const invalid = [];\n  for (const candle of candles || []) {\n    const { valid: ok, errors } = validateCandle(candle);\n    if (ok) {\n      valid.push({ ...candle, suspiciousZeroVolume: candle.volume === 0 });\n    } else {\n      invalid.push({ ...candle, errors });\n    }\n  }\n  return { valid, invalid };\n}\n\n/**\n * Removes duplicate candles (same symbol+date), keeping the last occurrence\n * (assumed most recent fetch / most authoritative).\n */\nfunction dedupeCandles(candles) {\n  const map = new Map();\n  for (const c of candles || []) {\n    map.set(`${c.symbol}::${c.date}`, c);\n  }\n  return Array.from(map.values());\n}\n\n/** Sorts candles ascending by date (oldest first) — mandatory before any TA calc. */\nfunction sortCandlesAscending(candles) {\n  return [...(candles || [])].sort((a, b) => new Date(a.date) - new Date(b.date));\n}\n\n/**\n * Derives tradedValue when the provider doesn't supply it directly.\n * Uses the session's typical price (H+L+C)/3 * volume as a reasonable proxy.\n */\nfunction deriveTradedValue(candle) {\n  if (isNumber(candle.tradedValue)) return candle.tradedValue;\n  if (!isNumber(candle.high) || !isNumber(candle.low) || !isNumber(candle.close) || !isNumber(candle.volume)) {\n    return null;\n  }\n  const typicalPrice = (candle.high + candle.low + candle.close) / 3;\n  return typicalPrice * candle.volume;\n}\n\n/** Simple mean of the last `n` numeric values in `arr` (nulls skipped). Returns null if insufficient data. */\nfunction meanOfLast(arr, n) {\n  if (!Array.isArray(arr) || arr.length < n) return null;\n  const slice = arr.slice(-n).filter(isNumber);\n  if (slice.length < n) return null;\n  return slice.reduce((a, b) => a + b, 0) / n;\n}\n\n/** Standard deviation of the last `n` numeric values. Returns null if insufficient data. */\nfunction stdDevOfLast(arr, n) {\n  const mean = meanOfLast(arr, n);\n  if (mean === null) return null;\n  const slice = arr.slice(-n);\n  const variance = slice.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / n;\n  return Math.sqrt(variance);\n}\n\n/** Clamps a number into [min, max]. */\nfunction clamp(value, min, max) {\n  if (!isNumber(value)) return min;\n  return Math.min(Math.max(value, min), max);\n}\n\n/**\n * Wraps arbitrary rows into n8n's expected item structure: [{ json: {...} }].\n * Accepts a single object or array of objects.\n */\nfunction toN8nItems(rows) {\n  const list = Array.isArray(rows) ? rows : [rows];\n  return list.map((json) => ({ json }));\n}\n\n/**\n * Reads all `json` payloads out of an n8n items array back into plain objects.\n */\nfunction fromN8nItems(items) {\n  return (items || []).map((item) => item.json);\n}\n\n// Runs once per batch across every candle item produced this iteration.\n// Groups by symbol so dedupe/sort are correct per-stock, then validates each\n// candle (spec section 31) and derives tradedValue when the provider didn't\n// supply one directly.\n\nconst items = $input.all().map((i) => i.json);\nconst preFlagged = items.filter((c) => c._valid === false);\nconst candidates = items.filter((c) => c._valid !== false);\n\nconst bySymbol = new Map();\nfor (const c of candidates) {\n  if (!bySymbol.has(c.symbol)) bySymbol.set(c.symbol, []);\n  bySymbol.get(c.symbol).push(c);\n}\n\nconst out = [...preFlagged];\nfor (const [symbol, candles] of bySymbol.entries()) {\n  const deduped = dedupeCandles(candles);\n  const { valid, invalid } = validateCandles(deduped);\n  for (const c of valid) {\n    out.push({\n      ...c,\n      tradedValue: deriveTradedValue(c),\n      _valid: true,\n    });\n  }\n  for (const c of invalid) {\n    out.push({ ...c, _valid: false, errors: c.errors });\n  }\n}\n\nreturn out.map((json) => ({ json }));"
+      },
+      "position": [
+        1560,
+        0
+      ],
+      "id": "2629672e-17f1-495e-9001-d3105863dd93"
+    },
+    {
+      "name": "Is Valid Candle?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "943873cb-9eb8-4172-8e39-f056050e57b4",
+              "leftValue": "={{ $json._valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1820,
+        0
+      ],
+      "id": "4341f33d-ab63-49e5-9d34-6db238e6974d"
+    },
+    {
+      "name": "Upsert Daily Price",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO daily_prices (stock_id, trading_date, open, high, low, close, volume, traded_value)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8)\nON CONFLICT (stock_id, trading_date) DO UPDATE SET\n  open = EXCLUDED.open, high = EXCLUDED.high, low = EXCLUDED.low, close = EXCLUDED.close,\n  volume = EXCLUDED.volume, traded_value = EXCLUDED.traded_value, updated_at = now();",
+        "options": {
+          "queryReplacement": "={{ [$json.stockId, $json.date, $json.open, $json.high, $json.low, $json.close, $json.volume, $json.tradedValue] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        2080,
+        0
+      ],
+      "id": "372152fb-07d5-4c3b-a477-1df57f3d2357"
+    },
+    {
+      "name": "Log Failed Symbol/Candle",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_errors (workflow_name, symbol, trading_date, error_message, payload)\nVALUES ('02-egx-historical-import', $1, $2, $3, $4::jsonb);",
+        "options": {
+          "queryReplacement": "={{ [$json.symbol, $json.date, ($json.errors || []).join('; '), JSON.stringify($json)] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        2340,
+        0
+      ],
+      "id": "82f03554-433e-49c1-a49d-3064d8c7095c"
+    },
+    {
+      "name": "Join Branches",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        2600,
+        0
+      ],
+      "id": "dad514c4-ad0c-4f1f-acc6-0b9cb4943c2a"
+    },
+    {
+      "name": "Rate Limit Delay",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": "={{ (Number($env.API_DELAY_MS) || 500) / 1000 }}",
+        "unit": "seconds"
+      },
+      "position": [
+        0,
+        200
+      ],
+      "id": "bd6e2821-8b3a-4c11-be4d-438e5dc18f26"
+    },
+    {
+      "name": "Count Imported Rows",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*)::int AS total_daily_price_rows FROM daily_prices;",
+        "options": {}
+      },
+      "executeOnce": true,
+      "position": [
+        260,
+        200
+      ],
+      "id": "2add102d-c50d-4466-ade8-c4c86c3bb7a3"
+    },
+    {
+      "name": "Build Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const count = $input.first().json.total_daily_price_rows;\nreturn [{ json: {\n  workflow: '02-egx-historical-import',\n  finishedAt: new Date().toISOString(),\n  totalDailyPriceRows: count,\n  message: 'Historical import pass complete. Check workflow_errors for skipped symbols.',\n} }];"
+      },
+      "position": [
+        520,
+        200
+      ],
+      "id": "50438f36-e271-4d99-87bb-14897c877069"
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Active Stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Load Active Stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Active Stocks": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Stocks (Batch)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Stocks (Batch)": {
+      "main": [
+        [
+          {
+            "node": "Count Imported Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Historical OHLCV (CONFIGURE ENDPOINT)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Historical OHLCV (CONFIGURE ENDPOINT)": {
+      "main": [
+        [
+          {
+            "node": "Normalize OHLCV Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize OHLCV Response": {
+      "main": [
+        [
+          {
+            "node": "Validate, Dedupe & Derive Traded Value",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate, Dedupe & Derive Traded Value": {
+      "main": [
+        [
+          {
+            "node": "Is Valid Candle?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Valid Candle?": {
+      "main": [
+        [
+          {
+            "node": "Upsert Daily Price",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Failed Symbol/Candle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Daily Price": {
+      "main": [
+        [
+          {
+            "node": "Join Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Failed Symbol/Candle": {
+      "main": [
+        [
+          {
+            "node": "Join Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Join Branches": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit Delay": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Stocks (Batch)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Imported Rows": {
+      "main": [
+        [
+          {
+            "node": "Build Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "209d0328-68e9-4b47-a7bc-082d6a5a8f85",
+  "tags": []
+}

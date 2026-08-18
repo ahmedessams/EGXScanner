@@ -1,0 +1,2434 @@
+{
+  "name": "13 - EGX Report API",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -400
+      ],
+      "parameters": {
+        "content": "## 13 - EGX Report API\n\nRead-only webhook endpoints over the scanner's Postgres views (section 25/26/36). Each route checks `Authorization: Bearer $REPORT_WEBHOOK_SECRET` — if the secret env var is empty, the route stays open (documented public-read choice, section 38). All queries are parameterized or built from a strict server-side whitelist — no raw user input is ever concatenated into SQL.\n\nRequires 11-egx-overall-ranking to have run at least once (reads from v_full_market / v_scanner_top / v_latest_scanner_run).\n\n**After import:** each Webhook node needs the workflow ACTIVATED (top-right toggle) for its production URL to respond — see docs/IMPORT-N8N.md.",
+        "height": 340,
+        "width": 560,
+        "color": 5
+      },
+      "id": "28ae3c3f-608f-479e-a939-1c183bfa7ee6"
+    },
+    {
+      "name": "Webhook: full-market",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "1b5003d2-d23b-4eec-bf23-025b01e3f754",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/stocks",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        0,
+        0
+      ],
+      "id": "ea15a6bf-f800-43db-9688-28cb433497b6"
+    },
+    {
+      "name": "Check Auth: full-market",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        260,
+        0
+      ],
+      "id": "6d7967a8-b28e-4440-b520-96e8636d9fb1"
+    },
+    {
+      "name": "Authorized?: full-market",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "861333b6-f266-4f1a-8ccf-89f60685d12e",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        520,
+        0
+      ],
+      "id": "08c6ccba-cdcd-40a3-97cc-c6351d46f5f3"
+    },
+    {
+      "name": "Respond 401: full-market",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        780,
+        0
+      ],
+      "id": "cccf5487-8bdc-4176-b49c-a204b4039e93"
+    },
+    {
+      "name": "Build Query: full-market",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const sortMap = { volume: 'volume', tradedvalue: 'traded_value', rvol: 'rvol20', score: 'overall_score', change: 'change_pct' };\nconst requested = String(($json.query && $json.query.sort) || 'score').toLowerCase();\nconst orderByColumn = sortMap[requested] || 'overall_score';\nreturn [{ json: { ...$json, orderByColumn } }];"
+      },
+      "position": [
+        1040,
+        0
+      ],
+      "id": "485be4d0-58cd-4e69-a1a9-4d8149539b4a"
+    },
+    {
+      "name": "Query: full-market",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT * FROM v_full_market ORDER BY {{ $json.orderByColumn }} DESC NULLS LAST LIMIT 1000;",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1300,
+        0
+      ],
+      "id": "1b2d20f7-5fa7-4847-a7b0-4e9c00581557"
+    },
+    {
+      "name": "Format: full-market",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: {\n  success: true,\n  tradingDate: $input.first().json.trading_date || null,\n  count: $input.all().length,\n  results: $input.all().map((i) => i.json),\n} }];"
+      },
+      "position": [
+        1560,
+        0
+      ],
+      "id": "5dc2d781-1170-4f75-bf3e-0c8f3a125382"
+    },
+    {
+      "name": "Respond 200: full-market",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        1820,
+        0
+      ],
+      "id": "f284edfb-73c8-4d29-9574-86825dc9ac46"
+    },
+    {
+      "name": "Webhook: volume",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "6c1a185b-8188-4f08-8596-2ede50496295",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/stocks/volume",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        2080,
+        0
+      ],
+      "id": "0f2f9c83-3b1b-4435-adef-0e6b0451b067"
+    },
+    {
+      "name": "Check Auth: volume",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        2340,
+        0
+      ],
+      "id": "67317c7a-f2d3-429f-8bb5-a5840c5a1eb0"
+    },
+    {
+      "name": "Authorized?: volume",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "88d2818d-25c8-42fe-88de-a3894cd4c42b",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        2600,
+        0
+      ],
+      "id": "93ec42b8-f740-42e3-b747-bfb252886c54"
+    },
+    {
+      "name": "Respond 401: volume",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        0,
+        200
+      ],
+      "id": "d7ab7999-d523-4da1-bcc7-e00ae8ca0f28"
+    },
+    {
+      "name": "Query: volume",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT symbol, name, sector, close, volume, traded_value, avg_volume20, rvol20, rvol50, target1, target1_gain_pct, target1_estimated_days\nFROM v_full_market ORDER BY volume DESC NULLS LAST LIMIT 1000;",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        260,
+        200
+      ],
+      "id": "53a2cd39-3803-433a-a42f-bef8444ed750"
+    },
+    {
+      "name": "Format: volume",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: { success: true, count: $input.all().length, results: $input.all().map((i) => i.json) } }];"
+      },
+      "position": [
+        520,
+        200
+      ],
+      "id": "1bb56374-1082-47ef-be46-dab88d7962a5"
+    },
+    {
+      "name": "Respond 200: volume",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        780,
+        200
+      ],
+      "id": "ef014928-7163-47ce-a3f5-e3c412fb617b"
+    },
+    {
+      "name": "Webhook: relative-volume",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "b3e90386-b87a-4c80-9e83-527a3f50cf4b",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/stocks/relative-volume",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        1040,
+        200
+      ],
+      "id": "a70a1748-e33d-4fc8-adf4-3f99fef8a28a"
+    },
+    {
+      "name": "Check Auth: relative-volume",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        1300,
+        200
+      ],
+      "id": "1e002227-2586-4fd8-bd32-30c61468d719"
+    },
+    {
+      "name": "Authorized?: relative-volume",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "19f797ce-ab7b-4ca2-bde7-490131eae168",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1560,
+        200
+      ],
+      "id": "9312960f-5f53-42e3-8042-8ec930967da3"
+    },
+    {
+      "name": "Respond 401: relative-volume",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        1820,
+        200
+      ],
+      "id": "ae7e3025-79d9-45d8-aca6-9a4c49232977"
+    },
+    {
+      "name": "Query: relative-volume",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT symbol, name, sector, close, volume, avg_volume20, rvol20, rvol50, target1, target1_gain_pct, target1_estimated_days\nFROM v_full_market ORDER BY rvol20 DESC NULLS LAST LIMIT 1000;",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        2080,
+        200
+      ],
+      "id": "240c81ea-9080-4d7a-b977-43b3118d20f1"
+    },
+    {
+      "name": "Format: relative-volume",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: { success: true, count: $input.all().length, results: $input.all().map((i) => i.json) } }];"
+      },
+      "position": [
+        2340,
+        200
+      ],
+      "id": "bd4b5204-6a89-4e33-bcfb-de4e669f6276"
+    },
+    {
+      "name": "Respond 200: relative-volume",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        2600,
+        200
+      ],
+      "id": "e9c77382-c67d-4339-8ba5-aaf243a9ad92"
+    },
+    {
+      "name": "Webhook: top",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "b35b45f2-9de1-475f-8742-ece6c32f3ed6",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/top",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        0,
+        400
+      ],
+      "id": "b3213d7d-9ff3-4960-a5b2-565bafcc0a64"
+    },
+    {
+      "name": "Check Auth: top",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        260,
+        400
+      ],
+      "id": "5821f594-5b11-44f0-9653-6739a237a047"
+    },
+    {
+      "name": "Authorized?: top",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "e6539cc3-fcfc-4e20-b641-e4d35a9cc5a6",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        520,
+        400
+      ],
+      "id": "d143a161-034d-42a2-8e3c-993c52abe54c"
+    },
+    {
+      "name": "Respond 401: top",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        780,
+        400
+      ],
+      "id": "0fabffd0-66af-44ee-9dc3-384f589b1f55"
+    },
+    {
+      "name": "Query: top",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM v_latest_scanner_run)\n  AND eligible = TRUE\nORDER BY overall_rank ASC\nLIMIT COALESCE(NULLIF($1, 0), 10);",
+        "options": {
+          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10 ] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1040,
+        400
+      ],
+      "id": "5edf0093-06e8-4285-bd2e-e09f79ae177a"
+    },
+    {
+      "name": "Format: top",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rows = $input.all().map((i) => i.json);\nreturn [{ json: {\n  success: true,\n  tradingDate: rows[0] ? rows[0].trading_date : null,\n  results: rows,\n} }];"
+      },
+      "position": [
+        1300,
+        400
+      ],
+      "id": "0ecca535-06a2-42cf-87be-1669760c8237"
+    },
+    {
+      "name": "Respond 200: top",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        1560,
+        400
+      ],
+      "id": "6965d5d3-0c2a-4240-83aa-ecf7cc383b69"
+    },
+    {
+      "name": "Webhook: breakout",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "f29a762a-6975-49bf-b76a-f71fe8aa2a20",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/breakout",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        1820,
+        400
+      ],
+      "id": "da02f54c-0a70-4020-b718-bee8203d3cd7"
+    },
+    {
+      "name": "Check Auth: breakout",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        2080,
+        400
+      ],
+      "id": "e97379d8-cae9-4e75-9d30-b534517a6ebb"
+    },
+    {
+      "name": "Authorized?: breakout",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c0d812b7-cb58-400d-9ae8-0e75eea4733c",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        2340,
+        400
+      ],
+      "id": "a661b8b6-5267-4c7b-94f0-c89aec3dabab"
+    },
+    {
+      "name": "Respond 401: breakout",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        2600,
+        400
+      ],
+      "id": "919d2c92-dce5-4da9-ad4f-61723279d1cf"
+    },
+    {
+      "name": "Query: breakout",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM v_latest_scanner_run) AND eligible = TRUE\nORDER BY breakout_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
+        "options": {
+          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10 ] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        0,
+        600
+      ],
+      "id": "14066103-0f32-4c30-aceb-609ac932d510"
+    },
+    {
+      "name": "Format: breakout",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rows = $input.all().map((i) => i.json);\nreturn [{ json: { success: true, setup: 'breakout', results: rows } }];"
+      },
+      "position": [
+        260,
+        600
+      ],
+      "id": "b7f3bbe3-9ce9-4b3e-9c8f-e64c38a5cd00"
+    },
+    {
+      "name": "Respond 200: breakout",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        520,
+        600
+      ],
+      "id": "73086cfe-3cc1-4b57-a73b-aac1cd3ca017"
+    },
+    {
+      "name": "Webhook: momentum",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "0843b251-5bd8-4be1-a1e6-518b138e6ac1",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/momentum",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        780,
+        600
+      ],
+      "id": "dc428197-236c-4619-ae52-ddf9faeecdc2"
+    },
+    {
+      "name": "Check Auth: momentum",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        1040,
+        600
+      ],
+      "id": "1561d03e-2c19-4069-93d2-b8e701da3284"
+    },
+    {
+      "name": "Authorized?: momentum",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "3d7e1706-26fc-4ed5-8147-d43740865f7f",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1300,
+        600
+      ],
+      "id": "4d596ac8-39ad-4420-9ce4-8f31b1ad50a0"
+    },
+    {
+      "name": "Respond 401: momentum",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        1560,
+        600
+      ],
+      "id": "58701b2b-8df9-4555-aafe-6a2ac09d7335"
+    },
+    {
+      "name": "Query: momentum",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM v_latest_scanner_run) AND eligible = TRUE\nORDER BY momentum_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
+        "options": {
+          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10 ] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1820,
+        600
+      ],
+      "id": "2d3a0735-79ed-403a-8f6b-77e1cd978bd2"
+    },
+    {
+      "name": "Format: momentum",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rows = $input.all().map((i) => i.json);\nreturn [{ json: { success: true, setup: 'momentum', results: rows } }];"
+      },
+      "position": [
+        2080,
+        600
+      ],
+      "id": "c682b051-5608-49cf-a24c-dd2dd32c5bec"
+    },
+    {
+      "name": "Respond 200: momentum",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        2340,
+        600
+      ],
+      "id": "c0977de1-fac1-4e81-b576-d26c394b3d33"
+    },
+    {
+      "name": "Webhook: pullback",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "0aec5f4f-484c-483a-9a7a-5a7c6c3bfc56",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/pullback",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        2600,
+        600
+      ],
+      "id": "52d950f3-e0f7-44cc-9b21-ed44195e24bc"
+    },
+    {
+      "name": "Check Auth: pullback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        0,
+        800
+      ],
+      "id": "6cea0ef6-3da5-48a7-83ca-850127bb1ae2"
+    },
+    {
+      "name": "Authorized?: pullback",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "7477db66-da01-4c11-8c2a-0539dc2ff384",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        260,
+        800
+      ],
+      "id": "7f0589dd-9c41-4f58-a810-1452c8871a37"
+    },
+    {
+      "name": "Respond 401: pullback",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        520,
+        800
+      ],
+      "id": "9eb777e8-fa78-448b-9fbf-368b79e3a699"
+    },
+    {
+      "name": "Query: pullback",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM v_latest_scanner_run) AND eligible = TRUE\nORDER BY pullback_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
+        "options": {
+          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10 ] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        780,
+        800
+      ],
+      "id": "f1bd5652-7a54-4608-a2cd-4a0bdbcfe721"
+    },
+    {
+      "name": "Format: pullback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rows = $input.all().map((i) => i.json);\nreturn [{ json: { success: true, setup: 'pullback', results: rows } }];"
+      },
+      "position": [
+        1040,
+        800
+      ],
+      "id": "b228238d-ccd7-4c78-8784-73d260ce5826"
+    },
+    {
+      "name": "Respond 200: pullback",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        1300,
+        800
+      ],
+      "id": "718f82b1-ca20-4a12-a737-db9eaa869c10"
+    },
+    {
+      "name": "Webhook: reversal",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "c4901142-33ec-4c6c-a1a9-2051c5c3950a",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/reversal",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        1560,
+        800
+      ],
+      "id": "349800fe-3619-433c-80ec-b30a1e413810"
+    },
+    {
+      "name": "Check Auth: reversal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        1820,
+        800
+      ],
+      "id": "9bb3a467-a2b3-485e-a57c-902762cb4cc3"
+    },
+    {
+      "name": "Authorized?: reversal",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "21a2b039-022f-421a-8e67-8418eeb304ee",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        2080,
+        800
+      ],
+      "id": "22289ca9-05b4-468f-a2da-e4aa63dff5f1"
+    },
+    {
+      "name": "Respond 401: reversal",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        2340,
+        800
+      ],
+      "id": "8265bd5a-5722-4801-aea1-b50b51eb50ea"
+    },
+    {
+      "name": "Query: reversal",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM v_latest_scanner_run) AND eligible = TRUE\nORDER BY reversal_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
+        "options": {
+          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10 ] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        2600,
+        800
+      ],
+      "id": "4a30336d-e143-4d10-92f8-ddc921fb9a29"
+    },
+    {
+      "name": "Format: reversal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rows = $input.all().map((i) => i.json);\nreturn [{ json: { success: true, setup: 'reversal', results: rows } }];"
+      },
+      "position": [
+        0,
+        1000
+      ],
+      "id": "c57c958c-668b-469b-b555-0e4702ceddcf"
+    },
+    {
+      "name": "Respond 200: reversal",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        260,
+        1000
+      ],
+      "id": "f4cb0b01-dc60-4ad5-b607-5de54d90520f"
+    },
+    {
+      "name": "Webhook: stock-detail",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "bfeea97e-10c7-4290-9acf-d420db85399f",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/stock",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        520,
+        1000
+      ],
+      "id": "4175d23a-05c2-43d0-b61a-c4bc71e1d7dc"
+    },
+    {
+      "name": "Check Auth: stock-detail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        780,
+        1000
+      ],
+      "id": "95841923-e97f-4abd-a091-ecc8f2792cd4"
+    },
+    {
+      "name": "Authorized?: stock-detail",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "f2090333-413d-4ac2-9be0-cdf76d81228d",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1040,
+        1000
+      ],
+      "id": "96ea3f5e-ff85-46fd-9751-38c2ea9cbe8f"
+    },
+    {
+      "name": "Respond 401: stock-detail",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        1300,
+        1000
+      ],
+      "id": "fd71ebf0-e4e1-49f2-8bce-300507348c7d"
+    },
+    {
+      "name": "Build Query: stock-detail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const symbol = String(($json.query && $json.query.symbol) || '').toUpperCase().replace(/[^A-Z0-9.]/g, '');\nif (!symbol) throw new Error('symbol query parameter is required, e.g. ?symbol=COMI');\nreturn [{ json: { ...$json, symbol } }];"
+      },
+      "position": [
+        1560,
+        1000
+      ],
+      "id": "660c6b35-e56c-4cc7-b7ea-2788780d2bd1"
+    },
+    {
+      "name": "Query: stock-detail",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM v_full_market WHERE symbol = $1;",
+        "options": {
+          "queryReplacement": "={{ [$json.symbol] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1820,
+        1000
+      ],
+      "id": "c4778b19-ba2f-4521-b2e2-baeffb57a308"
+    },
+    {
+      "name": "Format: stock-detail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const row = $input.first() ? $input.first().json : null;\nif (!row) return [{ json: { success: false, error: 'symbol not found' } }];\nreturn [{ json: {\n  success: true,\n  symbol: row.symbol, name: row.name, close: row.close, changePct: row.change_pct,\n  volume: row.volume, averageVolume20: row.avg_volume20, relativeVolume20: row.rvol20,\n  rsi14: row.rsi14,\n  macd: { line: row.macd, signal: row.macd_signal, histogram: row.macd_histogram, state: (row.macd_histogram > 0 ? 'BULLISH' : 'BEARISH') },\n  movingAverages: { ema9: row.ema9, ema20: row.ema20, ema50: row.ema50, ema200: row.ema200 },\n  support: [row.support1, row.support2, row.support3].filter((v) => v !== null),\n  resistance: [row.resistance1, row.resistance2, row.resistance3].filter((v) => v !== null),\n  scores: { overall: row.overall_score, breakout: row.breakout_score, momentum: row.momentum_score, pullback: row.pullback_score, reversal: row.reversal_score },\n  setup: row.setup_type,\n  eligible: row.eligible,\n  // gainPct is potential gain IF the target is reached, plain arithmetic on\n  // entry/target — NOT a forecast. estimatedDays is a rough ATR-based\n  // projection (this stock's own average daily range), NOT a historical\n  // statistic or a guarantee of when (or whether) the target is hit — see\n  // docs/SCORING.md for the exact method.\n  tradeStructure: {\n    entry: row.entry_price, invalidation: row.invalidation_price,\n    target1: row.target1, target2: row.target2, target3: row.target3,\n    riskReward: { t1: row.risk_reward_t1, t2: row.risk_reward_t2, t3: row.risk_reward_t3 },\n    gainPct: { t1: row.target1_gain_pct, t2: row.target2_gain_pct, t3: row.target3_gain_pct },\n    estimatedDays: { t1: row.target1_estimated_days, t2: row.target2_estimated_days, t3: row.target3_estimated_days },\n  },\n} }];"
+      },
+      "position": [
+        2080,
+        1000
+      ],
+      "id": "2a477280-7e0f-42a5-a88a-34ca57380558"
+    },
+    {
+      "name": "Respond 200: stock-detail",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        2340,
+        1000
+      ],
+      "id": "a551b171-be82-4978-929f-1d93fb61e3e2"
+    },
+    {
+      "name": "Webhook: stock-technicals",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "aedfc161-9046-4253-9102-31ea4c9e92ea",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/stock/technicals",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        2600,
+        1000
+      ],
+      "id": "1f759e03-1315-4842-a71b-ff613b50e617"
+    },
+    {
+      "name": "Check Auth: stock-technicals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        0,
+        1200
+      ],
+      "id": "faf79fb3-50c5-45c7-a1cf-442bedfde416"
+    },
+    {
+      "name": "Authorized?: stock-technicals",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "d29b8150-2a9b-4a4a-ac84-6bc208f741da",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        260,
+        1200
+      ],
+      "id": "9b606245-ec0f-488f-9a5a-bcca2c274c5c"
+    },
+    {
+      "name": "Respond 401: stock-technicals",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        520,
+        1200
+      ],
+      "id": "afa2028e-c8ab-4b45-b198-7c576d46a286"
+    },
+    {
+      "name": "Build Query: stock-technicals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const symbol = String(($json.query && $json.query.symbol) || '').toUpperCase().replace(/[^A-Z0-9.]/g, '');\nif (!symbol) throw new Error('symbol query parameter is required, e.g. ?symbol=COMI');\nreturn [{ json: { ...$json, symbol } }];"
+      },
+      "position": [
+        780,
+        1200
+      ],
+      "id": "9bdcaf10-c9d9-43f5-8ca1-ced8fe7afb41"
+    },
+    {
+      "name": "Query: stock-technicals",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT row_to_json(t) AS technicals FROM (\n  SELECT s.symbol, ta.* FROM technical_analysis ta\n  JOIN stocks s ON s.id = ta.stock_id\n  WHERE s.symbol = $1\n  ORDER BY ta.trading_date DESC LIMIT 1\n) t;",
+        "options": {
+          "queryReplacement": "={{ [$json.symbol] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1040,
+        1200
+      ],
+      "id": "4eeec58d-11ff-4994-b86b-8c9b7409bf0e"
+    },
+    {
+      "name": "Format: stock-technicals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const row = $input.first() ? $input.first().json.technicals : null;\nif (!row) return [{ json: { success: false, error: 'no technical analysis found for symbol' } }];\nreturn [{ json: { success: true, technicals: row } }];"
+      },
+      "position": [
+        1300,
+        1200
+      ],
+      "id": "2c00e9f7-1719-45dc-a28c-55c224342af7"
+    },
+    {
+      "name": "Respond 200: stock-technicals",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        1560,
+        1200
+      ],
+      "id": "d7fd5bb9-76bc-4e08-afbd-9551c71d85a6"
+    },
+    {
+      "name": "Webhook: stock-support-resistance",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "f2fd35f4-788f-46be-9f23-97ed97b2af49",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/stock/support-resistance",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        1820,
+        1200
+      ],
+      "id": "6de63841-9370-4abc-8f85-9fc8995ceeff"
+    },
+    {
+      "name": "Check Auth: stock-support-resistance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        2080,
+        1200
+      ],
+      "id": "3b3b6174-1d2b-4abe-85eb-e6725358a7cf"
+    },
+    {
+      "name": "Authorized?: stock-support-resistance",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "57ff9deb-a4ec-4928-a9ed-204d0d20c47f",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        2340,
+        1200
+      ],
+      "id": "34416ef9-d4ce-4f3c-8070-6050a1e1e05a"
+    },
+    {
+      "name": "Respond 401: stock-support-resistance",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        2600,
+        1200
+      ],
+      "id": "f241c2ca-8367-4254-bd62-34761668aa3e"
+    },
+    {
+      "name": "Build Query: stock-support-resistance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const symbol = String(($json.query && $json.query.symbol) || '').toUpperCase().replace(/[^A-Z0-9.]/g, '');\nif (!symbol) throw new Error('symbol query parameter is required, e.g. ?symbol=COMI');\nreturn [{ json: { ...$json, symbol } }];"
+      },
+      "position": [
+        0,
+        1400
+      ],
+      "id": "2c90ebc9-11d5-47b8-b9b9-74e86483089f"
+    },
+    {
+      "name": "Query: stock-support-resistance",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT row_to_json(t) AS support_resistance FROM (\n  SELECT s.symbol, sr.* FROM support_resistance sr\n  JOIN stocks s ON s.id = sr.stock_id\n  WHERE s.symbol = $1\n  ORDER BY sr.trading_date DESC LIMIT 1\n) t;",
+        "options": {
+          "queryReplacement": "={{ [$json.symbol] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        260,
+        1400
+      ],
+      "id": "9c90e71b-9e94-42e2-9038-9e87ffa41c6d"
+    },
+    {
+      "name": "Format: stock-support-resistance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const row = $input.first() ? $input.first().json.support_resistance : null;\nif (!row) return [{ json: { success: false, error: 'no support/resistance data found for symbol' } }];\nreturn [{ json: { success: true, supportResistance: row } }];"
+      },
+      "position": [
+        520,
+        1400
+      ],
+      "id": "54ec179e-3552-43af-bb90-793d057b4a7b"
+    },
+    {
+      "name": "Respond 200: stock-support-resistance",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        780,
+        1400
+      ],
+      "id": "0baf7a16-aec6-4a32-a9dd-77e82ee87705"
+    },
+    {
+      "name": "Webhook: market",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "1e1ae22d-9498-4fa5-91d3-ff0aaede573f",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/market",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        1040,
+        1400
+      ],
+      "id": "4fcf0e95-29d9-465c-9957-9750244e7e51"
+    },
+    {
+      "name": "Check Auth: market",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        1300,
+        1400
+      ],
+      "id": "b5c69ace-fecd-4317-a340-89012319c44d"
+    },
+    {
+      "name": "Authorized?: market",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "3919ca1a-2c91-4ed5-95ee-770308c07b72",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1560,
+        1400
+      ],
+      "id": "abcea239-e33e-425f-bf34-ffe89c7b85ae"
+    },
+    {
+      "name": "Respond 401: market",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        1820,
+        1400
+      ],
+      "id": "57bb59af-9b34-4afb-99aa-b7fca9815847"
+    },
+    {
+      "name": "Query: market",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT trading_date::text AS trading_date, market_score::float8 AS market_score, market_regime,\n       stocks_scanned::float8 AS stocks_scanned, eligible_stocks::float8 AS eligible_stocks\nFROM v_latest_scanner_run;",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        2080,
+        1400
+      ],
+      "id": "d8160fa2-b793-449e-b64a-18cf44ebdc97"
+    },
+    {
+      "name": "Format: market",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const row = $input.first() ? $input.first().json : null;\nreturn [{ json: {\n  success: true,\n  tradingDate: row ? row.trading_date : null,\n  market: row ? { regime: row.market_regime, score: row.market_score } : null,\n  stocksScanned: row ? row.stocks_scanned : 0,\n  eligibleStocks: row ? row.eligible_stocks : 0,\n} }];"
+      },
+      "position": [
+        2340,
+        1400
+      ],
+      "id": "a01df3ca-7fe5-416c-822d-eaf479c21de1"
+    },
+    {
+      "name": "Respond 200: market",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        2600,
+        1400
+      ],
+      "id": "d632cf66-d898-4b45-97ab-1a35c91a30bf"
+    }
+  ],
+  "connections": {
+    "Authorized?: full-market": {
+      "main": [
+        [
+          {
+            "node": "Build Query: full-market",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401: full-market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query: full-market": {
+      "main": [
+        [
+          {
+            "node": "Query: full-market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query: full-market": {
+      "main": [
+        [
+          {
+            "node": "Format: full-market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: full-market": {
+      "main": [
+        [
+          {
+            "node": "Respond 200: full-market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: full-market": {
+      "main": [
+        [
+          {
+            "node": "Check Auth: full-market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Auth: full-market": {
+      "main": [
+        [
+          {
+            "node": "Authorized?: full-market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized?: volume": {
+      "main": [
+        [
+          {
+            "node": "Query: volume",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401: volume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query: volume": {
+      "main": [
+        [
+          {
+            "node": "Format: volume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: volume": {
+      "main": [
+        [
+          {
+            "node": "Respond 200: volume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: volume": {
+      "main": [
+        [
+          {
+            "node": "Check Auth: volume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Auth: volume": {
+      "main": [
+        [
+          {
+            "node": "Authorized?: volume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized?: relative-volume": {
+      "main": [
+        [
+          {
+            "node": "Query: relative-volume",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401: relative-volume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query: relative-volume": {
+      "main": [
+        [
+          {
+            "node": "Format: relative-volume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: relative-volume": {
+      "main": [
+        [
+          {
+            "node": "Respond 200: relative-volume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: relative-volume": {
+      "main": [
+        [
+          {
+            "node": "Check Auth: relative-volume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Auth: relative-volume": {
+      "main": [
+        [
+          {
+            "node": "Authorized?: relative-volume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized?: top": {
+      "main": [
+        [
+          {
+            "node": "Query: top",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401: top",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query: top": {
+      "main": [
+        [
+          {
+            "node": "Format: top",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: top": {
+      "main": [
+        [
+          {
+            "node": "Respond 200: top",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: top": {
+      "main": [
+        [
+          {
+            "node": "Check Auth: top",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Auth: top": {
+      "main": [
+        [
+          {
+            "node": "Authorized?: top",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized?: breakout": {
+      "main": [
+        [
+          {
+            "node": "Query: breakout",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401: breakout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query: breakout": {
+      "main": [
+        [
+          {
+            "node": "Format: breakout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: breakout": {
+      "main": [
+        [
+          {
+            "node": "Respond 200: breakout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: breakout": {
+      "main": [
+        [
+          {
+            "node": "Check Auth: breakout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Auth: breakout": {
+      "main": [
+        [
+          {
+            "node": "Authorized?: breakout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized?: momentum": {
+      "main": [
+        [
+          {
+            "node": "Query: momentum",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401: momentum",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query: momentum": {
+      "main": [
+        [
+          {
+            "node": "Format: momentum",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: momentum": {
+      "main": [
+        [
+          {
+            "node": "Respond 200: momentum",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: momentum": {
+      "main": [
+        [
+          {
+            "node": "Check Auth: momentum",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Auth: momentum": {
+      "main": [
+        [
+          {
+            "node": "Authorized?: momentum",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized?: pullback": {
+      "main": [
+        [
+          {
+            "node": "Query: pullback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401: pullback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query: pullback": {
+      "main": [
+        [
+          {
+            "node": "Format: pullback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: pullback": {
+      "main": [
+        [
+          {
+            "node": "Respond 200: pullback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: pullback": {
+      "main": [
+        [
+          {
+            "node": "Check Auth: pullback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Auth: pullback": {
+      "main": [
+        [
+          {
+            "node": "Authorized?: pullback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized?: reversal": {
+      "main": [
+        [
+          {
+            "node": "Query: reversal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401: reversal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query: reversal": {
+      "main": [
+        [
+          {
+            "node": "Format: reversal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: reversal": {
+      "main": [
+        [
+          {
+            "node": "Respond 200: reversal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: reversal": {
+      "main": [
+        [
+          {
+            "node": "Check Auth: reversal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Auth: reversal": {
+      "main": [
+        [
+          {
+            "node": "Authorized?: reversal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized?: stock-detail": {
+      "main": [
+        [
+          {
+            "node": "Build Query: stock-detail",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401: stock-detail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query: stock-detail": {
+      "main": [
+        [
+          {
+            "node": "Query: stock-detail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query: stock-detail": {
+      "main": [
+        [
+          {
+            "node": "Format: stock-detail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: stock-detail": {
+      "main": [
+        [
+          {
+            "node": "Respond 200: stock-detail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: stock-detail": {
+      "main": [
+        [
+          {
+            "node": "Check Auth: stock-detail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Auth: stock-detail": {
+      "main": [
+        [
+          {
+            "node": "Authorized?: stock-detail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized?: stock-technicals": {
+      "main": [
+        [
+          {
+            "node": "Build Query: stock-technicals",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401: stock-technicals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query: stock-technicals": {
+      "main": [
+        [
+          {
+            "node": "Query: stock-technicals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query: stock-technicals": {
+      "main": [
+        [
+          {
+            "node": "Format: stock-technicals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: stock-technicals": {
+      "main": [
+        [
+          {
+            "node": "Respond 200: stock-technicals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: stock-technicals": {
+      "main": [
+        [
+          {
+            "node": "Check Auth: stock-technicals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Auth: stock-technicals": {
+      "main": [
+        [
+          {
+            "node": "Authorized?: stock-technicals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized?: stock-support-resistance": {
+      "main": [
+        [
+          {
+            "node": "Build Query: stock-support-resistance",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401: stock-support-resistance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query: stock-support-resistance": {
+      "main": [
+        [
+          {
+            "node": "Query: stock-support-resistance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query: stock-support-resistance": {
+      "main": [
+        [
+          {
+            "node": "Format: stock-support-resistance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: stock-support-resistance": {
+      "main": [
+        [
+          {
+            "node": "Respond 200: stock-support-resistance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: stock-support-resistance": {
+      "main": [
+        [
+          {
+            "node": "Check Auth: stock-support-resistance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Auth: stock-support-resistance": {
+      "main": [
+        [
+          {
+            "node": "Authorized?: stock-support-resistance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized?: market": {
+      "main": [
+        [
+          {
+            "node": "Query: market",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401: market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query: market": {
+      "main": [
+        [
+          {
+            "node": "Format: market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: market": {
+      "main": [
+        [
+          {
+            "node": "Respond 200: market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: market": {
+      "main": [
+        [
+          {
+            "node": "Check Auth: market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Auth: market": {
+      "main": [
+        [
+          {
+            "node": "Authorized?: market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "07727db2-b01c-4d62-a336-3385122bcf6a",
+  "tags": []
+}
