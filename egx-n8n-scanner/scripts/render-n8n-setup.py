@@ -133,7 +133,13 @@ def main():
         body = build_create_body(wf_json, cred_id, cred_name)
         existing_id = find_workflow_id(base_url, api_key, wf_json["name"])
         if existing_id:
-            api(base_url, api_key, "PUT", f"/workflows/{existing_id}", body)
+            # publishIfActive=false: an already-published workflow's PUT
+            # defaults to immediately re-publishing it, but at THIS point
+            # Execute Workflow references are still blank (fixed in the
+            # next pass below) — n8n's own publish validation would reject
+            # them. The explicit "Publishing" pass further down (after refs
+            # are fixed) is what actually (re-)publishes everything.
+            api(base_url, api_key, "PUT", f"/workflows/{existing_id}?publishIfActive=false", body)
             wf_id = existing_id
             print(f"  {filename} -> {wf_json['name']} ({wf_id}) [updated existing]")
         else:
@@ -158,7 +164,7 @@ def main():
                 else:
                     print(f"  WARNING: {filename} references unknown workflow '{target_name}'")
         if changed:
-            api(base_url, api_key, "PUT", f"/workflows/{wf_id}", body)
+            api(base_url, api_key, "PUT", f"/workflows/{wf_id}?publishIfActive=false", body)
             print(f"  {filename}: references updated")
 
     print()
