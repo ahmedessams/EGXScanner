@@ -4,6 +4,7 @@
 # OS / editor cruft
 .DS_Store
 *.swp
+__pycache__/
 
 # claude-mem auto-generated activity logs, not real project docs
 CLAUDE.md

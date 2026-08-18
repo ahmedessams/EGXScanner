@@ -361,6 +361,8 @@ const RANKED_COLUMNS = [
   { key: 'risk_reward_t1', label: 'R:R T1', num: true, render: (r) => fmt(r.risk_reward_t1, 2) },
   { key: 'target1_gain_pct', label: 'Gain % T1', num: true, title: 'Potential gain if Target 1 is reached — not a forecast', render: (r) => gainCell(r.target1_gain_pct) },
   { key: 'target1_estimated_days', label: 'Est. Days T1', num: true, title: 'Rough ATR-based projection, not a historical statistic or guarantee', render: (r) => fmtDays(r.target1_estimated_days) },
+  { key: 'historical_target1_hit_pct', label: 'P(T1) %', num: true, title: 'Historical rate: % of past eligible picks with this setup type that reached Target 1 within their own estimated-days window. Not a forecast for this specific stock — hover the value for sample size.', render: (r) => probCell(r.historical_target1_hit_pct, r.historical_sample_size, true) },
+  { key: 'historical_stop_hit_pct', label: 'P(Stop) %', num: true, title: 'Historical rate: % of past eligible picks with this setup type that hit the stop/invalidation level first, within that same window. Hover the value for sample size.', render: (r) => probCell(r.historical_stop_hit_pct, r.historical_sample_size, false) },
 ];
 
 const VOLUME_COLUMNS = [
@@ -374,6 +376,8 @@ const VOLUME_COLUMNS = [
   { key: 'target1', label: 'Target 1', num: true, render: (r) => fmt(r.target1) },
   { key: 'target1_gain_pct', label: 'Gain % T1', num: true, title: 'Potential gain if Target 1 is reached — not a forecast', render: (r) => gainCell(r.target1_gain_pct) },
   { key: 'target1_estimated_days', label: 'Est. Days T1', num: true, title: 'Rough ATR-based projection, not a historical statistic or guarantee', render: (r) => fmtDays(r.target1_estimated_days) },
+  { key: 'historical_target1_hit_pct', label: 'P(T1) %', num: true, title: 'Historical rate: % of past eligible picks with this setup type that reached Target 1 within their own estimated-days window. Not a forecast for this specific stock — hover the value for sample size.', render: (r) => probCell(r.historical_target1_hit_pct, r.historical_sample_size, true) },
+  { key: 'historical_stop_hit_pct', label: 'P(Stop) %', num: true, title: 'Historical rate: % of past eligible picks with this setup type that hit the stop/invalidation level first, within that same window. Hover the value for sample size.', render: (r) => probCell(r.historical_stop_hit_pct, r.historical_sample_size, false) },
 ];
 
 const FULL_MARKET_COLUMNS = [
@@ -388,6 +392,8 @@ const FULL_MARKET_COLUMNS = [
   { key: 'setup_type', label: 'Setup', render: (r) => setupBadge(r.setup_type), sortKey: null },
   { key: 'target1_gain_pct', label: 'Gain % T1', num: true, title: 'Potential gain if Target 1 is reached — not a forecast', render: (r) => gainCell(r.target1_gain_pct) },
   { key: 'target1_estimated_days', label: 'Est. Days T1', num: true, title: 'Rough ATR-based projection, not a historical statistic or guarantee', render: (r) => fmtDays(r.target1_estimated_days) },
+  { key: 'historical_target1_hit_pct', label: 'P(T1) %', num: true, title: 'Historical rate: % of past eligible picks with this setup type that reached Target 1 within their own estimated-days window. Not a forecast for this specific stock — hover the value for sample size.', render: (r) => probCell(r.historical_target1_hit_pct, r.historical_sample_size, true) },
+  { key: 'historical_stop_hit_pct', label: 'P(Stop) %', num: true, title: 'Historical rate: % of past eligible picks with this setup type that hit the stop/invalidation level first, within that same window. Hover the value for sample size.', render: (r) => probCell(r.historical_stop_hit_pct, r.historical_sample_size, false) },
   { key: 'eligible', label: 'Eligible', render: (r) => r.eligible ? '✓' : '—', sortKey: null },
 ];
 
@@ -451,6 +457,9 @@ const FULL_MARKET_EXPORT_COLUMNS = [
   { key: 'target1_estimated_days', label: 'Est. Days T1' },
   { key: 'target2_estimated_days', label: 'Est. Days T2' },
   { key: 'target3_estimated_days', label: 'Est. Days T3' },
+  { key: 'historical_target1_hit_pct', label: 'P(T1) %' },
+  { key: 'historical_stop_hit_pct', label: 'P(Stop) %' },
+  { key: 'historical_sample_size', label: 'P Sample Size' },
 ];
 
 function esc(s) { return (s ?? '').toString().replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -462,6 +471,16 @@ function gainCell(v) {
   if (v === null || v === undefined || v === '') return '—';
   const n = Number(v);
   return `<span class="change-pos">+${n.toFixed(2)}%</span>`;
+}
+function probCell(v, sampleSize, positive) {
+  if (v === null || v === undefined || v === '') return '—';
+  const n = Number(v);
+  const size = Number(sampleSize) || 0;
+  const lowConfidence = size < 100;
+  const cls = positive ? 'change-pos' : 'change-neg';
+  const style = lowConfidence ? 'opacity:0.6;font-style:italic;' : '';
+  const note = lowConfidence ? ' — small sample, treat with caution' : '';
+  return `<span class="${cls}" style="${style}" title="Sample size: n=${size}${note}">${n.toFixed(1)}%</span>`;
 }
 function changeCell(v) {
   if (v === null || v === undefined || v === '') return '—';
@@ -801,6 +820,19 @@ async function openDetail(symbol) {
         <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">
           * Rough projection from this stock's own average daily range (ATR) — not a
           historical statistic, forecast, or guarantee of when (or whether) a target is reached.
+        </div>
+      ` : ''}
+
+      ${data.historicalProbability && data.historicalProbability.target1HitPct !== null && data.historicalProbability.target1HitPct !== undefined ? `
+        <div class="section-title">Historical Probability</div>
+        <div class="kv-grid">
+          <div class="kv"><div class="label">Reached Target 1 in Window</div><div class="value">${probCell(data.historicalProbability.target1HitPct, data.historicalProbability.sampleSize, true)}</div></div>
+          <div class="kv"><div class="label">Hit Stop First</div><div class="value">${probCell(data.historicalProbability.stopHitPct, data.historicalProbability.sampleSize, false)}</div></div>
+        </div>
+        <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">
+          Measured outcome rate across ${data.historicalProbability.sampleSize ?? 0} past ${esc(data.historicalProbability.setupType || '')}-setup
+          picks, walking forward up to each pick's own estimated-days window — NOT a
+          forecast for this specific stock, and not reliable when the sample size is small.
         </div>
       ` : ''}
 

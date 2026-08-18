@@ -16,7 +16,7 @@
         "width": 560,
         "color": 5
       },
-      "id": "6caee655-6294-418f-81d4-b9c69a53fea2"
+      "id": "35596aad-9319-4962-b62b-188567fecdca"
     },
     {
       "name": "Manual Trigger",
@@ -27,7 +27,7 @@
         0,
         0
       ],
-      "id": "d40b10cf-3b41-4bc0-aad3-fb7566bc6ec0"
+      "id": "821a20b1-4d4e-43af-b975-1cda52e83be0"
     },
     {
       "name": "When Executed by Another Workflow",
@@ -40,7 +40,7 @@
         260,
         0
       ],
-      "id": "31bbf9ba-c19a-4ce6-ab11-361772ecb9d7"
+      "id": "3d50ea52-a8f1-45a7-b41c-a1431532beab"
     },
     {
       "name": "Resolve Backtest Parameters",
@@ -55,7 +55,7 @@
         520,
         0
       ],
-      "id": "3f461233-efe8-4387-9047-8cba57644d11"
+      "id": "00aae1c3-3f2b-4594-892f-b225e8ecee70"
     },
     {
       "name": "Get Trading Dates In Range",
@@ -73,7 +73,7 @@
         780,
         0
       ],
-      "id": "03fd6a20-dc4a-4b1f-a679-22316d7168e4"
+      "id": "827a091c-2c65-46b1-9f24-8c847830b753"
     },
     {
       "name": "Loop Over Trading Dates",
@@ -87,7 +87,7 @@
         1040,
         0
       ],
-      "id": "73faa247-936d-446b-baf9-2b5ea1a707cd"
+      "id": "67931f37-ddea-41fc-b4b6-31708299d29e"
     },
     {
       "name": "Capture Current Date",
@@ -102,7 +102,7 @@
         1300,
         0
       ],
-      "id": "a24612cb-9bdd-48b3-a1fb-383805cae315"
+      "id": "3ca7aced-9c8e-44d0-a518-a8d587958197"
     },
     {
       "name": "Prep for 04 Technical Analysis",
@@ -117,7 +117,7 @@
         1560,
         0
       ],
-      "id": "1378e435-216f-43da-bad7-2f91fd2a1989"
+      "id": "b30daaea-bb98-49f8-a1e0-596f116c62c2"
     },
     {
       "name": "Execute: 04 Technical Analysis",
@@ -137,7 +137,7 @@
         1820,
         0
       ],
-      "id": "3ea8e6fb-f5ea-4fa1-8b33-499762a87ceb"
+      "id": "0ab0658c-5a59-4c4f-baeb-5265faded80c"
     },
     {
       "name": "Prep for 05 Support Resistance",
@@ -152,7 +152,7 @@
         2080,
         0
       ],
-      "id": "73951c73-1721-429e-8881-5cafca7a7293"
+      "id": "d771898d-e1b7-4c40-aad2-0e12bd1fc77b"
     },
     {
       "name": "Execute: 05 Support Resistance",
@@ -172,7 +172,7 @@
         2340,
         0
       ],
-      "id": "4426aa8c-bbd7-4673-9c50-917ab82f0941"
+      "id": "7d4ebf29-c3c1-44e3-a7ab-6b29078008ce"
     },
     {
       "name": "Prep for 06 Volume Analysis",
@@ -187,7 +187,7 @@
         2600,
         0
       ],
-      "id": "0f2e1a81-f3c8-4392-a9ae-5d114d2d8102"
+      "id": "30a1bc0d-8ce5-45ca-badd-88bb6071f1da"
     },
     {
       "name": "Execute: 06 Volume Analysis",
@@ -207,7 +207,7 @@
         0,
         200
       ],
-      "id": "7accc148-52d4-4230-a67d-58ad945b5b55"
+      "id": "4f35beea-784a-4136-b6aa-a6dccb5b8fe8"
     },
     {
       "name": "Prep for 07 Breakout Scanner",
@@ -222,7 +222,7 @@
         260,
         200
       ],
-      "id": "d73b2124-e078-48b4-9baf-2dcd2c1b4244"
+      "id": "8d978e7f-c1f3-4f86-8f3f-ff5e12480179"
     },
     {
       "name": "Execute: 07 Breakout Scanner",
@@ -242,7 +242,7 @@
         520,
         200
       ],
-      "id": "5caf5a2d-2dc7-469f-8ec1-8e8c92bbb3a1"
+      "id": "54c648db-b18e-4a11-834b-fc3ab0d230d7"
     },
     {
       "name": "Prep for 08 Momentum Scanner",
@@ -257,7 +257,7 @@
         780,
         200
       ],
-      "id": "054ad589-60ff-45b8-a403-37dc574c1073"
+      "id": "bb396b13-3503-4ce3-83a7-83214754212a"
     },
     {
       "name": "Execute: 08 Momentum Scanner",
@@ -277,7 +277,7 @@
         1040,
         200
       ],
-      "id": "8a1e5e2f-046c-427e-adb0-7cb30caded96"
+      "id": "9135d7fa-a366-44ba-9a49-c6473f6c3110"
     },
     {
       "name": "Prep for 09 Pullback Scanner",
@@ -292,7 +292,7 @@
         1300,
         200
       ],
-      "id": "ea42f311-5ba2-4379-a63a-804ba16554c8"
+      "id": "48077ab2-4a73-4ae1-83d5-285b7d8cf7c0"
     },
     {
       "name": "Execute: 09 Pullback Scanner",
@@ -312,7 +312,7 @@
         1560,
         200
       ],
-      "id": "7e92ac02-d86e-4d45-bf33-54fb8c3f903d"
+      "id": "a289ba46-ccb7-49fb-b697-839953192ef1"
     },
     {
       "name": "Prep for 10 Reversal Scanner",
@@ -327,7 +327,7 @@
         1820,
         200
       ],
-      "id": "a15762be-6b7b-4eda-bf83-9829740d8c69"
+      "id": "8d963795-0139-414d-a465-c49c6e5e0e8c"
     },
     {
       "name": "Execute: 10 Reversal Scanner",
@@ -347,7 +347,7 @@
         2080,
         200
       ],
-      "id": "4e7e811e-d58d-4e7e-b94a-1867de483934"
+      "id": "41e3cca4-d9d8-451b-97c1-2dc92e0f48a9"
     },
     {
       "name": "Prep for 11 Overall Ranking",
@@ -362,7 +362,7 @@
         2340,
         200
       ],
-      "id": "cbed9945-de0f-48d3-b446-6fdc46cf305e"
+      "id": "089ab409-7dae-45c5-83da-7b9de4d0bb0a"
     },
     {
       "name": "Execute: 11 Overall Ranking",
@@ -382,7 +382,7 @@
         2600,
         200
       ],
-      "id": "dd994401-4faa-4f17-918b-2b4cfb5e33dc"
+      "id": "505445bb-40e3-466c-9100-70de426a11a2"
     },
     {
       "name": "Brief Pause Between Dates",
@@ -397,7 +397,7 @@
         0,
         400
       ],
-      "id": "4fd12e32-9131-46d0-9329-7dd3a225a560"
+      "id": "ae5e5e3a-d1a0-4920-9b75-00359778f0e9"
     },
     {
       "name": "Prep for 14",
@@ -412,7 +412,7 @@
         260,
         400
       ],
-      "id": "4623ffc7-17ec-47c0-a4ec-1a59eb831763"
+      "id": "9b0167f2-3cff-4de6-8327-af5c55ffd0c4"
     },
     {
       "name": "Execute: 14 Prediction Evaluation",
@@ -432,7 +432,7 @@
         520,
         400
       ],
-      "id": "bf43aafd-d406-49f4-ac40-4365ca6570aa"
+      "id": "b72dd3ee-f506-4515-b73e-1735d936706b"
     },
     {
       "name": "Aggregate Backtest Metrics",
@@ -450,7 +450,7 @@
         780,
         400
       ],
-      "id": "4b8fc519-5936-48f4-a063-261bc9d054ec"
+      "id": "1131030f-f56d-412b-b18f-e9913e2c7902"
     },
     {
       "name": "Build Backtest Summary",
@@ -465,7 +465,7 @@
         1040,
         400
       ],
-      "id": "998a1214-e578-45bf-98d8-2650ec4d2896"
+      "id": "f2ee9bc4-210b-4121-ad65-03535e6138f7"
     }
   ],
   "connections": {
@@ -771,6 +771,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "40fe777c-2771-4430-a85e-c6b058f73c13",
+  "id": "61a58c6d-5802-4448-b420-db74c805f3a4",
   "tags": []
 }

@@ -159,6 +159,24 @@ AND the requested date range/score/setup filters — it deliberately does not
 use `v_prediction_stats_by_setup` (see [DATABASE.md](DATABASE.md)). Expensive
 — expect a multi-day backtest over hundreds of stocks to take a while.
 
+## 16 - EGX Target Window Evaluation
+
+Distinct from `14`, which only looks at the single NEXT trading session.
+Finds every eligible `scanner_results` row with a valid `target1`/
+`invalidation_price`/`target1_estimated_days` and no `target_window_
+evaluation` row yet, walks forward through real `daily_prices` up to that
+row's own `target1_estimated_days` sessions, and records whichever
+happened first: `TARGET1_HIT`, `STOP_HIT`, or (window fully elapsed with
+neither touched) `EXPIRED_NO_HIT`. Rows without enough future price
+history yet are left unevaluated and re-checked on the next run — never
+guessed early. Then refreshes `probability_stats`, aggregated by
+`setup_type`, which `v_scanner_top`/`v_full_market` join in to attach
+`historical_target1_hit_pct`/`historical_stop_hit_pct`/
+`historical_sample_size` to every current pick (see docs/SCORING.md
+"Historical probability" for the full methodology and why grouping is
+setup-type-only). Batches at 3000 rows per run like `14`/`15` — re-run to
+catch up backlog. Not time-critical; scheduled weekly rather than daily.
+
 ## A note on empty-input edges
 
 Several workflows (`06`, `14`, and any per-item chain) will simply produce a

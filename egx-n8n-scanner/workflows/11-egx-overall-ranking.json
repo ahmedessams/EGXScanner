@@ -16,7 +16,7 @@
         "width": 480,
         "color": 5
       },
-      "id": "b264d0d4-5eb4-4621-86c5-fbaeafdc3a00"
+      "id": "e19b31a1-00fd-41ab-a752-e40a386003c2"
     },
     {
       "name": "Manual Trigger",
@@ -27,7 +27,7 @@
         0,
         0
       ],
-      "id": "03bcfe6c-f97d-4af3-a648-c151889975fe"
+      "id": "97b975c6-01c4-4bcb-9b82-c4f323f563ce"
     },
     {
       "name": "When Executed by Another Workflow",
@@ -40,7 +40,7 @@
         260,
         0
       ],
-      "id": "e82653e7-447b-4c72-930b-36b06bed0449"
+      "id": "3e3bfb9d-060c-49f6-b588-d14a5564b42a"
     },
     {
       "name": "Attach As-Of Date",
@@ -55,7 +55,7 @@
         520,
         0
       ],
-      "id": "1f32a506-d328-49c8-a849-09b9b47167db"
+      "id": "ec05fda6-f802-4d76-8897-649137325662"
     },
     {
       "name": "Get or Create Scanner Run",
@@ -73,7 +73,7 @@
         780,
         0
       ],
-      "id": "74d4208f-fd7e-4b4c-8a06-5dd21ed048b8"
+      "id": "02e031c1-3b4d-47da-b96f-7dcf2cb6b7c7"
     },
     {
       "name": "Load Scoring Weights",
@@ -89,7 +89,7 @@
         1040,
         0
       ],
-      "id": "73f3a34c-53d4-4b58-9856-ab67247418bd"
+      "id": "71fe242e-4c9a-4e80-9ab2-864c432e5319"
     },
     {
       "name": "Build Weights Map",
@@ -104,7 +104,7 @@
         1300,
         0
       ],
-      "id": "0d8acb6d-494f-4d3e-83ea-2b205c1be92b"
+      "id": "cc06bd22-161f-4759-90f8-f6bc623126d8"
     },
     {
       "name": "Load Active Stocks",
@@ -122,7 +122,7 @@
         1560,
         0
       ],
-      "id": "13881c33-0e28-4008-8601-ef3d4523b624"
+      "id": "c3828992-4c19-45e4-ace3-20988628a9a0"
     },
     {
       "name": "Attach Ranking Context",
@@ -137,7 +137,7 @@
         1820,
         0
       ],
-      "id": "9f56508c-5005-4a1d-9771-67ce5d958708"
+      "id": "2fa0119e-cad1-4680-8ea6-d542eea9da35"
     },
     {
       "name": "Load Ranking Inputs",
@@ -155,7 +155,7 @@
         2080,
         0
       ],
-      "id": "c5ed2b0d-75e0-4314-a6a4-8d3792dbcbeb"
+      "id": "585715aa-3cc3-40d8-803a-03cc5e193abb"
     },
     {
       "name": "Compute Overall Score & Trade Structure",
@@ -170,7 +170,7 @@
         2340,
         0
       ],
-      "id": "8be97c05-651d-4c9f-a2ab-9b7402b34869"
+      "id": "d2b22735-383c-4300-b442-7b22d4b02145"
     },
     {
       "name": "Upsert Overall Ranking",
@@ -188,7 +188,7 @@
         2600,
         0
       ],
-      "id": "cd5d880b-fce1-487d-ad1f-f30de20ecf3f"
+      "id": "64cba8dc-1355-47d8-bf41-8fe958fdb08b"
     },
     {
       "name": "Assign Overall Rank",
@@ -206,7 +206,7 @@
         0,
         200
       ],
-      "id": "402bf75a-187f-4c9c-828c-79131621dc6f"
+      "id": "74854879-8c00-4d2f-bc40-35b3249a1ee8"
     },
     {
       "name": "Load Market-Wide Rows",
@@ -224,7 +224,7 @@
         260,
         200
       ],
-      "id": "ec52f7e9-9320-4e76-9abe-118f8a5f59e3"
+      "id": "96aef5a5-1887-46e9-b01c-c07b2ca32b73"
     },
     {
       "name": "Compute Market Regime",
@@ -239,7 +239,7 @@
         520,
         200
       ],
-      "id": "09d8e4d9-eec4-4383-9764-f360d09a310e"
+      "id": "9edfb21d-3eb0-4b21-8571-9ff567c56ba3"
     },
     {
       "name": "Finalize Scanner Run",
@@ -257,7 +257,7 @@
         780,
         200
       ],
-      "id": "0856808d-45fb-4d16-897d-b38369eedd0b"
+      "id": "9fcd6727-59a4-4fa9-b12f-a0b23ce40c81"
     },
     {
       "name": "Build Summary",
@@ -272,7 +272,7 @@
         1040,
         200
       ],
-      "id": "7fb135a7-343c-463a-8905-4f3a635e78db"
+      "id": "1e822602-4c0a-4347-bb9d-73d31e172046"
     }
   ],
   "connections": {
@@ -450,6 +450,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "3e120ce1-2d28-482c-9b3b-138ee70b5908",
+  "id": "1345a716-aba0-4df2-aef2-8e3fff69ae06",
   "tags": []
 }

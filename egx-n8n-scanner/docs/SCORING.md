@@ -159,10 +159,45 @@ original file) are computed alongside each target:
   moves in a straight line). It is **not** a historical statistic drawn from
   `prediction_evaluation`, not a forecast, and not a guarantee of when — or
   whether — a target is hit. Every place it's surfaced (API, dashboard) is
-  labeled as an estimate/projection for exactly this reason. If you want a
-  historically-grounded version instead, extend `14-egx-prediction-
-  evaluation` to track actual days-to-hit per setup/score band across many
-  real outcomes — that data doesn't exist yet.
+  labeled as an estimate/projection for exactly this reason. A
+  historically-grounded companion to this estimate exists — see below.
+
+## Historical probability (`16-egx-target-window-evaluation`)
+
+Answers a different question than the estimate above: not "roughly how many
+days might this take" but "historically, what fraction of past picks like
+this one actually got there?" Two fields, `historical_target1_hit_pct` /
+`historical_stop_hit_pct` (API, dashboard: "P(T1) %" / "P(Stop) %"),
+surfaced everywhere `target1_gain_pct`/`target1_estimated_days` already are.
+
+**Method**: for every past eligible `scanner_results` row with a valid
+`target1`/`invalidation_price`/`target1_estimated_days`, walk forward
+day-by-day through real `daily_prices` up to that row's OWN
+`target1_estimated_days` sessions, and record whichever happened first:
+target1 touched (`TARGET1_HIT`), invalidation touched (`STOP_HIT`), or
+neither by the time the window fully elapsed (`EXPIRED_NO_HIT`). A pick
+with too little future price history to resolve yet is left unevaluated
+and re-checked on `16`'s next run — never guessed early. Same-day
+ambiguity (both target1 and invalidation touched on one daily bar — daily
+OHLC can't tell us the intraday order) is treated conservatively as a
+stop, matching `prediction_evaluation.success`'s existing convention.
+
+**Grouping**: aggregated by `setup_type` only (4-6 buckets), not further
+split by score band or estimated-days bucket. This was a deliberate
+tradeoff, not an oversight — current sample sizes (a few hundred to a few
+thousand per setup type as of this writing) already get thin fast under
+finer slicing, and a bucket with single-digit samples would look more
+authoritative than it actually is. `historical_sample_size` ships
+alongside every probability so the dashboard can flag (and this doc can
+warn you) when a number is resting on too little data — treat anything
+under roughly 100 samples with real caution, and REVERSAL specifically
+(the rarest setup) tends to sit in that range.
+
+**What this is not**: not personalized to the specific stock being viewed
+— it's the setup type's track record, not this stock's. Not a guarantee.
+Not updated in real time (the pipeline schedules `16` weekly, since the
+underlying sample only grows slowly) — check `probability_stats.updated_at`
+if you need to know how fresh it is.
 
 ## Liquidity filter (spec section 19)
 

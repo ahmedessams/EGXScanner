@@ -353,3 +353,44 @@ CREATE TABLE IF NOT EXISTS index_prices (
 );
 
 COMMENT ON TABLE index_prices IS 'Optional broad-market index history (e.g. EGX30) for market regime analysis';
+
+-- ---------------------------------------------------------------------
+-- Historical probability tracking (user-requested addition beyond the
+-- original spec): "what % of past picks like this actually reached
+-- Target 1 within their estimated days, vs hit the stop first?"
+--
+-- Deliberately separate from prediction_evaluation (which only looks at
+-- the SINGLE next trading session). This tracks the FULL window out to
+-- each pick's own target1_estimated_days, since that's the actual
+-- question being asked — not just "did it move favorably tomorrow."
+-- Populated by 16-egx-target-window-evaluation. Tables live here (not a
+-- later-numbered file) because 003-views.sql's v_scanner_top/
+-- v_full_market join probability_stats, so it must exist before those
+-- views are created.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS target_window_evaluation (
+    id                      BIGSERIAL PRIMARY KEY,
+    scanner_result_id       BIGINT NOT NULL REFERENCES scanner_results(id) ON DELETE CASCADE,
+    target1_estimated_days  INTEGER NOT NULL,
+    outcome                 VARCHAR(20) NOT NULL,
+    resolved_day_number     INTEGER,
+    evaluated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_target_window_evaluation_result UNIQUE (scanner_result_id),
+    CONSTRAINT chk_target_window_evaluation_outcome
+        CHECK (outcome IN ('TARGET1_HIT', 'STOP_HIT', 'EXPIRED_NO_HIT'))
+);
+
+COMMENT ON TABLE target_window_evaluation IS 'Per-pick outcome walking forward up to target1_estimated_days trading sessions: did price reach target1 first, hit the invalidation/stop level first, or neither within the window?';
+COMMENT ON COLUMN target_window_evaluation.outcome IS 'TARGET1_HIT: high touched target1 before invalidation, within the window. STOP_HIT: invalidation touched first (or same day as target1 — ambiguous intraday order, treated conservatively as a stop, matching prediction_evaluation.success convention). EXPIRED_NO_HIT: neither triggered by the time target1_estimated_days sessions had elapsed.';
+COMMENT ON COLUMN target_window_evaluation.resolved_day_number IS 'Which trading day (1-indexed from the scan date) the outcome resolved on; NULL for EXPIRED_NO_HIT.';
+
+CREATE TABLE IF NOT EXISTS probability_stats (
+    setup_type          VARCHAR(20) PRIMARY KEY,
+    sample_size         INTEGER NOT NULL,
+    target1_hit_pct     NUMERIC(6,2) NOT NULL,
+    stop_hit_pct        NUMERIC(6,2) NOT NULL,
+    expired_no_hit_pct  NUMERIC(6,2) NOT NULL,
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+COMMENT ON TABLE probability_stats IS 'Historical, per-setup-type outcome rates from target_window_evaluation — NOT a forecast, a measured track record over whatever data has accumulated so far (see sample_size).';

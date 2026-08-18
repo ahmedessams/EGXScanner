@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """Automates the manual n8n setup steps documented in docs/RENDER_DEPLOY.md:
-create the Postgres credential, import all 15 workflows/*.json with that
+create the Postgres credential, import all workflows/*.json with that
 credential wired into every Postgres node, fix cross-workflow
 Execute-Workflow references (n8n assigns new IDs on import), and publish
 everything in dependency order.
+
+Idempotent / safe to re-run: an existing "EGX Postgres" credential or
+same-named workflow is reused and UPDATED rather than duplicated — so this
+doubles as a "sync latest local changes to production n8n" tool (symmetric
+with sync-live.js, which does the same for local dev) whenever
+workflows/*.json changes, not just for the initial import.
 
 Run via scripts/render-n8n-setup.sh, which prompts for the inputs below
 instead of taking them as CLI args (keeps the API key and DB password out
@@ -34,6 +40,7 @@ PUBLISH_ORDER = [
     "13-egx-report-api.json",
     "14-egx-prediction-evaluation.json",
     "15-egx-backtest.json",
+    "16-egx-target-window-evaluation.json",
 ]
 
 
@@ -61,6 +68,21 @@ def api(base_url, api_key, method, path, body=None):
         raise
 
 
+def find_credential_id(base_url, api_key, name):
+    result = api(base_url, api_key, "GET", "/credentials?limit=250")
+    for c in result.get("data", []):
+        if c.get("name") == name:
+            return c["id"]
+    return None
+
+
+def find_workflow_id(base_url, api_key, name):
+    from urllib.parse import quote
+    result = api(base_url, api_key, "GET", f"/workflows?name={quote(name)}&limit=1")
+    data = result.get("data", [])
+    return data[0]["id"] if data else None
+
+
 def build_create_body(wf_json, cred_id, cred_name):
     nodes = json.loads(json.dumps(wf_json["nodes"]))  # deep copy
     for n in nodes:
@@ -83,30 +105,43 @@ def main():
     pg_user = env("PG_USER")
     pg_password = env("PG_PASSWORD")
 
-    print("== Creating Postgres credential ==")
-    cred = api(base_url, api_key, "POST", "/credentials", {
-        "name": "EGX Postgres",
-        "type": "postgres",
-        "data": {
-            "host": pg_host, "port": pg_port, "database": pg_database,
-            "user": pg_user, "password": pg_password,
-        },
-    })
-    cred_id, cred_name = cred["id"], cred["name"]
-    print(f"  created: {cred_name} ({cred_id})")
+    cred_name = "EGX Postgres"
+    print(f"== Postgres credential ('{cred_name}') ==")
+    existing_cred_id = find_credential_id(base_url, api_key, cred_name)
+    if existing_cred_id:
+        cred_id = existing_cred_id
+        print(f"  found existing: {cred_id} (reusing — credential data can't be updated via this API; delete and re-run if the DB password changed)")
+    else:
+        cred = api(base_url, api_key, "POST", "/credentials", {
+            "name": cred_name,
+            "type": "postgres",
+            "data": {
+                "host": pg_host, "port": pg_port, "database": pg_database,
+                "user": pg_user, "password": pg_password,
+            },
+        })
+        cred_id = cred["id"]
+        print(f"  created: {cred_id}")
 
     print()
-    print("== Importing workflows ==")
+    print("== Importing / syncing workflows ==")
     name_to_id = {}
     created_bodies = {}
     for filename in PUBLISH_ORDER:
         path = WORKFLOWS_DIR / filename
         wf_json = json.loads(path.read_text())
         body = build_create_body(wf_json, cred_id, cred_name)
-        created = api(base_url, api_key, "POST", "/workflows", body)
-        name_to_id[wf_json["name"]] = created["id"]
-        created_bodies[filename] = (created["id"], body)
-        print(f"  {filename} -> {wf_json['name']} ({created['id']})")
+        existing_id = find_workflow_id(base_url, api_key, wf_json["name"])
+        if existing_id:
+            api(base_url, api_key, "PUT", f"/workflows/{existing_id}", body)
+            wf_id = existing_id
+            print(f"  {filename} -> {wf_json['name']} ({wf_id}) [updated existing]")
+        else:
+            created = api(base_url, api_key, "POST", "/workflows", body)
+            wf_id = created["id"]
+            print(f"  {filename} -> {wf_json['name']} ({wf_id}) [created]")
+        name_to_id[wf_json["name"]] = wf_id
+        created_bodies[filename] = (wf_id, body)
 
     print()
     print("== Fixing cross-workflow Execute Workflow references ==")

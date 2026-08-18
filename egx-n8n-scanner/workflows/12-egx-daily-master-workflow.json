@@ -16,7 +16,7 @@
         "width": 560,
         "color": 5
       },
-      "id": "c9f7982a-f623-4616-98c3-122cc85e6be6"
+      "id": "2516ebc6-eede-4a9b-aa8e-fa78916e233e"
     },
     {
       "name": "Schedule Trigger (Daily After Close)",
@@ -36,7 +36,7 @@
         0,
         0
       ],
-      "id": "cd5291b6-9ca2-4280-8caa-ed2577766758"
+      "id": "80118524-f3a9-4757-b52c-92d5f5279698"
     },
     {
       "name": "Manual Trigger (Run EGX Scanner Now)",
@@ -47,7 +47,7 @@
         260,
         0
       ],
-      "id": "c50c10ab-ed30-498b-a037-eb4b1ea7045a"
+      "id": "aa476b74-78c5-408b-bcb5-ecda6f43bcde"
     },
     {
       "name": "Compute Trading Date",
@@ -62,7 +62,7 @@
         520,
         0
       ],
-      "id": "b02c1afa-20d9-4ad8-b30a-9a1287390030"
+      "id": "e0962d28-679d-4667-aa18-08eed31a966b"
     },
     {
       "name": "Execute: 01 Stock Universe",
@@ -82,7 +82,7 @@
         780,
         0
       ],
-      "id": "df556a3b-2678-43a5-b960-cd1841c83701"
+      "id": "c0a3a744-82f9-4283-a47c-6e00f2f09187"
     },
     {
       "name": "Prep for 03",
@@ -97,7 +97,7 @@
         1040,
         0
       ],
-      "id": "9763d071-40dd-4154-b78e-b8e63a814991"
+      "id": "8975dbb7-8bf5-4e01-a564-fa6e873254de"
     },
     {
       "name": "Execute: 03 Daily Market Update",
@@ -117,7 +117,7 @@
         1300,
         0
       ],
-      "id": "ffd92925-aee4-4afa-bb39-d790b0911c95"
+      "id": "32e9a97b-fd11-4148-940f-1585f1cc245c"
     },
     {
       "name": "Is Trading Day?",
@@ -132,7 +132,7 @@
           },
           "conditions": [
             {
-              "id": "14f276ce-e8f8-4f2b-b44c-615111dc01a8",
+              "id": "7ae7612a-4170-4dc4-a033-101ec4b084d8",
               "leftValue": "={{ $json.isTradingDay }}",
               "rightValue": "",
               "operator": {
@@ -150,7 +150,7 @@
         1560,
         0
       ],
-      "id": "8ca41e36-e330-4912-a3d3-17cc0900233e"
+      "id": "18c81062-2f8b-44cc-98e6-1e664a6b126b"
     },
     {
       "name": "Skip - Non-Trading Day",
@@ -161,7 +161,7 @@
         1820,
         0
       ],
-      "id": "25aa162c-ca8b-4813-9e0b-0e110d379934"
+      "id": "27fbe3b0-f821-4df8-8c38-a087a954290e"
     },
     {
       "name": "Prep for 04",
@@ -176,7 +176,7 @@
         2080,
         0
       ],
-      "id": "4b4e021d-a078-4d26-b959-bed99cf59bb1"
+      "id": "a58952dc-5332-45df-9365-f1a8f3649755"
     },
     {
       "name": "Execute: 04 Technical Analysis",
@@ -196,7 +196,7 @@
         2340,
         0
       ],
-      "id": "ccaea7b8-4803-401b-8d08-bf064b484a8e"
+      "id": "ec86b268-cf9f-44f9-b709-50508ecc6a8b"
     },
     {
       "name": "Prep for 05",
@@ -211,7 +211,7 @@
         2600,
         0
       ],
-      "id": "8e4d5283-96bc-40e6-814a-85778d2f3404"
+      "id": "e2f88553-7012-471d-9460-dcd653b1e6f0"
     },
     {
       "name": "Execute: 05 Support Resistance",
@@ -231,7 +231,7 @@
         0,
         200
       ],
-      "id": "8853199f-5c6c-46bc-a069-aa84bf5ff105"
+      "id": "e5f6e6c1-d498-4fa3-8de5-0f838244d13a"
     },
     {
       "name": "Prep for 06",
@@ -246,7 +246,7 @@
         260,
         200
       ],
-      "id": "7eeaa7b2-91a0-4664-849b-2e9b76fa1d3b"
+      "id": "d2d49642-a7c1-4e84-a5d6-aae216447e4c"
     },
     {
       "name": "Execute: 06 Volume Analysis",
@@ -266,7 +266,7 @@
         520,
         200
       ],
-      "id": "740a150e-08f7-4f07-a6f1-dabfaf0f0e7c"
+      "id": "13a75c5c-d46b-4d2b-b4fa-2f5282abdb07"
     },
     {
       "name": "Prep for 07",
@@ -281,7 +281,7 @@
         780,
         200
       ],
-      "id": "9bf5bbe8-7859-4d3e-beb3-92de84d915e8"
+      "id": "9face23a-2e5b-44d7-b151-8686e5be4d51"
     },
     {
       "name": "Execute: 07 Breakout Scanner",
@@ -301,7 +301,7 @@
         1040,
         200
       ],
-      "id": "4bf7607e-8e9a-46f5-a626-c1552f815abe"
+      "id": "56c14d75-408d-44f4-9f04-f3da680ddae5"
     },
     {
       "name": "Prep for 08",
@@ -316,7 +316,7 @@
         1300,
         200
       ],
-      "id": "8b131b83-804d-429b-985b-378df3be8dc1"
+      "id": "a9ecbcd4-b49c-4233-8aeb-e2ce68c0d803"
     },
     {
       "name": "Execute: 08 Momentum Scanner",
@@ -336,7 +336,7 @@
         1560,
         200
       ],
-      "id": "3770691a-53d9-4251-8127-b43502dc4df5"
+      "id": "9ff9d70c-3f3c-421f-a07d-88807944e3bc"
     },
     {
       "name": "Prep for 09",
@@ -351,7 +351,7 @@
         1820,
         200
       ],
-      "id": "6d747a73-99e1-43a0-a019-a8f70b92bb70"
+      "id": "e605f3d7-7b8e-4cf8-b683-6603192e2bc3"
     },
     {
       "name": "Execute: 09 Pullback Scanner",
@@ -371,7 +371,7 @@
         2080,
         200
       ],
-      "id": "42b27ed0-9ae4-403e-aa17-8a19f590248f"
+      "id": "b53c214a-de87-4903-9e68-ac3653381b02"
     },
     {
       "name": "Prep for 10",
@@ -386,7 +386,7 @@
         2340,
         200
       ],
-      "id": "4583e609-b9a5-4d62-8f80-d6336c56ccd8"
+      "id": "6d97f7d1-ab7f-4b00-86d6-847c853b3199"
     },
     {
       "name": "Execute: 10 Reversal Scanner",
@@ -406,7 +406,7 @@
         2600,
         200
       ],
-      "id": "d556aa4e-c204-4d32-bbcd-7c8f1eb630d8"
+      "id": "e7661fe2-80c6-4916-83f8-0c940aa1d565"
     },
     {
       "name": "Prep for 11",
@@ -421,7 +421,7 @@
         0,
         400
       ],
-      "id": "d2121488-071f-4e2d-be5f-7173a919bcd1"
+      "id": "5da6c802-0f28-4aa7-8da0-0d1964dedb4c"
     },
     {
       "name": "Execute: 11 Overall Ranking",
@@ -441,7 +441,7 @@
         260,
         400
       ],
-      "id": "8ced2ff5-4b9b-4ded-9c15-ff43743d4c62"
+      "id": "b8e20148-1ffb-41a7-b9f7-1a0da77c3b67"
     },
     {
       "name": "Load Report Data",
@@ -459,7 +459,7 @@
         520,
         400
       ],
-      "id": "3513f32d-0f2d-467b-baaa-40bc36c72838"
+      "id": "cc823ba9-cb8b-4010-bd84-42dfef24b971"
     },
     {
       "name": "Generate Daily Report Text",
@@ -474,7 +474,7 @@
         780,
         400
       ],
-      "id": "1ae65e58-e5fa-4f28-a5b8-3437dbaf1171"
+      "id": "c129c604-92b6-4ec2-974f-19d868efedc5"
     }
   ],
   "connections": {
@@ -758,6 +758,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "7b25ee5d-0f35-4095-84ee-490d29116aec",
+  "id": "fd596d89-48d7-4cfa-9fac-02aea7103b6e",
   "tags": []
 }

@@ -1,0 +1,364 @@
+{
+  "name": "16 - EGX Target Window Evaluation",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -420
+      ],
+      "parameters": {
+        "content": "## 16 - EGX Target Window Evaluation\n\nAnswers the actual question 'what's the historical probability of reaching Target 1 within its estimated days, vs hitting the stop first?' — distinct from 14-egx-prediction-evaluation, which only looks at the single NEXT trading session. This walks forward day-by-day, up to each pick's own target1_estimated_days, and records which happened first: target1 touched, invalidation touched, or neither (EXPIRED_NO_HIT) by the time the window fully elapsed. Rows with insufficient future price history yet are left unevaluated and re-checked on the next run — never guessed early.\n\nSame-day ambiguity (both target1 and invalidation touched on the same daily bar) is treated conservatively as STOP_HIT, matching prediction_evaluation.success's convention — daily OHLC can't tell us the intraday order.\n\nAggregates into probability_stats by setup_type (docs/SCORING.md explains why not a finer score-band breakdown: current sample sizes are too thin per-bucket to be meaningfully precise). v_scanner_top / v_full_market read from that table to attach a probability + sample size to every current pick.\n\nNot time-critical — schedule weekly, or run manually after a backtest.",
+        "height": 420,
+        "width": 560,
+        "color": 5
+      },
+      "id": "7ed45f60-107f-4e1f-9861-9a345d95351c"
+    },
+    {
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        0,
+        0
+      ],
+      "id": "ea5a9b91-09eb-4025-bce4-1781cd382949"
+    },
+    {
+      "name": "Schedule Trigger (Weekly)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 23 * * 0"
+            }
+          ]
+        }
+      },
+      "position": [
+        260,
+        0
+      ],
+      "id": "10ad7575-4932-49c1-83d7-b2235d422208"
+    },
+    {
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "position": [
+        520,
+        0
+      ],
+      "id": "1e379413-f161-4b50-a111-b403f5d47600"
+    },
+    {
+      "name": "Load Evaluable Scanner Results",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT r.id AS scanner_result_id, r.stock_id, run.trading_date::text AS scan_date,\n       r.target1::float8 AS target1, r.invalidation_price::float8 AS invalidation_price,\n       r.target1_estimated_days::int AS target1_estimated_days\nFROM scanner_results r\nJOIN scanner_runs run ON run.id = r.scanner_run_id\nLEFT JOIN target_window_evaluation twe ON twe.scanner_result_id = r.id\nWHERE twe.scanner_result_id IS NULL\n  AND r.eligible = TRUE\n  AND r.target1 IS NOT NULL\n  AND r.invalidation_price IS NOT NULL\n  AND r.target1_estimated_days IS NOT NULL\n  AND EXISTS (\n    SELECT 1 FROM daily_prices dp\n    WHERE dp.stock_id = r.stock_id AND dp.trading_date > run.trading_date\n  )\nORDER BY run.trading_date ASC\nLIMIT 3000;",
+        "options": {}
+      },
+      "executeOnce": true,
+      "position": [
+        780,
+        0
+      ],
+      "id": "49929543-07f9-4f8e-a793-5aea084251fa"
+    },
+    {
+      "name": "Load Forward Candles (as JSON array)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT json_agg(t.* ORDER BY t.trading_date ASC) AS candles\nFROM (\n  SELECT trading_date::text AS trading_date, high::float8 AS high, low::float8 AS low\n  FROM daily_prices\n  WHERE stock_id = $1 AND trading_date > $2\n  ORDER BY trading_date ASC\n  LIMIT 40\n) t;",
+        "options": {
+          "queryReplacement": "={{ [$json.stock_id, $json.scan_date] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1040,
+        0
+      ],
+      "id": "dae2cf59-2393-4485-8cf2-b03c728c08be"
+    },
+    {
+      "name": "Compute Window Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "function isNumber(v) { return typeof v === 'number' && Number.isFinite(v); }\n\n// Runs once for the WHOLE batch — one item per evaluable scanner_result\n// arrives here from \"Load Forward Candles\". Must loop $input.all()\n// explicitly (same bug pattern found and fixed across every multi-item\n// Code node in this project — confirmed via live E2E testing).\n// itemMatching(i) pairs each row back to the scanner_result that produced it.\n\nconst items = $input.all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  let original;\n  try { original = $('Load Evaluable Scanner Results').itemMatching(i).json; } catch (e) { continue; }\n  const row = items[i].json;\n  const candles = Array.isArray(row.candles) ? row.candles : [];\n  const estDays = original.target1_estimated_days;\n  const target1 = original.target1;\n  const invalidation = original.invalidation_price;\n\n  if (!isNumber(estDays) || !isNumber(target1) || !isNumber(invalidation) || estDays < 1) {\n    out.push({ json: { scannerResultId: original.scanner_result_id, _skip: true } });\n    continue;\n  }\n\n  const windowCandles = candles.slice(0, estDays);\n  let outcome = null;\n  let resolvedDay = null;\n\n  for (let d = 0; d < windowCandles.length; d++) {\n    const c = windowCandles[d];\n    const hitTarget = isNumber(c.high) && c.high >= target1;\n    const hitStop = isNumber(c.low) && c.low <= invalidation;\n    if (hitTarget || hitStop) {\n      // Same-day ambiguity (both true on one daily bar) treated as a stop —\n      // conservative, matches prediction_evaluation.success's convention.\n      outcome = hitStop ? 'STOP_HIT' : 'TARGET1_HIT';\n      resolvedDay = d + 1;\n      break;\n    }\n  }\n\n  if (!outcome) {\n    if (windowCandles.length >= estDays) {\n      outcome = 'EXPIRED_NO_HIT';\n    } else {\n      // Not enough future sessions yet to know either way — re-check later,\n      // never guess early.\n      out.push({ json: { scannerResultId: original.scanner_result_id, _skip: true } });\n      continue;\n    }\n  }\n\n  out.push({ json: {\n    scannerResultId: original.scanner_result_id,\n    targetEstimatedDays: estDays,\n    outcome,\n    resolvedDay,\n    _skip: false,\n  } });\n}\n\nreturn out;"
+      },
+      "position": [
+        1300,
+        0
+      ],
+      "id": "56d8c76f-bbbc-41ae-a29b-8f3051e43d68"
+    },
+    {
+      "name": "Has Outcome?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "608bcdea-bad7-434b-90d6-9bb4bbed4ca9",
+              "leftValue": "={{ $json._skip }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1560,
+        0
+      ],
+      "id": "26a55125-080f-4414-bf3b-d1ba714cb821"
+    },
+    {
+      "name": "Upsert Target Window Evaluation",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO target_window_evaluation (\n  scanner_result_id, target1_estimated_days, outcome, resolved_day_number, evaluated_at\n)\nVALUES ($1,$2,$3,$4, now())\nON CONFLICT (scanner_result_id) DO UPDATE SET\n  target1_estimated_days = EXCLUDED.target1_estimated_days,\n  outcome = EXCLUDED.outcome,\n  resolved_day_number = EXCLUDED.resolved_day_number,\n  evaluated_at = now();",
+        "options": {
+          "queryReplacement": "={{ [$json.scannerResultId, $json.targetEstimatedDays, $json.outcome, $json.resolvedDay] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1820,
+        0
+      ],
+      "id": "93ff6ae2-a48c-4445-a769-2d761fb20f7e"
+    },
+    {
+      "name": "Join Branches",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        2080,
+        0
+      ],
+      "id": "9460eee7-1bfe-4b9b-b90c-3a905e46961d"
+    },
+    {
+      "name": "Refresh Probability Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO probability_stats (\n  setup_type, sample_size, target1_hit_pct, stop_hit_pct, expired_no_hit_pct, updated_at\n)\nSELECT r.setup_type,\n       COUNT(*)::int,\n       ROUND(100.0 * COUNT(*) FILTER (WHERE twe.outcome = 'TARGET1_HIT') / COUNT(*), 2),\n       ROUND(100.0 * COUNT(*) FILTER (WHERE twe.outcome = 'STOP_HIT') / COUNT(*), 2),\n       ROUND(100.0 * COUNT(*) FILTER (WHERE twe.outcome = 'EXPIRED_NO_HIT') / COUNT(*), 2),\n       now()\nFROM target_window_evaluation twe\nJOIN scanner_results r ON r.id = twe.scanner_result_id\nGROUP BY r.setup_type\nON CONFLICT (setup_type) DO UPDATE SET\n  sample_size = EXCLUDED.sample_size,\n  target1_hit_pct = EXCLUDED.target1_hit_pct,\n  stop_hit_pct = EXCLUDED.stop_hit_pct,\n  expired_no_hit_pct = EXCLUDED.expired_no_hit_pct,\n  updated_at = now();",
+        "options": {}
+      },
+      "executeOnce": true,
+      "position": [
+        2340,
+        0
+      ],
+      "id": "4bacf302-a23c-4fde-aebf-a77373b8b229"
+    },
+    {
+      "name": "Count Evaluated Rows",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*)::int AS evaluated_count FROM target_window_evaluation;",
+        "options": {}
+      },
+      "executeOnce": true,
+      "position": [
+        2600,
+        0
+      ],
+      "id": "51a5c977-488f-4559-88d9-cadbccbd53e2"
+    },
+    {
+      "name": "Build Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const count = $input.first().json.evaluated_count;\nreturn [{ json: {\n  workflow: '16-egx-target-window-evaluation',\n  finishedAt: new Date().toISOString(),\n  totalEvaluatedRows: count,\n} }];"
+      },
+      "position": [
+        0,
+        200
+      ],
+      "id": "a0bda809-497b-4d0b-bfcb-9e300408e451"
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Evaluable Scanner Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger (Weekly)": {
+      "main": [
+        [
+          {
+            "node": "Load Evaluable Scanner Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Load Evaluable Scanner Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Evaluable Scanner Results": {
+      "main": [
+        [
+          {
+            "node": "Load Forward Candles (as JSON array)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Forward Candles (as JSON array)": {
+      "main": [
+        [
+          {
+            "node": "Compute Window Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Window Outcome": {
+      "main": [
+        [
+          {
+            "node": "Has Outcome?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Outcome?": {
+      "main": [
+        [
+          {
+            "node": "Upsert Target Window Evaluation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Join Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Target Window Evaluation": {
+      "main": [
+        [
+          {
+            "node": "Join Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Join Branches": {
+      "main": [
+        [
+          {
+            "node": "Refresh Probability Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refresh Probability Stats": {
+      "main": [
+        [
+          {
+            "node": "Count Evaluated Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Evaluated Rows": {
+      "main": [
+        [
+          {
+            "node": "Build Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "b296cb28-ce80-4cd7-aac0-f59e9424e851",
+  "tags": []
+}

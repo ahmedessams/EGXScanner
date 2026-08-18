@@ -77,3 +77,7 @@ CREATE INDEX IF NOT EXISTS idx_workflow_errors_symbol
 -- index_prices ---------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_index_prices_code_date
     ON index_prices (index_code, trading_date DESC);
+
+-- target_window_evaluation ----------------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_target_window_evaluation_result
+    ON target_window_evaluation (scanner_result_id);

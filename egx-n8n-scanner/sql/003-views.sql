@@ -108,7 +108,10 @@ SELECT
     res.target1::float8 AS target1, res.target2::float8 AS target2, res.target3::float8 AS target3,
     res.risk_reward_t1::float8 AS risk_reward_t1, res.risk_reward_t2::float8 AS risk_reward_t2, res.risk_reward_t3::float8 AS risk_reward_t3,
     res.target1_gain_pct::float8 AS target1_gain_pct, res.target2_gain_pct::float8 AS target2_gain_pct, res.target3_gain_pct::float8 AS target3_gain_pct,
-    res.target1_estimated_days, res.target2_estimated_days, res.target3_estimated_days
+    res.target1_estimated_days, res.target2_estimated_days, res.target3_estimated_days,
+    ps.target1_hit_pct::float8 AS historical_target1_hit_pct,
+    ps.stop_hit_pct::float8 AS historical_stop_hit_pct,
+    ps.sample_size AS historical_sample_size
 
 FROM stocks s
 LEFT JOIN v_latest_prices lp ON lp.stock_id = s.id
@@ -121,6 +124,7 @@ LEFT JOIN volume_analysis va
 LEFT JOIN v_latest_scanner_run latest_run ON TRUE
 LEFT JOIN scanner_results res
     ON res.stock_id = s.id AND res.scanner_run_id = latest_run.id
+LEFT JOIN probability_stats ps ON ps.setup_type = res.setup_type
 WHERE s.active = TRUE;
 
 COMMENT ON VIEW v_full_market IS 'One row per active stock with latest price/indicator/scanner snapshot; used by GET /webhook/egx/stocks';
@@ -162,7 +166,10 @@ SELECT
     res.reasons_json,
     res.warnings_json,
     res.data_confidence::float8 AS data_confidence,
-    res.setup_confidence::float8 AS setup_confidence
+    res.setup_confidence::float8 AS setup_confidence,
+    ps.target1_hit_pct::float8 AS historical_target1_hit_pct,
+    ps.stop_hit_pct::float8 AS historical_stop_hit_pct,
+    ps.sample_size AS historical_sample_size
 FROM scanner_results res
 JOIN scanner_runs run ON run.id = res.scanner_run_id
 JOIN stocks s ON s.id = res.stock_id
@@ -170,7 +177,8 @@ LEFT JOIN v_latest_prices lp ON lp.stock_id = s.id
 LEFT JOIN technical_analysis ta
     ON ta.stock_id = s.id AND ta.trading_date = run.trading_date
 LEFT JOIN support_resistance srz
-    ON srz.stock_id = s.id AND srz.trading_date = run.trading_date;
+    ON srz.stock_id = s.id AND srz.trading_date = run.trading_date
+LEFT JOIN probability_stats ps ON ps.setup_type = res.setup_type;
 
 COMMENT ON VIEW v_scanner_top IS 'Flattened scanner_results for the latest or any given run, used by ranking webhook endpoints';
 
