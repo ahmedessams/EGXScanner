@@ -92,9 +92,11 @@ pre-wired"). After step 3 above:
 
 This Blueprint uses paid plans for `egx-postgres` (`basic-256mb` — Render's
 smallest current persistent Postgres tier; legacy names like `starter` are
-no longer available for new databases), `egx-n8n`, and `egx-db-init` (both
-`starter`, the service-plan naming, which is separate from database
-instance types) specifically so the database persists past Render's 30-day
+no longer available for new databases), `egx-n8n` (`standard`, 2GB RAM —
+`starter`'s 512MB crashed n8n with "JavaScript heap out of memory" under
+this project's real load, confirmed via a live deploy crash log), and
+`egx-db-init` (`starter` — it just runs `psql` once and exits, doesn't need
+more) specifically so the database persists past Render's 30-day
 free-Postgres expiry and n8n's disk survives redeploys —
 Render doesn't attach persistent disks to free-tier services at all, and
 n8n needs one to keep its encryption key / imported workflows / credentials

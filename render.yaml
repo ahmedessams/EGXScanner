@@ -50,7 +50,12 @@ services:
     runtime: image
     image:
       url: docker.io/n8nio/n8n:latest
-    plan: starter
+    # starter (512MB RAM) crashes n8n with "JavaScript heap out of memory"
+    # under this project's real load — n8n itself + its Task Runner + the
+    # scanner workflows looping indicator/support-resistance computation
+    # across 241 stocks needs more headroom. standard (2GB RAM) confirmed
+    # via a live deploy crash log.
+    plan: standard
     region: frankfurt
     healthCheckPath: /healthz
     disk:
