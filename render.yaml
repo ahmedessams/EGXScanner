@@ -30,7 +30,10 @@ databases:
   - name: egx-postgres
     databaseName: egx_scanner
     user: egx_user
-    plan: starter
+    # Render retired legacy Postgres instance types (starter/standard/pro)
+    # for new databases — basic-256mb is the current smallest persistent
+    # paid tier (comfortably enough for this dataset: ~47MB uncompressed).
+    plan: basic-256mb
     region: frankfurt
     postgresMajorVersion: "16"
 
