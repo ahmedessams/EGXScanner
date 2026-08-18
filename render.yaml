@@ -3,30 +3,28 @@
 # This file MUST live at the git repo root — Render's Blueprint scanner does
 # not look in subdirectories. The actual project lives in ./egx-n8n-scanner
 # (see `rootDir` on each service below, which points Render's build context
-# there — Dockerfile, sql/, data/, webapp/ etc. all stay where they are).
+# there — Dockerfile*, sql/, data/, webapp/ etc. all stay where they are).
 #
 # Usage: push this repo to GitHub, then in Render: New -> Blueprint -> pick
 # the repo -> Apply.
 #
-# After the first deploy finishes, three MANUAL one-time steps remain (same
-# as local docker-compose — see egx-n8n-scanner/docs/IMPORT-N8N.md and
-# egx-n8n-scanner/README.md):
-#   1. Open the n8n URL, create the owner account, and add ONE Postgres
-#      credential pointing at the "egx-postgres" database (Render's dashboard
-#      shows the individual host/port/user/password/database values on the
-#      database's Info tab).
-#   2. Import all 15 workflows/*.json files and assign that Postgres
+# After the first deploy finishes, manual one-time steps remain — see
+# egx-n8n-scanner/docs/RENDER_DEPLOY.md for the full walkthrough:
+#   1. Go to the "egx-db-init" cron job and click "Trigger Run" ONCE to
+#      restore data/full_dump.sql.gz (schema + ~10 months of real EGX data
+#      already imported) into the fresh database. Idempotent — safe to
+#      trigger again later, it just no-ops if the schema already exists.
+#   2. Open the n8n URL, create the owner account, and add ONE Postgres
+#      credential pointing at "egx-postgres" (Render's dashboard shows the
+#      individual host/port/user/password/database values on the database's
+#      Info tab).
+#   3. Import all 15 workflows/*.json files and assign that Postgres
 #      credential to every Postgres node (deliberately not pre-wired — see
 #      docs/IMPORT-N8N.md "Why credentials can't ship pre-wired").
-#   3. Publish workflows 01, 03-11 (dependency order), then 12, 13, 14, 15,
+#   4. Publish workflows 01, 03-11 (dependency order), then 12, 13, 14, 15,
 #      and fill in MARKET_API_BASE_URL / MARKET_API_KEY (EODHD) as real
-#      secrets in the egx-n8n service's Environment tab in Render — they ship
-#      unset here since they're credentials, never committed to git.
-#
-# Data: this Blueprint restores data/full_dump.sql.gz (schema + ~10 months of
-# real EGX price/scan history already imported) into a FRESH Postgres on
-# first deploy only — see scripts/render-db-init.sh. Later deploys are a fast
-# no-op check, not a re-import.
+#      secrets in the egx-n8n service's Environment tab — they ship unset
+#      here since they're credentials, never committed to git.
 
 databases:
   - name: egx-postgres
@@ -37,22 +35,21 @@ databases:
     postgresMajorVersion: "16"
 
 services:
-  # --- n8n: workflow engine, hosts the 15 EGX scanner workflows -----------
+  # --- egx-n8n: workflow engine, hosts the 15 EGX scanner workflows -------
+  # Uses the stock n8n image directly (unmodified — it's a "hardened" Alpine
+  # build with no package manager, so it can't be customized in-place).
+  # N8N_HOST/WEBHOOK_URL are hardcoded to this service's predictable
+  # onrender.com URL (Render's default domain is always
+  # https://<service-name>.onrender.com) — if you rename the service or
+  # attach a custom domain, update these two values to match.
   - type: web
     name: egx-n8n
-    runtime: docker
-    rootDir: egx-n8n-scanner
+    runtime: image
+    image:
+      url: docker.io/n8nio/n8n:latest
     plan: starter
     region: frankfurt
-    dockerfilePath: ./Dockerfile.n8n
-    dockerContext: .
     healthCheckPath: /healthz
-    preDeployCommand: sh /home/node/render-db-init.sh
-    startCommand: >-
-      sh -c 'export N8N_PROTOCOL=https;
-      export N8N_HOST=$(echo $RENDER_EXTERNAL_URL | sed -E "s#https?://##; s#/*$##");
-      export WEBHOOK_URL=$RENDER_EXTERNAL_URL/;
-      n8n start'
     disk:
       name: egx-n8n-data
       mountPath: /home/node/.n8n
@@ -62,6 +59,12 @@ services:
         value: Africa/Cairo
       - key: GENERIC_TIMEZONE
         value: Africa/Cairo
+      - key: N8N_PROTOCOL
+        value: https
+      - key: N8N_HOST
+        value: egx-n8n.onrender.com
+      - key: WEBHOOK_URL
+        value: https://egx-n8n.onrender.com/
       - key: N8N_ENCRYPTION_KEY
         generateValue: true
       - key: N8N_BASIC_AUTH_ACTIVE
@@ -131,7 +134,25 @@ services:
       - key: REPORT_WEBHOOK_SECRET
         generateValue: true
 
-  # --- webapp: static dashboard over the Report API ------------------------
+  # --- egx-db-init: one-shot job, restores data/full_dump.sql.gz ----------
+  # Cron jobs don't auto-run on deploy — go to this service in Render and
+  # click "Trigger Run" once after the first deploy. The `schedule` below is
+  # a once-a-year placeholder (real invocation is the manual trigger); it
+  # won't fire on its own in any practical sense.
+  - type: cron
+    name: egx-db-init
+    runtime: docker
+    rootDir: egx-n8n-scanner
+    dockerfilePath: ./Dockerfile.dbinit
+    dockerContext: .
+    schedule: "0 0 1 1 *"
+    plan: starter
+    region: frankfurt
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: egx-postgres, property: connectionString }
+
+  # --- egx-webapp: static dashboard over the Report API --------------------
   - type: web
     name: egx-webapp
     runtime: static
@@ -141,4 +162,4 @@ services:
       sed -i "s#__N8N_BASE_URL__#${N8N_BASE_URL}/webhook/egx#g" webapp/index.html
     envVars:
       - key: N8N_BASE_URL
-        fromService: { name: egx-n8n, type: web, envVarKey: RENDER_EXTERNAL_URL }
+        value: https://egx-n8n.onrender.com

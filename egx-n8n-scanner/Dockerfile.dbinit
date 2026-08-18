@@ -1,0 +1,14 @@
+# Tiny one-shot image whose only job is restoring data/full_dump.sql.gz
+# into the managed Postgres database. Deliberately NOT based on n8n's image
+# — n8nio/n8n:latest is a "hardened" Alpine build with no package manager
+# (apk is stripped for security), so postgresql-client can't be installed
+# into it. Plain postgres:16-alpine already ships psql.
+FROM postgres:16-alpine
+
+COPY sql/ /app/sql/
+COPY data/ /app/data/
+COPY scripts/render-db-init.sh /app/render-db-init.sh
+RUN chmod +x /app/render-db-init.sh
+
+WORKDIR /app
+ENTRYPOINT ["/app/render-db-init.sh"]
