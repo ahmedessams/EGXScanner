@@ -1,25 +1,27 @@
 # Deploying to Render
 
-`render.yaml` (repo root of this folder) is a Render Blueprint that
-provisions three things: a managed Postgres database (`egx-postgres`), the
-n8n workflow engine (`egx-n8n`, Docker-based, paid plan + persistent disk so
-credentials/workflows survive redeploys), and the static dashboard
-(`egx-webapp`).
+`render.yaml`, at the git repo root (one level above this `egx-n8n-scanner`
+folder — Render's Blueprint scanner only looks at the repo root, never a
+subdirectory), is a Render Blueprint that provisions three things: a managed
+Postgres database (`egx-postgres`), the n8n workflow engine (`egx-n8n`,
+Docker-based, paid plan + persistent disk so credentials/workflows survive
+redeploys), and the static dashboard (`egx-webapp`). Each service sets
+`rootDir: egx-n8n-scanner` so their build context (Dockerfile, `sql/`,
+`data/`, `webapp/`, etc.) still resolves correctly from that subfolder.
 
 ## 1. Push to GitHub
 
-Push this folder to the GitHub repo you'll import into Render. If your
-GitHub repo root IS this `egx-n8n-scanner` folder, push as-is. If this folder
-is a subdirectory of a larger repo, note the path — Render's Blueprint setup
-asks for a "Root Directory" and `render.yaml` needs to be found there.
+Push the repo (both `render.yaml` at the root and this `egx-n8n-scanner`
+folder) to GitHub as-is — no Root Directory setting needed in Render, since
+`render.yaml` is already at the true repo root.
 
 `.env` is git-ignored on purpose — never commit real secrets.
 
 ## 2. Create the Blueprint in Render
 
-Render dashboard -> **New +** -> **Blueprint** -> pick the repo (set the Root
-Directory if needed, per above) -> Render reads `render.yaml` and shows the
-three resources it's about to create -> **Apply**.
+Render dashboard -> **New +** -> **Blueprint** -> pick the repo -> Render
+finds `render.yaml` at the root and shows the three resources it's about to
+create -> **Apply**.
 
 You'll be prompted for the two env vars marked `sync: false` in
 `render.yaml` (real secrets, not committed):

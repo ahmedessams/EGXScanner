@@ -1,11 +1,16 @@
 # Render Blueprint for the EGX N8N Scanner.
 #
-# Usage: push this repo to GitHub, then in Render: New -> Blueprint, pick the
-# repo. If this "egx-n8n-scanner" folder is NOT your repo root, set the
-# Blueprint's Root Directory to "egx-n8n-scanner" when Render asks.
+# This file MUST live at the git repo root — Render's Blueprint scanner does
+# not look in subdirectories. The actual project lives in ./egx-n8n-scanner
+# (see `rootDir` on each service below, which points Render's build context
+# there — Dockerfile, sql/, data/, webapp/ etc. all stay where they are).
 #
-# After the first deploy still finishes, three MANUAL one-time steps remain
-# (same as local docker-compose — see docs/IMPORT-N8N.md and README.md):
+# Usage: push this repo to GitHub, then in Render: New -> Blueprint -> pick
+# the repo -> Apply.
+#
+# After the first deploy finishes, three MANUAL one-time steps remain (same
+# as local docker-compose — see egx-n8n-scanner/docs/IMPORT-N8N.md and
+# egx-n8n-scanner/README.md):
 #   1. Open the n8n URL, create the owner account, and add ONE Postgres
 #      credential pointing at the "egx-postgres" database (Render's dashboard
 #      shows the individual host/port/user/password/database values on the
@@ -36,6 +41,7 @@ services:
   - type: web
     name: egx-n8n
     runtime: docker
+    rootDir: egx-n8n-scanner
     plan: starter
     region: frankfurt
     dockerfilePath: ./Dockerfile.n8n
@@ -129,6 +135,7 @@ services:
   - type: web
     name: egx-webapp
     runtime: static
+    rootDir: egx-n8n-scanner
     staticPublishPath: ./webapp
     buildCommand: >-
       sed -i "s#__N8N_BASE_URL__#${N8N_BASE_URL}/webhook/egx#g" webapp/index.html
