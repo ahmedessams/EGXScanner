@@ -116,18 +116,33 @@ toggle; older n8n versions use the Active toggle directly.
 
 | Route | Notes |
 |---|---|
-| `GET /webhook/egx/stocks` | Full market table. `?sort=volume\|tradedvalue\|rvol\|score\|change` |
-| `GET /webhook/egx/stocks/volume` | Sorted by raw volume |
-| `GET /webhook/egx/stocks/relative-volume` | Sorted by RVOL20 |
-| `GET /webhook/egx/top` | Overall Top N (eligible only). `?limit=` |
-| `GET /webhook/egx/breakout` | Top N by breakout_score |
-| `GET /webhook/egx/momentum` | Top N by momentum_score |
-| `GET /webhook/egx/pullback` | Top N by pullback_score |
-| `GET /webhook/egx/reversal` | Top N by reversal_score |
+| `GET /webhook/egx/stocks` | Full market table. `?sort=volume\|tradedvalue\|rvol\|score\|change`, `?date=YYYY-MM-DD` |
+| `GET /webhook/egx/stocks/volume` | Sorted by raw volume. `?date=YYYY-MM-DD` |
+| `GET /webhook/egx/stocks/relative-volume` | Sorted by RVOL20. `?date=YYYY-MM-DD` |
+| `GET /webhook/egx/top` | Overall Top N (eligible only). `?limit=`, `?date=YYYY-MM-DD` |
+| `GET /webhook/egx/breakout` | Top N by breakout_score. `?date=YYYY-MM-DD` |
+| `GET /webhook/egx/momentum` | Top N by momentum_score. `?date=YYYY-MM-DD` |
+| `GET /webhook/egx/pullback` | Top N by pullback_score. `?date=YYYY-MM-DD` |
+| `GET /webhook/egx/reversal` | Top N by reversal_score. `?date=YYYY-MM-DD` |
 | `GET /webhook/egx/stock?symbol=SYMBOL` | Full stock detail (section 26 shape) |
 | `GET /webhook/egx/stock/technicals?symbol=SYMBOL` | Latest `technical_analysis` row |
 | `GET /webhook/egx/stock/support-resistance?symbol=SYMBOL` | Latest `support_resistance` row |
 | `GET /webhook/egx/market` | Latest market regime/score |
+| `GET /webhook/egx/dates` | Distinct LIVE scan dates (newest first, max 90) — feeds the dashboard's date filter |
+
+**`?date=YYYY-MM-DD` (spec: user-requested "date filter in each tab")**:
+every route above except `/stock*` and `/market` accepts it. On-or-before
+semantics via `market_snapshot(p_date)` / `scanner_run_as_of(p_date)`
+(`sql/003-views.sql`) — picking a non-trading day (weekend/holiday) falls
+back to the most recent prior trading day rather than erroring. Omitted or
+invalid (anything not matching `YYYY-MM-DD`, validated server-side, never
+concatenated into SQL) means "latest", identical to pre-filter behavior.
+The ranked routes (`/top` and per-setup) return `{success:true,
+results:[]}` for a date with no LIVE scan yet, rather than an empty HTTP
+body — see the `alwaysOutputData` note on those endpoints in `13.js` if
+you're extending this pattern elsewhere; a Postgres node's zero-row result
+otherwise means every Code node downstream of it simply never executes
+(confirmed via live E2E testing — see "A note on empty-input edges" below).
 
 **Why query params instead of the `:symbol` path param spec section 25 shows:**
 confirmed via live E2E testing that this n8n build's PRODUCTION webhook router

@@ -16,7 +16,7 @@
         "width": 480,
         "color": 5
       },
-      "id": "43138134-2edd-4f5d-8f6b-c6ad68738237"
+      "id": "521ea04d-0205-480d-aaa3-8bd4008147b1"
     },
     {
       "name": "Manual Trigger",
@@ -27,7 +27,7 @@
         0,
         0
       ],
-      "id": "6ae184e7-1336-49b5-91eb-66fd21714ccd"
+      "id": "f25d1699-d881-43bd-9cf9-b1eadd84d4d7"
     },
     {
       "name": "When Executed by Another Workflow",
@@ -40,7 +40,7 @@
         260,
         0
       ],
-      "id": "4b1f12a5-07c7-4338-9bd8-a369f949fd60"
+      "id": "bb6d55c7-6879-4969-b4c0-38a18f52b628"
     },
     {
       "name": "Load Active Stocks",
@@ -58,7 +58,7 @@
         520,
         0
       ],
-      "id": "56d179a5-d987-446d-a396-5fe31576b73b"
+      "id": "86d5408f-d314-497c-aeca-81e8dda0c1ad"
     },
     {
       "name": "Attach As-Of Date",
@@ -73,7 +73,7 @@
         780,
         0
       ],
-      "id": "008825d9-fc32-4eab-9773-2e44d58379ef"
+      "id": "025d0e67-d5b5-4a57-ae8c-407256a621e5"
     },
     {
       "name": "Load Price History (as JSON array)",
@@ -91,7 +91,7 @@
         1040,
         0
       ],
-      "id": "e7cf3cd3-cef6-4fa0-b986-a9b50be947ba"
+      "id": "296ae01b-bb14-4081-8636-07eb29147b47"
     },
     {
       "name": "Calculate Indicators",
@@ -106,7 +106,7 @@
         1300,
         0
       ],
-      "id": "5519d257-629a-4009-ad44-2d1c0a2e949f"
+      "id": "663af840-768c-4955-bcbc-ddb1eee08133"
     },
     {
       "name": "Upsert Technical Analysis",
@@ -124,7 +124,7 @@
         1560,
         0
       ],
-      "id": "aa10229b-5ca0-4ec7-a508-0b1985169470"
+      "id": "c7ad4bc4-a8c5-4689-ae5e-8b551f6d2dba"
     },
     {
       "name": "Count Technical Analysis Rows",
@@ -140,7 +140,7 @@
         1820,
         0
       ],
-      "id": "069e7277-2494-47b9-87a4-6c72096c126a"
+      "id": "e38bbce5-b82c-4797-af5d-8a5d1f5a933b"
     },
     {
       "name": "Build Summary",
@@ -155,7 +155,7 @@
         2080,
         0
       ],
-      "id": "f224bb17-3228-4af8-9ee0-79b9152ee147"
+      "id": "9d510f71-f770-4338-8314-bebe40fea59f"
     }
   ],
   "connections": {
@@ -256,6 +256,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "6dde1e3f-7903-472f-bdb5-cf9126d9cb5e",
+  "id": "344c1aa6-238f-4de1-b9e0-b65052d87e2a",
   "tags": []
 }

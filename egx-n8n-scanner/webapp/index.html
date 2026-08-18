@@ -250,6 +250,10 @@
 
   <div class="filter-bar">
     <div class="filter-group">
+      <label for="dateFilterSelect">Date</label>
+      <select id="dateFilterSelect"></select>
+    </div>
+    <div class="filter-group">
       <label for="filterDaysSelect">Est. Days T1 ≤</label>
       <select id="filterDaysSelect"></select>
     </div>
@@ -304,6 +308,8 @@ const state = {
   loading: false,
   filterMaxDays: 'any',
   filterMinGain: 'any',
+  filterDate: 'latest',
+  availableDates: [],
   hiddenColumns: JSON.parse(localStorage.getItem('egx_hidden_columns') || '{}'),
 };
 
@@ -333,15 +339,22 @@ const GAIN_FILTER_OPTIONS = [
   { value: '30', label: '≥ 30%' },
 ];
 
+// Every tab's endpoint accepts an optional date=YYYY-MM-DD (market_snapshot /
+// scanner_run_as_of on the API side; NULL/omitted = latest, same as before
+// this filter existed).
+function dateQS(s, sep) {
+  return (s.filterDate && s.filterDate !== 'latest') ? `${sep}date=${s.filterDate}` : '';
+}
+
 const TABS = [
-  { id: 'top', label: 'Overall Top 10', endpoint: () => `/top?limit=10` },
-  { id: 'breakout', label: 'Breakout', endpoint: () => `/breakout?limit=10` },
-  { id: 'momentum', label: 'Momentum', endpoint: () => `/momentum?limit=10` },
-  { id: 'pullback', label: 'Pullback', endpoint: () => `/pullback?limit=10` },
-  { id: 'reversal', label: 'Reversal', endpoint: () => `/reversal?limit=10` },
-  { id: 'volume', label: 'Top Volume', endpoint: () => `/stocks/volume` },
-  { id: 'rvol', label: 'Top Relative Volume', endpoint: () => `/stocks/relative-volume` },
-  { id: 'full', label: 'Full Market', endpoint: (s) => `/stocks?sort=${s.sort}` },
+  { id: 'top', label: 'Overall Top 10', endpoint: (s) => `/top?limit=10${dateQS(s, '&')}` },
+  { id: 'breakout', label: 'Breakout', endpoint: (s) => `/breakout?limit=10${dateQS(s, '&')}` },
+  { id: 'momentum', label: 'Momentum', endpoint: (s) => `/momentum?limit=10${dateQS(s, '&')}` },
+  { id: 'pullback', label: 'Pullback', endpoint: (s) => `/pullback?limit=10${dateQS(s, '&')}` },
+  { id: 'reversal', label: 'Reversal', endpoint: (s) => `/reversal?limit=10${dateQS(s, '&')}` },
+  { id: 'volume', label: 'Top Volume', endpoint: (s) => `/stocks/volume${dateQS(s, '?')}` },
+  { id: 'rvol', label: 'Top Relative Volume', endpoint: (s) => `/stocks/relative-volume${dateQS(s, '?')}` },
+  { id: 'full', label: 'Full Market', endpoint: (s) => `/stocks?sort=${s.sort}${dateQS(s, '&')}` },
 ];
 
 const RANKED_COLUMNS = [
@@ -580,6 +593,7 @@ function filteredRows() {
 function renderFilterBar() {
   const daysSel = document.getElementById('filterDaysSelect');
   const gainSel = document.getElementById('filterGainSelect');
+  const dateSel = document.getElementById('dateFilterSelect');
   if (!daysSel.options.length) {
     daysSel.innerHTML = DAYS_FILTER_OPTIONS.map((o) => `<option value="${o.value}">${esc(o.label)}</option>`).join('');
     gainSel.innerHTML = GAIN_FILTER_OPTIONS.map((o) => `<option value="${o.value}">${esc(o.label)}</option>`).join('');
@@ -588,14 +602,31 @@ function renderFilterBar() {
     document.getElementById('filterResetBtn').addEventListener('click', () => {
       state.filterMaxDays = 'any';
       state.filterMinGain = 'any';
+      state.filterDate = 'latest';
       daysSel.value = 'any';
       gainSel.value = 'any';
-      renderTable();
-      renderStatRow();
+      dateSel.value = 'latest';
+      loadTab();
     });
   }
   daysSel.value = state.filterMaxDays;
   gainSel.value = state.filterMinGain;
+  dateSel.value = state.filterDate;
+}
+
+async function initDateFilter() {
+  const dateSel = document.getElementById('dateFilterSelect');
+  dateSel.innerHTML = '<option value="latest">Latest</option>';
+  try {
+    const data = await apiGet('/dates');
+    state.availableDates = data.dates || [];
+    dateSel.innerHTML = '<option value="latest">Latest</option>'
+      + state.availableDates.map((d) => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+  } catch (e) {
+    // Non-fatal: the dropdown just stays at "Latest" if /dates can't be reached.
+  }
+  dateSel.value = state.filterDate;
+  dateSel.addEventListener('change', () => { state.filterDate = dateSel.value; loadTab(); });
 }
 
 function hiddenSetForTab() {
@@ -666,7 +697,8 @@ function exportCsv() {
   const tabDef = TABS.find((t) => t.id === state.tab);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `egx-${tabDef ? tabDef.id : state.tab}-${new Date().toISOString().slice(0, 10)}.csv`;
+  const dateSuffix = (state.filterDate && state.filterDate !== 'latest') ? state.filterDate : new Date().toISOString().slice(0, 10);
+  a.download = `egx-${tabDef ? tabDef.id : state.tab}-${dateSuffix}.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -883,6 +915,7 @@ document.getElementById('refreshBtn').addEventListener('click', refreshAll);
 document.getElementById('settingsBtn').addEventListener('click', openSettings);
 document.getElementById('exportBtn').addEventListener('click', exportCsv);
 initColumnsPicker();
+initDateFilter();
 
 renderTabs();
 refreshAll();

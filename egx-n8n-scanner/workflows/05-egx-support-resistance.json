@@ -16,7 +16,7 @@
         "width": 480,
         "color": 5
       },
-      "id": "a15801bd-6198-4701-af0b-5da603d19012"
+      "id": "b974153e-4a9c-468a-ba5d-c32d6e8e42f1"
     },
     {
       "name": "Manual Trigger",
@@ -27,7 +27,7 @@
         0,
         0
       ],
-      "id": "4a57dd30-8da9-484a-a8ec-2ed76fd923ec"
+      "id": "5a08d6bd-feac-4333-8228-50869daa07cf"
     },
     {
       "name": "When Executed by Another Workflow",
@@ -40,7 +40,7 @@
         260,
         0
       ],
-      "id": "475967b2-361e-41a2-b758-54ebc46c945d"
+      "id": "397a7c9d-a964-4492-8c05-6d6cb64c4409"
     },
     {
       "name": "Load Active Stocks",
@@ -58,7 +58,7 @@
         520,
         0
       ],
-      "id": "9e3ffced-68fd-42d5-88ab-e828fcbf9471"
+      "id": "9591fb5c-8531-4860-995d-5a0cbe378028"
     },
     {
       "name": "Attach As-Of Date",
@@ -73,7 +73,7 @@
         780,
         0
       ],
-      "id": "cd05df25-b63c-4197-ad5e-013a0afb37fd"
+      "id": "9cfafe53-1433-4305-9c03-9d0b5abc1846"
     },
     {
       "name": "Load Price History (as JSON array)",
@@ -91,7 +91,7 @@
         1040,
         0
       ],
-      "id": "69971c18-5a9d-4c78-9b1a-c422ffe97bb9"
+      "id": "32243fa5-e9f6-4bfb-9c5b-2b0a418a2bdc"
     },
     {
       "name": "Calculate Support/Resistance",
@@ -106,7 +106,7 @@
         1300,
         0
       ],
-      "id": "f834fb9f-c419-4164-a24c-92a952e25bf8"
+      "id": "5002b1b8-934d-4307-a1a6-1b06e1d7c30b"
     },
     {
       "name": "Upsert Support/Resistance",
@@ -124,7 +124,7 @@
         1560,
         0
       ],
-      "id": "b74e8d5d-07bc-4bd6-b438-64a00f748b45"
+      "id": "6effa70a-05be-4bf6-8b31-1ab462be489e"
     },
     {
       "name": "Count Support/Resistance Rows",
@@ -140,7 +140,7 @@
         1820,
         0
       ],
-      "id": "0af53c13-d2a4-4984-9bd0-01f65677f3ba"
+      "id": "1d20a0de-9d2f-4135-8930-7afbb90195a5"
     },
     {
       "name": "Build Summary",
@@ -155,7 +155,7 @@
         2080,
         0
       ],
-      "id": "9c58721a-34b9-4bb8-aeb8-1b66c9f8a021"
+      "id": "745d261d-82d9-48b3-b8f9-c68ba6dfd41f"
     }
   ],
   "connections": {
@@ -256,6 +256,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "e595c693-3a4e-471c-b92b-940d42695d72",
+  "id": "e70fea69-80ef-4772-8373-2f4c2d0946a4",
   "tags": []
 }

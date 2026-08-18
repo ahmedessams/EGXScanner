@@ -16,7 +16,7 @@
         "width": 480,
         "color": 5
       },
-      "id": "e7e48302-ede9-4bca-8ab4-0937802d8c45"
+      "id": "f35a5234-b0f5-481a-9f7b-a05fc2389497"
     },
     {
       "name": "Manual Trigger",
@@ -27,7 +27,7 @@
         0,
         0
       ],
-      "id": "39d01954-9305-45a6-bb3a-d24ef6ddb99f"
+      "id": "58e4a5aa-aded-4144-b829-d7f5eb15fb64"
     },
     {
       "name": "When Executed by Another Workflow",
@@ -40,7 +40,7 @@
         260,
         0
       ],
-      "id": "37695692-50cf-4407-ac93-2bc8644efe7f"
+      "id": "797f0d8d-9fdb-4527-a76e-cc3bf208c8be"
     },
     {
       "name": "Attach As-Of Date",
@@ -55,7 +55,7 @@
         520,
         0
       ],
-      "id": "9ea7c306-a53e-4a5c-b638-5decff236e8b"
+      "id": "afc518f6-2366-4006-8965-a431f62b621b"
     },
     {
       "name": "Get or Create Scanner Run",
@@ -73,7 +73,7 @@
         780,
         0
       ],
-      "id": "767c7bd9-16be-4b2e-9449-7adf289fae96"
+      "id": "85e0d546-3958-4b35-a5b2-6c189362432a"
     },
     {
       "name": "Load Active Stocks",
@@ -91,7 +91,7 @@
         1040,
         0
       ],
-      "id": "cfe5c51b-9d6d-4714-bdb2-14c0a53b14b2"
+      "id": "009f1813-7292-4d89-9c77-e291c165605e"
     },
     {
       "name": "Attach Scanner Context",
@@ -106,7 +106,7 @@
         1300,
         0
       ],
-      "id": "4e0e821f-bbf5-4f61-ac6d-3f515c5f5606"
+      "id": "3967fc9f-0476-41e4-b062-0bdbeb6f95a6"
     },
     {
       "name": "Load Snapshot",
@@ -124,7 +124,7 @@
         1560,
         0
       ],
-      "id": "e5b0ec17-0fd9-4a52-8d43-ab9f95edc0be"
+      "id": "aa432d4e-b8ee-4af2-a201-0f2ef465889f"
     },
     {
       "name": "Calculate Pullback Score",
@@ -139,7 +139,7 @@
         1820,
         0
       ],
-      "id": "95ba1113-acd2-468e-b017-d70d5feb8c51"
+      "id": "7a2e4602-d62a-414d-bbac-ddac81b70e5d"
     },
     {
       "name": "Upsert Scanner Result",
@@ -157,7 +157,7 @@
         2080,
         0
       ],
-      "id": "2b267b37-3a83-4e0c-98fc-e357c5674276"
+      "id": "43fc903a-d131-4c68-8501-f879a6654a18"
     },
     {
       "name": "Count Scored Stocks",
@@ -175,7 +175,7 @@
         2340,
         0
       ],
-      "id": "9d4ff470-56d4-44f4-b9d7-27ac53019d54"
+      "id": "99e02d3d-5e60-45fd-97ac-32037f606d45"
     },
     {
       "name": "Build Summary",
@@ -190,7 +190,7 @@
         2600,
         0
       ],
-      "id": "f513a96c-4f8b-4a98-8013-3f6399e10e25"
+      "id": "4801e45f-80e8-4457-88e2-5d7b6e4aacd9"
     }
   ],
   "connections": {
@@ -313,6 +313,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "5666eb1c-ba25-4802-bcac-22eb3832353d",
+  "id": "623df29f-41b5-4229-b35e-7cb4abc54794",
   "tags": []
 }

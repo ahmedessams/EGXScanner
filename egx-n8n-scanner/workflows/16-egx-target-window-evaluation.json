@@ -16,7 +16,7 @@
         "width": 560,
         "color": 5
       },
-      "id": "7ed45f60-107f-4e1f-9861-9a345d95351c"
+      "id": "efcc12f2-8e81-4ff9-acd9-f464d10540f9"
     },
     {
       "name": "Manual Trigger",
@@ -27,7 +27,7 @@
         0,
         0
       ],
-      "id": "ea5a9b91-09eb-4025-bce4-1781cd382949"
+      "id": "4d36fcf1-b6dd-4ba6-9606-afe8778b523d"
     },
     {
       "name": "Schedule Trigger (Weekly)",
@@ -47,7 +47,7 @@
         260,
         0
       ],
-      "id": "10ad7575-4932-49c1-83d7-b2235d422208"
+      "id": "6dd76b68-1f90-4475-8e6b-785fc727e0bf"
     },
     {
       "name": "When Executed by Another Workflow",
@@ -60,7 +60,7 @@
         520,
         0
       ],
-      "id": "1e379413-f161-4b50-a111-b403f5d47600"
+      "id": "3f42341b-3f3b-4edd-b5fc-add2b32249da"
     },
     {
       "name": "Load Evaluable Scanner Results",
@@ -76,7 +76,7 @@
         780,
         0
       ],
-      "id": "49929543-07f9-4f8e-a793-5aea084251fa"
+      "id": "903afeaf-d319-4c9d-9f47-b42f2906268d"
     },
     {
       "name": "Load Forward Candles (as JSON array)",
@@ -94,7 +94,7 @@
         1040,
         0
       ],
-      "id": "dae2cf59-2393-4485-8cf2-b03c728c08be"
+      "id": "51296a03-ffac-4310-9e27-5a2eb7b96003"
     },
     {
       "name": "Compute Window Outcome",
@@ -109,7 +109,7 @@
         1300,
         0
       ],
-      "id": "56d8c76f-bbbc-41ae-a29b-8f3051e43d68"
+      "id": "c575a05f-86d9-4f8e-8aab-a68adc000fdd"
     },
     {
       "name": "Has Outcome?",
@@ -124,7 +124,7 @@
           },
           "conditions": [
             {
-              "id": "608bcdea-bad7-434b-90d6-9bb4bbed4ca9",
+              "id": "d5744b1a-3964-4d47-8493-b0100b0967b8",
               "leftValue": "={{ $json._skip }}",
               "rightValue": "",
               "operator": {
@@ -142,7 +142,7 @@
         1560,
         0
       ],
-      "id": "26a55125-080f-4414-bf3b-d1ba714cb821"
+      "id": "3c0ecb83-5bca-4cbe-8343-f1aa623ce77f"
     },
     {
       "name": "Upsert Target Window Evaluation",
@@ -160,7 +160,7 @@
         1820,
         0
       ],
-      "id": "93ff6ae2-a48c-4445-a769-2d761fb20f7e"
+      "id": "fa0b6036-d9a1-47e9-812b-9572e258cb18"
     },
     {
       "name": "Join Branches",
@@ -171,7 +171,7 @@
         2080,
         0
       ],
-      "id": "9460eee7-1bfe-4b9b-b90c-3a905e46961d"
+      "id": "8d918923-c51f-4ca4-b502-6a7bcb738fa4"
     },
     {
       "name": "Refresh Probability Stats",
@@ -187,7 +187,7 @@
         2340,
         0
       ],
-      "id": "4bacf302-a23c-4fde-aebf-a77373b8b229"
+      "id": "ebf22fd0-3b10-4a7e-8e55-44ad65292a32"
     },
     {
       "name": "Count Evaluated Rows",
@@ -203,7 +203,7 @@
         2600,
         0
       ],
-      "id": "51a5c977-488f-4559-88d9-cadbccbd53e2"
+      "id": "a5b902bf-2113-4d41-a486-62aed955684f"
     },
     {
       "name": "Build Summary",
@@ -218,7 +218,7 @@
         0,
         200
       ],
-      "id": "a0bda809-497b-4d0b-bfcb-9e300408e451"
+      "id": "ff3a0c07-2a45-4e08-8723-a02432633f02"
     }
   ],
   "connections": {
@@ -359,6 +359,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "b296cb28-ce80-4cd7-aac0-f59e9424e851",
+  "id": "ebbd9a7d-e527-49fc-8cac-b0051e84e6fc",
   "tags": []
 }

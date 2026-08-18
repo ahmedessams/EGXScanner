@@ -16,7 +16,7 @@
         "width": 460,
         "color": 5
       },
-      "id": "7930b862-c029-4996-ac10-05d66f0aa014"
+      "id": "74db11c2-b26f-4dd2-97c7-f6d7f6b38822"
     },
     {
       "name": "Configure Endpoint Warning",
@@ -32,7 +32,7 @@
         "width": 460,
         "color": 7
       },
-      "id": "44484ebe-643a-44d1-a870-31f2b0c586fd"
+      "id": "1debcf28-6fc4-4da9-9752-ecde5881e7d6"
     },
     {
       "name": "Manual Trigger",
@@ -43,7 +43,7 @@
         0,
         0
       ],
-      "id": "b60ab8ba-8505-463b-8b87-bcfee5a813b1"
+      "id": "02632442-3136-40e4-9848-d602fbb84a40"
     },
     {
       "name": "When Executed by Another Workflow",
@@ -56,7 +56,7 @@
         260,
         0
       ],
-      "id": "a160953a-31a7-4ba8-a1e3-4c0a68315c2c"
+      "id": "0c270d7e-3971-4458-976f-3e473cff12e9"
     },
     {
       "name": "Load Active Stocks",
@@ -74,7 +74,7 @@
         520,
         0
       ],
-      "id": "a57cde49-c2ef-4c3d-a141-824c6f5cce85"
+      "id": "fb3335e4-c768-478e-bf44-f7d4819fabd4"
     },
     {
       "name": "Loop Over Stocks (Batch)",
@@ -88,7 +88,7 @@
         780,
         0
       ],
-      "id": "37f4af23-603e-4107-9380-afac58537539"
+      "id": "787bee74-267e-4340-b659-219c2ffbd2c0"
     },
     {
       "name": "Fetch Historical OHLCV (CONFIGURE ENDPOINT)",
@@ -136,7 +136,7 @@
         1040,
         0
       ],
-      "id": "1a7bbba2-8880-4cfc-8705-fd0dea91cfbd"
+      "id": "370399c4-13e3-4949-b778-acceedd4bc70"
     },
     {
       "name": "Normalize OHLCV Response",
@@ -151,7 +151,7 @@
         1300,
         0
       ],
-      "id": "36430a7a-433a-4b5b-a72c-4ba418107e28"
+      "id": "ea8d8ad7-a161-4fa6-8c18-6b334de3ce2c"
     },
     {
       "name": "Validate, Dedupe & Derive Traded Value",
@@ -166,7 +166,7 @@
         1560,
         0
       ],
-      "id": "01b06e7a-0891-42f2-a8a2-c1c0ca809d87"
+      "id": "55930718-9d96-4997-84e3-749b02ac9aad"
     },
     {
       "name": "Is Valid Candle?",
@@ -181,7 +181,7 @@
           },
           "conditions": [
             {
-              "id": "a437b3b4-dc46-4a6c-9578-1da6f6153ee1",
+              "id": "3245bbb6-e0ca-43aa-9c8f-7e541719d093",
               "leftValue": "={{ $json._valid }}",
               "rightValue": "",
               "operator": {
@@ -199,7 +199,7 @@
         1820,
         0
       ],
-      "id": "fdca5cd7-4429-4fbc-8c25-fd68dbcf0b67"
+      "id": "d977f6c2-fde7-4f9e-a5d8-0f5679480388"
     },
     {
       "name": "Upsert Daily Price",
@@ -217,7 +217,7 @@
         2080,
         0
       ],
-      "id": "32cc692f-e170-4017-a955-0d176c7def3a"
+      "id": "009fa995-e26e-4057-ac8d-a299fa5c205d"
     },
     {
       "name": "Log Failed Symbol/Candle",
@@ -235,7 +235,7 @@
         2340,
         0
       ],
-      "id": "301b70f9-5565-4762-8e08-61936a53a7fe"
+      "id": "31bb8d30-08dd-4f65-84ac-33aebf88d2c0"
     },
     {
       "name": "Join Branches",
@@ -246,7 +246,7 @@
         2600,
         0
       ],
-      "id": "b8b2bbfc-9715-4701-8860-89ecddca70e6"
+      "id": "0a467915-20db-4689-8290-57508db95934"
     },
     {
       "name": "Rate Limit Delay",
@@ -261,7 +261,7 @@
         0,
         200
       ],
-      "id": "c9de181a-44b9-4e7c-927c-08c2607087aa"
+      "id": "852be848-6c43-489c-af89-82328cd399f3"
     },
     {
       "name": "Count Imported Rows",
@@ -277,7 +277,7 @@
         260,
         200
       ],
-      "id": "3e23728e-8e39-4181-81a6-a12149acf193"
+      "id": "d38b31ca-9dce-4c40-8b57-caee69da2ca8"
     },
     {
       "name": "Build Summary",
@@ -292,7 +292,7 @@
         520,
         200
       ],
-      "id": "0a8f541d-e27d-4c77-ba3a-6914676b105c"
+      "id": "f6a0c361-6892-400d-b17a-78071d45d385"
     }
   ],
   "connections": {
@@ -462,6 +462,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "4a709df5-331f-4e19-b851-456ed007a514",
+  "id": "edec4c95-0d72-474d-b70e-1e1153aa3b14",
   "tags": []
 }

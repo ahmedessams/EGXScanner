@@ -16,7 +16,7 @@
         "width": 480,
         "color": 5
       },
-      "id": "3f096965-d1d2-4877-b679-19e0704fcf98"
+      "id": "784d4bd9-7b6b-437d-8674-48d681ecd04e"
     },
     {
       "name": "Configure Endpoint Warning",
@@ -32,7 +32,7 @@
         "width": 440,
         "color": 7
       },
-      "id": "45126bc0-333e-4e84-a882-4a42a3246a23"
+      "id": "7a6e7de2-863a-4501-9458-505923a884b3"
     },
     {
       "name": "Manual Trigger",
@@ -43,7 +43,7 @@
         0,
         0
       ],
-      "id": "fbefd1f5-2769-43a4-9273-bc3d148d1d66"
+      "id": "38a697c9-1f74-4943-a8ff-6a1323992c52"
     },
     {
       "name": "When Executed by Another Workflow",
@@ -56,7 +56,7 @@
         260,
         0
       ],
-      "id": "97801635-1451-4152-8154-d0e2b130bbe9"
+      "id": "66ae652f-d42e-4c01-8115-ef6e5cfe0814"
     },
     {
       "name": "Schedule Trigger (Retry Import)",
@@ -76,7 +76,7 @@
         520,
         0
       ],
-      "id": "b54698f3-4aaa-4481-9a66-b88de584008a"
+      "id": "5ff73263-5d06-4411-a60a-72b6c778f339"
     },
     {
       "name": "Load Active Stocks",
@@ -94,7 +94,7 @@
         780,
         0
       ],
-      "id": "bbe76aab-883e-4cc0-a4a1-31fbb4a01cc8"
+      "id": "00cefb03-17f1-470d-b58c-7550db4c8f76"
     },
     {
       "name": "Loop Over Stocks (Batch)",
@@ -108,7 +108,7 @@
         1040,
         0
       ],
-      "id": "e0e553dc-ad02-4f1d-9bb8-3cb8730eda31"
+      "id": "d942c45c-8cc5-4c73-a679-d4a947ad97bc"
     },
     {
       "name": "Fetch Recent OHLCV (CONFIGURE ENDPOINT)",
@@ -156,7 +156,7 @@
         1300,
         0
       ],
-      "id": "c428a9a2-d21d-4c4d-b18f-eb79f5463efb"
+      "id": "4a5d740c-b301-48b3-af17-4e3444b6fd44"
     },
     {
       "name": "Normalize OHLCV Response",
@@ -171,7 +171,7 @@
         1560,
         0
       ],
-      "id": "787a3f5b-a91d-485a-b8ba-9ae26d4f13b0"
+      "id": "6e85a7be-a845-4d04-8b95-2237449ceb4a"
     },
     {
       "name": "Validate, Dedupe & Derive Traded Value",
@@ -186,7 +186,7 @@
         1820,
         0
       ],
-      "id": "cf8b0de7-3ad9-4d82-bdd2-bd117862f1ba"
+      "id": "db25dd77-abb3-410c-8562-e13074d2496a"
     },
     {
       "name": "Is Valid Candle?",
@@ -201,7 +201,7 @@
           },
           "conditions": [
             {
-              "id": "1d7e22a9-b16c-4ebf-a8d1-636b7eec43a8",
+              "id": "d41d2fa0-6445-4524-b2f3-074bb8fdfc18",
               "leftValue": "={{ $json._valid }}",
               "rightValue": "",
               "operator": {
@@ -219,7 +219,7 @@
         2080,
         0
       ],
-      "id": "5aaea906-5014-414b-a1d4-6ec3c6a78429"
+      "id": "ee18b913-7af7-482c-8e7c-edb3931d8354"
     },
     {
       "name": "Upsert Daily Price",
@@ -237,7 +237,7 @@
         2340,
         0
       ],
-      "id": "5d7e6d3c-3ec1-4ad1-a4bb-c2e1e0d1b475"
+      "id": "d24d5416-8608-4837-a061-5c339e67f5a7"
     },
     {
       "name": "Log Failed Symbol/Candle",
@@ -255,7 +255,7 @@
         2600,
         0
       ],
-      "id": "29910d6c-0820-4db1-afe7-aa4c0b54fb50"
+      "id": "384b8bc8-b62d-4a50-b102-bfc98711c484"
     },
     {
       "name": "Join Branches",
@@ -266,7 +266,7 @@
         0,
         200
       ],
-      "id": "cbc33a19-b1c2-4991-9701-8277cee05f70"
+      "id": "e4dcf00f-c57c-4699-ac32-f920781ebad7"
     },
     {
       "name": "Rate Limit Delay",
@@ -281,7 +281,7 @@
         260,
         200
       ],
-      "id": "87a377e7-0127-4e48-b63f-a3e65f50bb04"
+      "id": "2a8e4a4f-79a7-47ee-a0c0-e694653df8c7"
     },
     {
       "name": "Fetch EGX30 Index (OPTIONAL, CONFIGURE ENDPOINT)",
@@ -329,7 +329,7 @@
         520,
         200
       ],
-      "id": "6c6e8dc8-f14d-4c7a-a311-08c547ecb43e"
+      "id": "a0e880f6-36ae-4e92-baf1-5cd927a5dcb8"
     },
     {
       "name": "Normalize & Upsert Index (Skip on Failure)",
@@ -345,7 +345,7 @@
         780,
         200
       ],
-      "id": "b224e825-6e7c-4abb-baeb-59d62ee47e3d"
+      "id": "bdae5917-36ce-4bd8-8729-ee19984e5d28"
     },
     {
       "name": "Index Data Available?",
@@ -360,7 +360,7 @@
           },
           "conditions": [
             {
-              "id": "a4fabb98-7b6e-4f64-80f0-a3cecba0c40b",
+              "id": "510253e0-bcf5-48ba-ad3c-d977f9d629ec",
               "leftValue": "={{ $json.indexUpserted }}",
               "rightValue": "",
               "operator": {
@@ -378,7 +378,7 @@
         1040,
         200
       ],
-      "id": "019e3d30-d651-4b48-8a45-7b128ae6a046"
+      "id": "f8689807-1fbb-49e7-9d06-d726a7858e0b"
     },
     {
       "name": "Join Index Branches",
@@ -389,7 +389,7 @@
         1300,
         200
       ],
-      "id": "6494c698-173d-40db-b814-5d1a9e51b782"
+      "id": "7196c72e-4a33-48ba-a852-f755a53f9657"
     },
     {
       "name": "Upsert Index Prices",
@@ -407,7 +407,7 @@
         1560,
         200
       ],
-      "id": "49c15696-67ce-4b92-aa26-bad6a320b81b"
+      "id": "ce427c6f-e305-47f3-94e8-e4a345e823eb"
     },
     {
       "name": "Verify Data Completeness",
@@ -425,7 +425,7 @@
         1820,
         200
       ],
-      "id": "ceca38c6-6ff6-40d8-922a-cdd54a87a388"
+      "id": "1ba10cf5-1c4e-4b97-8793-2204089c1069"
     },
     {
       "name": "Build Summary",
@@ -440,7 +440,7 @@
         2080,
         200
       ],
-      "id": "890be9f7-a53e-4e2c-b304-67762baa18b4"
+      "id": "4f773cb6-b10e-44da-a1c2-a639f457efa3"
     }
   ],
   "connections": {
@@ -683,6 +683,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "4f4046ee-5b6f-45c5-be8d-cd532cd121c7",
+  "id": "e0a112e2-a686-4027-b1e8-84389d6eda01",
   "tags": []
 }

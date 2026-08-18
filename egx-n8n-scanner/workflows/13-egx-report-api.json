@@ -16,13 +16,13 @@
         "width": 560,
         "color": 5
       },
-      "id": "b59da651-e362-46a6-9287-98ec9d0b78c4"
+      "id": "395dd089-54f6-4a46-af88-cf87b240f1b9"
     },
     {
       "name": "Webhook: full-market",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "f9d574e5-339c-4def-8b86-89972761643e",
+      "webhookId": "9ce3831f-5500-4bf9-9073-3dbb2c1ae5df",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/stocks",
@@ -33,7 +33,7 @@
         0,
         0
       ],
-      "id": "62f0d62a-c8c6-4c6c-8267-7bf2f4631972"
+      "id": "a4828af8-bbf8-4046-852a-e1000c46edae"
     },
     {
       "name": "Check Auth: full-market",
@@ -48,7 +48,7 @@
         260,
         0
       ],
-      "id": "a1ff52cd-54be-4e60-b7c0-76ed4595cb05"
+      "id": "d98b8707-dc01-4dd0-be61-1c865476d7ec"
     },
     {
       "name": "Authorized?: full-market",
@@ -63,7 +63,7 @@
           },
           "conditions": [
             {
-              "id": "57ba39e9-d010-48cf-883b-d703f652297b",
+              "id": "757357b7-f6ca-420a-abeb-66453d622cd4",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -81,7 +81,7 @@
         520,
         0
       ],
-      "id": "e6f72b22-9d02-4c86-9d88-d801c4514731"
+      "id": "02ec3a41-7453-4e00-9352-e1ab986913e4"
     },
     {
       "name": "Respond 401: full-market",
@@ -98,7 +98,7 @@
         780,
         0
       ],
-      "id": "cb998660-0cd0-471b-8ef5-40c251b8af07"
+      "id": "ae2e062f-da9a-4419-8072-f8d7a06a89a6"
     },
     {
       "name": "Build Query: full-market",
@@ -107,13 +107,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const sortMap = { volume: 'volume', tradedvalue: 'traded_value', rvol: 'rvol20', score: 'overall_score', change: 'change_pct' };\nconst requested = String(($json.query && $json.query.sort) || 'score').toLowerCase();\nconst orderByColumn = sortMap[requested] || 'overall_score';\nreturn [{ json: { ...$json, orderByColumn } }];"
+        "jsCode": "const sortMap = { volume: 'volume', tradedvalue: 'traded_value', rvol: 'rvol20', score: 'overall_score', change: 'change_pct' };\nconst requested = String(($json.query && $json.query.sort) || 'score').toLowerCase();\nconst orderByColumn = sortMap[requested] || 'overall_score';\nconst rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, orderByColumn, dateParam } }];"
       },
       "position": [
         1040,
         0
       ],
-      "id": "fe965bd3-53d3-4c67-837c-711f5235afce"
+      "id": "c099dd17-6a07-4c04-8f81-7f267c00c0ba"
     },
     {
       "name": "Query: full-market",
@@ -121,15 +121,17 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "=SELECT * FROM v_full_market ORDER BY {{ $json.orderByColumn }} DESC NULLS LAST LIMIT 1000;",
-        "options": {}
+        "query": "=SELECT * FROM market_snapshot($1) ORDER BY {{ $json.orderByColumn }} DESC NULLS LAST LIMIT 1000;",
+        "options": {
+          "queryReplacement": "={{ [$json.dateParam] }}"
+        }
       },
       "onError": "continueRegularOutput",
       "position": [
         1300,
         0
       ],
-      "id": "3f7fca9a-40d5-40b0-9c2d-98563cee2e96"
+      "id": "4a0f082a-f0b1-487e-9ef7-0d50a976bcfa"
     },
     {
       "name": "Format: full-market",
@@ -144,7 +146,7 @@
         1560,
         0
       ],
-      "id": "68fe1f50-5ecf-4b9b-ad54-9531900e905a"
+      "id": "96f864a0-f9fd-4d6a-9910-e97d6a202070"
     },
     {
       "name": "Respond 200: full-market",
@@ -159,13 +161,13 @@
         1820,
         0
       ],
-      "id": "8d158a22-19fd-48ef-bd9d-9826cf3d1f0c"
+      "id": "3e1c5a77-d0f0-40fa-8727-4a0992d4db7d"
     },
     {
       "name": "Webhook: volume",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "20713fbe-fd2a-4e5a-9b41-f6f1b1cff5a4",
+      "webhookId": "9655015e-4cc1-4ebe-a04e-2be8ec893952",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/stocks/volume",
@@ -176,7 +178,7 @@
         2080,
         0
       ],
-      "id": "d28acbb6-4b45-4ace-8b0b-a665df646756"
+      "id": "527a3d53-ce14-460c-af8d-da3f2c5ced3c"
     },
     {
       "name": "Check Auth: volume",
@@ -191,7 +193,7 @@
         2340,
         0
       ],
-      "id": "2e49402b-7b6f-4b0c-af1f-9c6cb591be32"
+      "id": "e954a062-e07a-49f2-8e78-1bb4c58856ad"
     },
     {
       "name": "Authorized?: volume",
@@ -206,7 +208,7 @@
           },
           "conditions": [
             {
-              "id": "3dce0296-484f-4f0d-818f-3056fe602fc9",
+              "id": "f42ba3a8-5bee-48c1-99a0-8f77d8e085ed",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -224,7 +226,7 @@
         2600,
         0
       ],
-      "id": "cdff1d13-a47b-43d0-a1f6-32be65fddabf"
+      "id": "7a063fd6-9f85-4d06-82c0-fc438184348a"
     },
     {
       "name": "Respond 401: volume",
@@ -241,7 +243,22 @@
         0,
         200
       ],
-      "id": "963a2fe5-11f5-4741-8d49-01393d2e36ae"
+      "id": "95040299-07fb-4d46-a2fe-5767b45e357c"
+    },
+    {
+      "name": "Build Query: volume",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, dateParam } }];"
+      },
+      "position": [
+        260,
+        200
+      ],
+      "id": "28d6a4c8-40fb-452e-9c49-34eeb1ea3a61"
     },
     {
       "name": "Query: volume",
@@ -249,15 +266,17 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT symbol, name, sector, close, volume, traded_value, avg_volume20, rvol20, rvol50, target1, target1_gain_pct, target1_estimated_days, historical_target1_hit_pct, historical_stop_hit_pct, historical_sample_size\nFROM v_full_market ORDER BY volume DESC NULLS LAST LIMIT 1000;",
-        "options": {}
+        "query": "SELECT symbol, name, sector, close, volume, traded_value, avg_volume20, rvol20, rvol50, target1, target1_gain_pct, target1_estimated_days, historical_target1_hit_pct, historical_stop_hit_pct, historical_sample_size\nFROM market_snapshot($1) ORDER BY volume DESC NULLS LAST LIMIT 1000;",
+        "options": {
+          "queryReplacement": "={{ [$json.dateParam] }}"
+        }
       },
       "onError": "continueRegularOutput",
       "position": [
-        260,
+        520,
         200
       ],
-      "id": "75568838-5f92-462b-8a90-f058f2a88fbd"
+      "id": "3621cd5c-f06b-4b11-9933-5138c98e77ba"
     },
     {
       "name": "Format: volume",
@@ -269,10 +288,10 @@
         "jsCode": "return [{ json: { success: true, count: $input.all().length, results: $input.all().map((i) => i.json) } }];"
       },
       "position": [
-        520,
+        780,
         200
       ],
-      "id": "df41e282-7f8e-4299-a928-e9e1e2232084"
+      "id": "2a2300f4-011c-4e70-9273-11dd46756701"
     },
     {
       "name": "Respond 200: volume",
@@ -284,16 +303,16 @@
         "options": {}
       },
       "position": [
-        780,
+        1040,
         200
       ],
-      "id": "c353ed82-baac-4651-94ad-d09f545ed86f"
+      "id": "c64ba6fc-b0a6-46a1-86a9-e80f7aa4d560"
     },
     {
       "name": "Webhook: relative-volume",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "e4597775-35b0-46fd-936a-5e5e1c17945e",
+      "webhookId": "b3b618dc-90a0-49be-b1f0-fb4ff710af5b",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/stocks/relative-volume",
@@ -301,10 +320,10 @@
         "options": {}
       },
       "position": [
-        1040,
+        1300,
         200
       ],
-      "id": "97a192b7-26ed-4108-be50-a7ec35b2da27"
+      "id": "ade36e68-eab3-424c-934f-d3f26b619fe2"
     },
     {
       "name": "Check Auth: relative-volume",
@@ -316,10 +335,10 @@
         "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
       },
       "position": [
-        1300,
+        1560,
         200
       ],
-      "id": "7989cf1f-5d21-46bc-ad35-188861bafc6e"
+      "id": "32762942-f1fd-4694-9ece-71fc80b72147"
     },
     {
       "name": "Authorized?: relative-volume",
@@ -334,7 +353,7 @@
           },
           "conditions": [
             {
-              "id": "a1c0b30c-9246-435a-8655-edd6301d4be6",
+              "id": "55b90e75-27ad-4912-8b11-9100150d6b33",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -349,10 +368,10 @@
         "options": {}
       },
       "position": [
-        1560,
+        1820,
         200
       ],
-      "id": "3bbbd990-fca2-4586-a467-8d26752e1b96"
+      "id": "196e81ef-2a37-481e-be4a-d51a69964f0e"
     },
     {
       "name": "Respond 401: relative-volume",
@@ -366,10 +385,25 @@
         }
       },
       "position": [
-        1820,
+        2080,
         200
       ],
-      "id": "0eb9ed21-48fb-48b4-b225-d7b8a37beafe"
+      "id": "dadaf1f3-340c-4fbf-8cdd-f3d883926061"
+    },
+    {
+      "name": "Build Query: relative-volume",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, dateParam } }];"
+      },
+      "position": [
+        2340,
+        200
+      ],
+      "id": "634afe17-ce66-4ead-96bd-c2d63e451d6e"
     },
     {
       "name": "Query: relative-volume",
@@ -377,15 +411,17 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT symbol, name, sector, close, volume, avg_volume20, rvol20, rvol50, target1, target1_gain_pct, target1_estimated_days, historical_target1_hit_pct, historical_stop_hit_pct, historical_sample_size\nFROM v_full_market ORDER BY rvol20 DESC NULLS LAST LIMIT 1000;",
-        "options": {}
+        "query": "SELECT symbol, name, sector, close, volume, avg_volume20, rvol20, rvol50, target1, target1_gain_pct, target1_estimated_days, historical_target1_hit_pct, historical_stop_hit_pct, historical_sample_size\nFROM market_snapshot($1) ORDER BY rvol20 DESC NULLS LAST LIMIT 1000;",
+        "options": {
+          "queryReplacement": "={{ [$json.dateParam] }}"
+        }
       },
       "onError": "continueRegularOutput",
       "position": [
-        2080,
+        2600,
         200
       ],
-      "id": "31526d4d-3c5a-4648-9683-250294ffa5d4"
+      "id": "fbe5c901-381f-4b95-9736-a7b47baeb369"
     },
     {
       "name": "Format: relative-volume",
@@ -397,10 +433,10 @@
         "jsCode": "return [{ json: { success: true, count: $input.all().length, results: $input.all().map((i) => i.json) } }];"
       },
       "position": [
-        2340,
-        200
+        0,
+        400
       ],
-      "id": "f2153ca0-283e-45cc-be35-f2f8c97fc04d"
+      "id": "1b89bf62-dc30-4872-9d75-cb99ec5b63c6"
     },
     {
       "name": "Respond 200: relative-volume",
@@ -412,16 +448,16 @@
         "options": {}
       },
       "position": [
-        2600,
-        200
+        260,
+        400
       ],
-      "id": "77df22ee-3e7c-4ee5-b55c-ef680703a588"
+      "id": "d11a2c5d-fd6c-4c40-903d-7c56beac36a2"
     },
     {
       "name": "Webhook: top",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "9a71869a-9352-4a90-b180-97e87d63bd40",
+      "webhookId": "d8ff3065-a4d6-4d90-8e56-502387bcf31a",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/top",
@@ -429,10 +465,10 @@
         "options": {}
       },
       "position": [
-        0,
+        520,
         400
       ],
-      "id": "5236aded-97ed-47cb-982c-4da777195b50"
+      "id": "1158597e-38fa-4da9-890b-e2a770263d01"
     },
     {
       "name": "Check Auth: top",
@@ -444,10 +480,10 @@
         "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
       },
       "position": [
-        260,
+        780,
         400
       ],
-      "id": "eba3d286-71b2-4e78-82b6-ed99abe6a910"
+      "id": "fb131682-6cec-46c9-b6ef-4c07e55c8cd0"
     },
     {
       "name": "Authorized?: top",
@@ -462,7 +498,7 @@
           },
           "conditions": [
             {
-              "id": "5685d1a3-ca74-48b5-964d-9ee9e85d900d",
+              "id": "70c2aa11-1fb6-43fb-976a-787834769901",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -477,10 +513,10 @@
         "options": {}
       },
       "position": [
-        520,
+        1040,
         400
       ],
-      "id": "10cc8bb6-5483-4485-860b-7bcf3a2eed46"
+      "id": "7d61bf67-b654-4f8e-88cc-9120bf4455e9"
     },
     {
       "name": "Respond 401: top",
@@ -494,10 +530,25 @@
         }
       },
       "position": [
-        780,
+        1300,
         400
       ],
-      "id": "3ffe3f32-751d-4d52-8744-6ded64207ac1"
+      "id": "7fb1642c-bdb3-4120-83b3-82b5190a279c"
+    },
+    {
+      "name": "Build Query: top",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, dateParam } }];"
+      },
+      "position": [
+        1560,
+        400
+      ],
+      "id": "871b7fd4-e437-493e-9036-b2cc2841c802"
     },
     {
       "name": "Query: top",
@@ -505,17 +556,18 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM v_latest_scanner_run)\n  AND eligible = TRUE\nORDER BY overall_rank ASC\nLIMIT COALESCE(NULLIF($1, 0), 10);",
+        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($2))\n  AND eligible = TRUE\nORDER BY overall_rank ASC\nLIMIT COALESCE(NULLIF($1, 0), 10);",
         "options": {
-          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10 ] }}"
+          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10, $json.dateParam ] }}"
         }
       },
       "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
       "position": [
-        1040,
+        1820,
         400
       ],
-      "id": "d44d9056-f46c-40bf-a5d3-c3fe3888adc8"
+      "id": "5f0f9753-8f54-4728-9575-0054e397d942"
     },
     {
       "name": "Format: top",
@@ -524,13 +576,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const rows = $input.all().map((i) => i.json);\nreturn [{ json: {\n  success: true,\n  tradingDate: rows[0] ? rows[0].trading_date : null,\n  results: rows,\n} }];"
+        "jsCode": "// alwaysOutputData means a genuinely-empty result (no scanner run for the\n// requested date) still arrives as one placeholder item with an empty\n// json object — filter it back out rather than treating it as a row.\nconst rows = $input.all().map((i) => i.json).filter((r) => r && Object.keys(r).length > 0);\nreturn [{ json: {\n  success: true,\n  tradingDate: rows[0] ? rows[0].trading_date : null,\n  results: rows,\n} }];"
       },
       "position": [
-        1300,
+        2080,
         400
       ],
-      "id": "dd007a8c-55e6-4b3d-b37b-d31db4c9852d"
+      "id": "481f5e6f-06bb-46be-bfdd-23716c652570"
     },
     {
       "name": "Respond 200: top",
@@ -542,16 +594,16 @@
         "options": {}
       },
       "position": [
-        1560,
+        2340,
         400
       ],
-      "id": "e81935b8-776d-4ab3-8be1-6eaf1ae97472"
+      "id": "9b3c51cf-ba7e-4b24-904a-81ae277e4e5e"
     },
     {
       "name": "Webhook: breakout",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "2f9461cb-f97c-47da-a2e7-8f109b9f3705",
+      "webhookId": "03151d2c-dbf3-414f-b362-89231518084b",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/breakout",
@@ -559,10 +611,10 @@
         "options": {}
       },
       "position": [
-        1820,
+        2600,
         400
       ],
-      "id": "5f2b26d3-8588-40be-8ce8-ef15f3dfb449"
+      "id": "ba62cedb-22de-40c9-bdfe-2518b45fea6b"
     },
     {
       "name": "Check Auth: breakout",
@@ -574,10 +626,10 @@
         "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
       },
       "position": [
-        2080,
-        400
+        0,
+        600
       ],
-      "id": "19b268ca-272a-40bd-aee6-caba4e37b66f"
+      "id": "1b0e6a17-136a-4cae-ae8d-db6bfff63bab"
     },
     {
       "name": "Authorized?: breakout",
@@ -592,7 +644,7 @@
           },
           "conditions": [
             {
-              "id": "3bb4dfc6-d12b-4cde-a41f-ef68bee9a82c",
+              "id": "25ef5e31-9fa0-4b20-bab2-0baf1df6f1de",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -607,10 +659,10 @@
         "options": {}
       },
       "position": [
-        2340,
-        400
+        260,
+        600
       ],
-      "id": "493f832b-1e39-4537-a973-333b41bfd8f0"
+      "id": "93b7db1e-630a-46e1-8cfe-4869bf23f5a1"
     },
     {
       "name": "Respond 401: breakout",
@@ -624,10 +676,25 @@
         }
       },
       "position": [
-        2600,
-        400
+        520,
+        600
       ],
-      "id": "d532234b-6fd4-4cc9-895c-30911cfe7f3f"
+      "id": "b0814c96-6fb0-4402-9e1b-4c1f80355995"
+    },
+    {
+      "name": "Build Query: breakout",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, dateParam } }];"
+      },
+      "position": [
+        780,
+        600
+      ],
+      "id": "de11bdd4-1883-495d-a392-75fe0dab2d17"
     },
     {
       "name": "Query: breakout",
@@ -635,17 +702,18 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM v_latest_scanner_run) AND eligible = TRUE\nORDER BY breakout_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
+        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($2)) AND eligible = TRUE\nORDER BY breakout_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
         "options": {
-          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10 ] }}"
+          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10, $json.dateParam ] }}"
         }
       },
       "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
       "position": [
-        0,
+        1040,
         600
       ],
-      "id": "68d56769-8e59-41fe-92ec-e8b4a6a4e94c"
+      "id": "533131b9-3b39-455d-b848-1ac98594a27a"
     },
     {
       "name": "Format: breakout",
@@ -654,13 +722,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const rows = $input.all().map((i) => i.json);\nreturn [{ json: { success: true, setup: 'breakout', results: rows } }];"
+        "jsCode": "const rows = $input.all().map((i) => i.json).filter((r) => r && Object.keys(r).length > 0);\nreturn [{ json: { success: true, setup: 'breakout', results: rows } }];"
       },
       "position": [
-        260,
+        1300,
         600
       ],
-      "id": "d6a55a05-c119-4f5d-a061-ab01f675de0b"
+      "id": "e2288f04-2612-49b0-9825-89404be3f644"
     },
     {
       "name": "Respond 200: breakout",
@@ -672,16 +740,16 @@
         "options": {}
       },
       "position": [
-        520,
+        1560,
         600
       ],
-      "id": "c2ac8531-ef76-40af-b29d-d99b4104df76"
+      "id": "4825f6ab-4ddb-43ac-85df-4fdae7d2f367"
     },
     {
       "name": "Webhook: momentum",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "a50fb60a-ed84-4f06-ab48-bea4998b8ec7",
+      "webhookId": "e27831d9-e59e-4acc-8f1f-869505caa53e",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/momentum",
@@ -689,10 +757,10 @@
         "options": {}
       },
       "position": [
-        780,
+        1820,
         600
       ],
-      "id": "36c36e0d-4b42-43e1-8ad8-26947c3b2038"
+      "id": "3d690562-b659-4e1d-b6de-80291f87b7aa"
     },
     {
       "name": "Check Auth: momentum",
@@ -704,10 +772,10 @@
         "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
       },
       "position": [
-        1040,
+        2080,
         600
       ],
-      "id": "b83c3664-290b-4cc1-ab5d-a74c154ea474"
+      "id": "3900366c-759b-42ca-a5e4-54768e3a7735"
     },
     {
       "name": "Authorized?: momentum",
@@ -722,7 +790,7 @@
           },
           "conditions": [
             {
-              "id": "8024bd72-c7ba-4db2-b7b4-25a963570316",
+              "id": "83720923-62a8-45f5-b0a8-44c359365612",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -737,10 +805,10 @@
         "options": {}
       },
       "position": [
-        1300,
+        2340,
         600
       ],
-      "id": "37969704-5b88-426b-ab3b-3938d46fc837"
+      "id": "2a8ab9fa-f387-4175-883e-b6890c041574"
     },
     {
       "name": "Respond 401: momentum",
@@ -754,10 +822,25 @@
         }
       },
       "position": [
-        1560,
+        2600,
         600
       ],
-      "id": "4cdd6fc9-db95-4e5a-b1b1-0a42aa5bcc7e"
+      "id": "46b61608-6084-4293-a4e1-3b9056c8cc15"
+    },
+    {
+      "name": "Build Query: momentum",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, dateParam } }];"
+      },
+      "position": [
+        0,
+        800
+      ],
+      "id": "21bb5acf-494f-4e23-a91a-1e3c2f184eeb"
     },
     {
       "name": "Query: momentum",
@@ -765,17 +848,18 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM v_latest_scanner_run) AND eligible = TRUE\nORDER BY momentum_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
+        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($2)) AND eligible = TRUE\nORDER BY momentum_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
         "options": {
-          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10 ] }}"
+          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10, $json.dateParam ] }}"
         }
       },
       "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
       "position": [
-        1820,
-        600
+        260,
+        800
       ],
-      "id": "e4a180ba-849b-4310-835e-a062a6ba94c0"
+      "id": "af5a05f6-77db-401c-a0dd-36803f618a02"
     },
     {
       "name": "Format: momentum",
@@ -784,13 +868,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const rows = $input.all().map((i) => i.json);\nreturn [{ json: { success: true, setup: 'momentum', results: rows } }];"
+        "jsCode": "const rows = $input.all().map((i) => i.json).filter((r) => r && Object.keys(r).length > 0);\nreturn [{ json: { success: true, setup: 'momentum', results: rows } }];"
       },
       "position": [
-        2080,
-        600
+        520,
+        800
       ],
-      "id": "d8e5b4aa-5e00-4f49-b3b0-2a37780e16e6"
+      "id": "1ed663fa-00ac-4a19-95d2-afb3bede5886"
     },
     {
       "name": "Respond 200: momentum",
@@ -802,16 +886,16 @@
         "options": {}
       },
       "position": [
-        2340,
-        600
+        780,
+        800
       ],
-      "id": "4c091396-4ea2-4601-9c3d-9f0281338c07"
+      "id": "393b2a0e-a88e-46d8-af11-1f8f016f75be"
     },
     {
       "name": "Webhook: pullback",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "0245bc1b-016d-40b5-a79c-76273dd77c94",
+      "webhookId": "6e6c5abb-1510-4470-9773-1a53d53918c4",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/pullback",
@@ -819,10 +903,10 @@
         "options": {}
       },
       "position": [
-        2600,
-        600
+        1040,
+        800
       ],
-      "id": "46eb23da-ea1d-45a7-bd18-c7b9bdc622b8"
+      "id": "3e454304-5fed-428b-a6eb-573b98174301"
     },
     {
       "name": "Check Auth: pullback",
@@ -834,10 +918,10 @@
         "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
       },
       "position": [
-        0,
+        1300,
         800
       ],
-      "id": "8da920b9-de0a-40e4-98cd-17f02f1a240f"
+      "id": "ed2f0063-cf4a-4395-9f06-1b658405dc0c"
     },
     {
       "name": "Authorized?: pullback",
@@ -852,7 +936,7 @@
           },
           "conditions": [
             {
-              "id": "dd4a6493-cb1c-4461-a1b1-5607459e3022",
+              "id": "51c789fe-6b22-4594-bdb5-e934eaa9797e",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -867,10 +951,10 @@
         "options": {}
       },
       "position": [
-        260,
+        1560,
         800
       ],
-      "id": "ae974654-c475-4256-8650-22c940b0f392"
+      "id": "efdb74ea-7d87-4995-9d26-7233eba30564"
     },
     {
       "name": "Respond 401: pullback",
@@ -884,10 +968,25 @@
         }
       },
       "position": [
-        520,
+        1820,
         800
       ],
-      "id": "7d637ecb-9ded-4e1f-9a56-807940c5cc05"
+      "id": "57a52c97-bcb7-425a-a217-0426868a1787"
+    },
+    {
+      "name": "Build Query: pullback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, dateParam } }];"
+      },
+      "position": [
+        2080,
+        800
+      ],
+      "id": "3c0fa2e6-9078-4a4e-9764-33d822bf46d7"
     },
     {
       "name": "Query: pullback",
@@ -895,17 +994,18 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM v_latest_scanner_run) AND eligible = TRUE\nORDER BY pullback_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
+        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($2)) AND eligible = TRUE\nORDER BY pullback_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
         "options": {
-          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10 ] }}"
+          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10, $json.dateParam ] }}"
         }
       },
       "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
       "position": [
-        780,
+        2340,
         800
       ],
-      "id": "ac7afe0f-0042-4da6-8ba6-6983848cb92c"
+      "id": "7866734e-a174-496d-be55-ad2cdb01d23a"
     },
     {
       "name": "Format: pullback",
@@ -914,13 +1014,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const rows = $input.all().map((i) => i.json);\nreturn [{ json: { success: true, setup: 'pullback', results: rows } }];"
+        "jsCode": "const rows = $input.all().map((i) => i.json).filter((r) => r && Object.keys(r).length > 0);\nreturn [{ json: { success: true, setup: 'pullback', results: rows } }];"
       },
       "position": [
-        1040,
+        2600,
         800
       ],
-      "id": "f1691f96-cd51-49fe-8950-03d85499212e"
+      "id": "3dda8c67-3607-4964-8b2a-417851f48483"
     },
     {
       "name": "Respond 200: pullback",
@@ -932,16 +1032,16 @@
         "options": {}
       },
       "position": [
-        1300,
-        800
+        0,
+        1000
       ],
-      "id": "eff2a04c-7f1f-491f-9524-554a7ef0c589"
+      "id": "cdb143c3-606b-4872-b0cf-3e0bd1dc88a6"
     },
     {
       "name": "Webhook: reversal",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "423787ac-c241-4ee8-9e8b-ba13fa2a6312",
+      "webhookId": "dc74670a-f5d2-4fc2-b45c-8900a40999e4",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/reversal",
@@ -949,10 +1049,10 @@
         "options": {}
       },
       "position": [
-        1560,
-        800
+        260,
+        1000
       ],
-      "id": "6c02c01d-c9cc-4016-b7c1-47891471b1f6"
+      "id": "846d88a4-ab20-4110-9492-771e9751a43e"
     },
     {
       "name": "Check Auth: reversal",
@@ -964,10 +1064,10 @@
         "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
       },
       "position": [
-        1820,
-        800
+        520,
+        1000
       ],
-      "id": "3d4d383c-ce86-4857-8ea4-da9d3ed5031f"
+      "id": "9f03dbf4-fe01-4564-b3ff-5bef248fc0e0"
     },
     {
       "name": "Authorized?: reversal",
@@ -982,7 +1082,7 @@
           },
           "conditions": [
             {
-              "id": "d1b9ccdf-9f0f-4062-bac7-0fd63f8824ce",
+              "id": "4c71499f-1306-4332-b051-ddb97817247c",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -997,10 +1097,10 @@
         "options": {}
       },
       "position": [
-        2080,
-        800
+        780,
+        1000
       ],
-      "id": "9676fec5-a13c-47db-9a9c-cdad1a649a58"
+      "id": "c3f87309-77c2-4971-8f79-62325bbb5543"
     },
     {
       "name": "Respond 401: reversal",
@@ -1014,10 +1114,25 @@
         }
       },
       "position": [
-        2340,
-        800
+        1040,
+        1000
       ],
-      "id": "e1ea4e30-4cf6-440f-89c2-79a84440370d"
+      "id": "b9005b85-5eff-40e3-a4cd-adbdee87c923"
+    },
+    {
+      "name": "Build Query: reversal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, dateParam } }];"
+      },
+      "position": [
+        1300,
+        1000
+      ],
+      "id": "dc5f075c-fc81-45f9-ab82-8207f90d22de"
     },
     {
       "name": "Query: reversal",
@@ -1025,17 +1140,18 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM v_latest_scanner_run) AND eligible = TRUE\nORDER BY reversal_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
+        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($2)) AND eligible = TRUE\nORDER BY reversal_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
         "options": {
-          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10 ] }}"
+          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10, $json.dateParam ] }}"
         }
       },
       "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
       "position": [
-        2600,
-        800
+        1560,
+        1000
       ],
-      "id": "acaa6d3c-843a-4bf7-9176-7a2e1e9d36e6"
+      "id": "3c09cf34-8bfe-4859-97e2-7cca850d0259"
     },
     {
       "name": "Format: reversal",
@@ -1044,13 +1160,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const rows = $input.all().map((i) => i.json);\nreturn [{ json: { success: true, setup: 'reversal', results: rows } }];"
+        "jsCode": "const rows = $input.all().map((i) => i.json).filter((r) => r && Object.keys(r).length > 0);\nreturn [{ json: { success: true, setup: 'reversal', results: rows } }];"
       },
       "position": [
-        0,
+        1820,
         1000
       ],
-      "id": "72d29371-1811-442c-bd23-081dc2fc6e61"
+      "id": "ffc0328b-0090-44c2-9fa6-616303de0cdd"
     },
     {
       "name": "Respond 200: reversal",
@@ -1062,16 +1178,16 @@
         "options": {}
       },
       "position": [
-        260,
+        2080,
         1000
       ],
-      "id": "8bb03022-33df-46d2-80e4-54bb922398b8"
+      "id": "619ff6a4-63c1-4908-8437-d932c6c36cab"
     },
     {
       "name": "Webhook: stock-detail",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "06c36701-2b45-4605-b7c0-9fb58237b623",
+      "webhookId": "16632b62-e196-4ade-96d6-5c993bda4271",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/stock",
@@ -1079,10 +1195,10 @@
         "options": {}
       },
       "position": [
-        520,
+        2340,
         1000
       ],
-      "id": "c5cd7a86-1d05-4f05-adb8-c14f815e179e"
+      "id": "f53e1518-4121-47f4-b2b2-9357eb218398"
     },
     {
       "name": "Check Auth: stock-detail",
@@ -1094,10 +1210,10 @@
         "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
       },
       "position": [
-        780,
+        2600,
         1000
       ],
-      "id": "bd23b2ca-df37-493f-b029-3b56d315486d"
+      "id": "0298ecd1-a20b-4139-b0ea-43925c5546cb"
     },
     {
       "name": "Authorized?: stock-detail",
@@ -1112,7 +1228,7 @@
           },
           "conditions": [
             {
-              "id": "88563af7-5f76-497e-b232-1ba46bef5d82",
+              "id": "821aa4d5-63cf-4b85-9593-e5330fd1dafc",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -1127,10 +1243,10 @@
         "options": {}
       },
       "position": [
-        1040,
-        1000
+        0,
+        1200
       ],
-      "id": "4060fa7e-5cec-44fd-a7d6-46e42d5bbf56"
+      "id": "3fb29e30-1086-43fb-9134-9f7c50f590d6"
     },
     {
       "name": "Respond 401: stock-detail",
@@ -1144,10 +1260,10 @@
         }
       },
       "position": [
-        1300,
-        1000
+        260,
+        1200
       ],
-      "id": "53196024-87d0-41db-af34-3426b63349c5"
+      "id": "ed36a0f1-4f58-4bec-af40-0e8ea1f0efd1"
     },
     {
       "name": "Build Query: stock-detail",
@@ -1159,10 +1275,10 @@
         "jsCode": "const symbol = String(($json.query && $json.query.symbol) || '').toUpperCase().replace(/[^A-Z0-9.]/g, '');\nif (!symbol) throw new Error('symbol query parameter is required, e.g. ?symbol=COMI');\nreturn [{ json: { ...$json, symbol } }];"
       },
       "position": [
-        1560,
-        1000
+        520,
+        1200
       ],
-      "id": "6973a3a1-c228-40a0-a82a-2268e8c8c661"
+      "id": "dcf28826-afbe-4ffc-9311-fd999b8d22c3"
     },
     {
       "name": "Query: stock-detail",
@@ -1177,10 +1293,10 @@
       },
       "onError": "continueRegularOutput",
       "position": [
-        1820,
-        1000
+        780,
+        1200
       ],
-      "id": "c612abd4-ae38-45d0-8bc5-aac6a12c7c65"
+      "id": "eb142afe-bd43-4ab2-acd3-b1f7726f5e75"
     },
     {
       "name": "Format: stock-detail",
@@ -1192,10 +1308,10 @@
         "jsCode": "const row = $input.first() ? $input.first().json : null;\nif (!row) return [{ json: { success: false, error: 'symbol not found' } }];\nreturn [{ json: {\n  success: true,\n  symbol: row.symbol, name: row.name, close: row.close, changePct: row.change_pct,\n  volume: row.volume, averageVolume20: row.avg_volume20, relativeVolume20: row.rvol20,\n  rsi14: row.rsi14,\n  macd: { line: row.macd, signal: row.macd_signal, histogram: row.macd_histogram, state: (row.macd_histogram > 0 ? 'BULLISH' : 'BEARISH') },\n  movingAverages: { ema9: row.ema9, ema20: row.ema20, ema50: row.ema50, ema200: row.ema200 },\n  support: [row.support1, row.support2, row.support3].filter((v) => v !== null),\n  resistance: [row.resistance1, row.resistance2, row.resistance3].filter((v) => v !== null),\n  scores: { overall: row.overall_score, breakout: row.breakout_score, momentum: row.momentum_score, pullback: row.pullback_score, reversal: row.reversal_score },\n  setup: row.setup_type,\n  eligible: row.eligible,\n  // gainPct is potential gain IF the target is reached, plain arithmetic on\n  // entry/target — NOT a forecast. estimatedDays is a rough ATR-based\n  // projection (this stock's own average daily range), NOT a historical\n  // statistic or a guarantee of when (or whether) the target is hit — see\n  // docs/SCORING.md for the exact method.\n  tradeStructure: {\n    entry: row.entry_price, invalidation: row.invalidation_price,\n    target1: row.target1, target2: row.target2, target3: row.target3,\n    riskReward: { t1: row.risk_reward_t1, t2: row.risk_reward_t2, t3: row.risk_reward_t3 },\n    gainPct: { t1: row.target1_gain_pct, t2: row.target2_gain_pct, t3: row.target3_gain_pct },\n    estimatedDays: { t1: row.target1_estimated_days, t2: row.target2_estimated_days, t3: row.target3_estimated_days },\n  },\n  // Measured historical outcome rate for this setup_type, walking forward\n  // up to target1_estimated_days trading sessions across every past\n  // eligible pick of the same setup — NOT a forecast for THIS stock, and\n  // not reliable when sampleSize is small (see docs/SCORING.md).\n  historicalProbability: {\n    setupType: row.setup_type,\n    target1HitPct: row.historical_target1_hit_pct,\n    stopHitPct: row.historical_stop_hit_pct,\n    sampleSize: row.historical_sample_size,\n  },\n} }];"
       },
       "position": [
-        2080,
-        1000
+        1040,
+        1200
       ],
-      "id": "1afb38d3-515a-4134-a76c-7dc64effe095"
+      "id": "e204e43a-879d-42f9-bb28-71ec1d0f6f19"
     },
     {
       "name": "Respond 200: stock-detail",
@@ -1207,16 +1323,16 @@
         "options": {}
       },
       "position": [
-        2340,
-        1000
+        1300,
+        1200
       ],
-      "id": "291e6050-7fae-482d-b7bf-1744a025e0ad"
+      "id": "a35cee0f-a15f-480a-a1af-6fcc8aa3a8bd"
     },
     {
       "name": "Webhook: stock-technicals",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "79d3ea66-d998-4e53-af20-7cce9f543707",
+      "webhookId": "9f199d33-97e3-4ec0-ab54-052f33c8b67b",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/stock/technicals",
@@ -1224,10 +1340,10 @@
         "options": {}
       },
       "position": [
-        2600,
-        1000
+        1560,
+        1200
       ],
-      "id": "9e3f80da-2bd5-4339-a205-e8d1eeb2a84c"
+      "id": "74aa1a39-d12e-4975-ad1e-6cbca28e2645"
     },
     {
       "name": "Check Auth: stock-technicals",
@@ -1239,10 +1355,10 @@
         "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
       },
       "position": [
-        0,
+        1820,
         1200
       ],
-      "id": "013b9010-42ff-4136-8373-4120ac705216"
+      "id": "ceaa71b1-6d43-423f-98a5-dc8fdace692e"
     },
     {
       "name": "Authorized?: stock-technicals",
@@ -1257,7 +1373,7 @@
           },
           "conditions": [
             {
-              "id": "d7cc45bb-62fc-4a12-9bf9-5903cfbadb00",
+              "id": "ae3a49cb-61a0-4bb5-b456-45461afc215a",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -1272,10 +1388,10 @@
         "options": {}
       },
       "position": [
-        260,
+        2080,
         1200
       ],
-      "id": "b25c5ef3-2cdf-453f-bcc6-5798248ee468"
+      "id": "b69c4323-dcda-464c-a3dc-bbb99c5df9db"
     },
     {
       "name": "Respond 401: stock-technicals",
@@ -1289,10 +1405,10 @@
         }
       },
       "position": [
-        520,
+        2340,
         1200
       ],
-      "id": "47f44971-4910-4fb1-966e-86cd6ad1f566"
+      "id": "13832914-82ec-44df-a870-43b1e010d448"
     },
     {
       "name": "Build Query: stock-technicals",
@@ -1304,10 +1420,10 @@
         "jsCode": "const symbol = String(($json.query && $json.query.symbol) || '').toUpperCase().replace(/[^A-Z0-9.]/g, '');\nif (!symbol) throw new Error('symbol query parameter is required, e.g. ?symbol=COMI');\nreturn [{ json: { ...$json, symbol } }];"
       },
       "position": [
-        780,
+        2600,
         1200
       ],
-      "id": "1c63ead0-830a-4171-83fe-3e1c550e75f3"
+      "id": "f1e1eaa5-386b-4375-9f37-808d02b59ae3"
     },
     {
       "name": "Query: stock-technicals",
@@ -1322,10 +1438,10 @@
       },
       "onError": "continueRegularOutput",
       "position": [
-        1040,
-        1200
+        0,
+        1400
       ],
-      "id": "6a65eada-acde-4c8a-9191-8f3d673db8e1"
+      "id": "324935f8-aebf-4252-ae5c-0373908a0a22"
     },
     {
       "name": "Format: stock-technicals",
@@ -1337,10 +1453,10 @@
         "jsCode": "const row = $input.first() ? $input.first().json.technicals : null;\nif (!row) return [{ json: { success: false, error: 'no technical analysis found for symbol' } }];\nreturn [{ json: { success: true, technicals: row } }];"
       },
       "position": [
-        1300,
-        1200
+        260,
+        1400
       ],
-      "id": "6a06459d-2eca-4138-9660-c053ccc87c5c"
+      "id": "ed340c1a-f620-4589-abab-dd4de554e454"
     },
     {
       "name": "Respond 200: stock-technicals",
@@ -1352,16 +1468,16 @@
         "options": {}
       },
       "position": [
-        1560,
-        1200
+        520,
+        1400
       ],
-      "id": "0c7f18e9-eeb8-49de-b0de-7272860cf9e3"
+      "id": "6f4c9213-bc73-47ba-99a5-e45e78647ba5"
     },
     {
       "name": "Webhook: stock-support-resistance",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "a8407a1e-7fb4-4e80-a28f-43d71e075e5e",
+      "webhookId": "27a9638b-e14d-48a8-b279-3f16e463f3c0",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/stock/support-resistance",
@@ -1369,10 +1485,10 @@
         "options": {}
       },
       "position": [
-        1820,
-        1200
+        780,
+        1400
       ],
-      "id": "2413cdb4-861b-4899-a1da-9948f686c77e"
+      "id": "fff92216-a38f-403d-93d2-00be9d81f934"
     },
     {
       "name": "Check Auth: stock-support-resistance",
@@ -1384,10 +1500,10 @@
         "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
       },
       "position": [
-        2080,
-        1200
+        1040,
+        1400
       ],
-      "id": "80cb943a-5c17-460d-910b-e9f1f0033a8e"
+      "id": "d20c1530-e363-482b-b6ee-ae70af6114e5"
     },
     {
       "name": "Authorized?: stock-support-resistance",
@@ -1402,7 +1518,7 @@
           },
           "conditions": [
             {
-              "id": "113c0067-06e0-44cf-89c6-0654a951c2ac",
+              "id": "7439e07a-86af-4e94-a3ef-4c928018142e",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -1417,10 +1533,10 @@
         "options": {}
       },
       "position": [
-        2340,
-        1200
+        1300,
+        1400
       ],
-      "id": "b19a9bd8-fd98-4f32-92c6-c3ecb66934c7"
+      "id": "c20138e9-267d-4602-b79a-8da848ea3125"
     },
     {
       "name": "Respond 401: stock-support-resistance",
@@ -1434,10 +1550,10 @@
         }
       },
       "position": [
-        2600,
-        1200
+        1560,
+        1400
       ],
-      "id": "b3c92a98-a89f-4af8-b0a9-c4cafb50ef25"
+      "id": "eb394a03-ba6b-46bc-84aa-e95b0f86ed55"
     },
     {
       "name": "Build Query: stock-support-resistance",
@@ -1449,10 +1565,10 @@
         "jsCode": "const symbol = String(($json.query && $json.query.symbol) || '').toUpperCase().replace(/[^A-Z0-9.]/g, '');\nif (!symbol) throw new Error('symbol query parameter is required, e.g. ?symbol=COMI');\nreturn [{ json: { ...$json, symbol } }];"
       },
       "position": [
-        0,
+        1820,
         1400
       ],
-      "id": "154481ec-690b-47d4-8118-e7481aa48e1c"
+      "id": "6d5658be-1561-4dac-82ea-993fbc7d7b52"
     },
     {
       "name": "Query: stock-support-resistance",
@@ -1467,10 +1583,10 @@
       },
       "onError": "continueRegularOutput",
       "position": [
-        260,
+        2080,
         1400
       ],
-      "id": "7caa41f8-abb4-467c-bd3c-9da4842b5df6"
+      "id": "a9e203a7-eebc-4d43-b4f8-4088db2a124f"
     },
     {
       "name": "Format: stock-support-resistance",
@@ -1482,10 +1598,10 @@
         "jsCode": "const row = $input.first() ? $input.first().json.support_resistance : null;\nif (!row) return [{ json: { success: false, error: 'no support/resistance data found for symbol' } }];\nreturn [{ json: { success: true, supportResistance: row } }];"
       },
       "position": [
-        520,
+        2340,
         1400
       ],
-      "id": "20f8080e-207d-43cb-82ba-f07c81ae636e"
+      "id": "c3c74a07-33f3-4387-93bc-993a730ecaa0"
     },
     {
       "name": "Respond 200: stock-support-resistance",
@@ -1497,16 +1613,16 @@
         "options": {}
       },
       "position": [
-        780,
+        2600,
         1400
       ],
-      "id": "e8f4d94d-5b46-4960-bfef-c6cf166074cf"
+      "id": "8dcd50e9-e5c6-407c-b350-3d67ccfbc7b3"
     },
     {
       "name": "Webhook: market",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "c1d722d8-2983-4933-b2f3-3cd9e47362fb",
+      "webhookId": "d191672e-6da1-4e6b-a1c6-d0c7b27e706e",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/market",
@@ -1514,10 +1630,10 @@
         "options": {}
       },
       "position": [
-        1040,
-        1400
+        0,
+        1600
       ],
-      "id": "e1c156ef-2202-4763-b876-4e0ff7cd6120"
+      "id": "31fd37c4-d207-4a34-bcca-4187a6c87ced"
     },
     {
       "name": "Check Auth: market",
@@ -1529,10 +1645,10 @@
         "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
       },
       "position": [
-        1300,
-        1400
+        260,
+        1600
       ],
-      "id": "ca863ab1-6ea7-475a-ab6f-264512568370"
+      "id": "fc248446-d0bd-44d9-b307-8858e0f4e6f9"
     },
     {
       "name": "Authorized?: market",
@@ -1547,7 +1663,7 @@
           },
           "conditions": [
             {
-              "id": "62964ce5-004a-43e4-bdf5-644d41d6e3ef",
+              "id": "a7140519-9432-478f-8b20-d2565602b4d9",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -1562,10 +1678,10 @@
         "options": {}
       },
       "position": [
-        1560,
-        1400
+        520,
+        1600
       ],
-      "id": "e5a91876-fcb9-4893-94c0-02ee779b3dc9"
+      "id": "f8a3b8ea-dfbf-41c0-aa13-3b6109559717"
     },
     {
       "name": "Respond 401: market",
@@ -1579,10 +1695,10 @@
         }
       },
       "position": [
-        1820,
-        1400
+        780,
+        1600
       ],
-      "id": "464642ad-abca-4509-8376-9a13224a18c8"
+      "id": "793a0db2-5853-4f59-b106-9e2afce7bfde"
     },
     {
       "name": "Query: market",
@@ -1595,10 +1711,10 @@
       },
       "onError": "continueRegularOutput",
       "position": [
-        2080,
-        1400
+        1040,
+        1600
       ],
-      "id": "9cca0712-ed31-41e1-b44f-24cd240b5380"
+      "id": "839a52a6-651e-461b-bc9e-51b9a138d12c"
     },
     {
       "name": "Format: market",
@@ -1610,10 +1726,10 @@
         "jsCode": "const row = $input.first() ? $input.first().json : null;\nreturn [{ json: {\n  success: true,\n  tradingDate: row ? row.trading_date : null,\n  market: row ? { regime: row.market_regime, score: row.market_score } : null,\n  stocksScanned: row ? row.stocks_scanned : 0,\n  eligibleStocks: row ? row.eligible_stocks : 0,\n} }];"
       },
       "position": [
-        2340,
-        1400
+        1300,
+        1600
       ],
-      "id": "554f200d-1f39-4184-a3e3-f87faa632c69"
+      "id": "eefd904a-ffe9-4b37-bb72-1a6384cfbc29"
     },
     {
       "name": "Respond 200: market",
@@ -1625,10 +1741,139 @@
         "options": {}
       },
       "position": [
-        2600,
-        1400
+        1560,
+        1600
       ],
-      "id": "8d305309-42d3-44a3-aae9-d9010ad9b7b6"
+      "id": "28ec3a59-18c2-4030-8831-52b79bc82b56"
+    },
+    {
+      "name": "Webhook: dates",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "d834f817-e955-4051-8381-d8976ba1e7fe",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/dates",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        1820,
+        1600
+      ],
+      "id": "6f6b7cab-c1f6-4422-82ab-c11a52fc2a35"
+    },
+    {
+      "name": "Check Auth: dates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        2080,
+        1600
+      ],
+      "id": "e2881f4e-c33e-4cab-8b5b-0bef17c9bf7c"
+    },
+    {
+      "name": "Authorized?: dates",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cb5f3531-1aa7-466b-91e5-fbc789303cc5",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        2340,
+        1600
+      ],
+      "id": "97fcdb62-1e55-49ca-bcf7-ba6461d0d41c"
+    },
+    {
+      "name": "Respond 401: dates",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        2600,
+        1600
+      ],
+      "id": "34116883-c565-40bc-89ae-7d0bed5f967d"
+    },
+    {
+      "name": "Query: dates",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT trading_date::text AS trading_date\nFROM scanner_runs\nWHERE run_type = 'LIVE' AND status = 'COMPLETED'\nORDER BY trading_date DESC\nLIMIT 90;",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "position": [
+        0,
+        1800
+      ],
+      "id": "f9bcc3c0-1024-4bb8-a17d-c959f9ee3af8"
+    },
+    {
+      "name": "Format: dates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rows = $input.all().map((i) => i.json).filter((r) => r && r.trading_date);\nreturn [{ json: { success: true, dates: rows.map((r) => r.trading_date) } }];"
+      },
+      "position": [
+        260,
+        1800
+      ],
+      "id": "428df1e7-1c83-4107-b66e-fdabef657c1f"
+    },
+    {
+      "name": "Respond 200: dates",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        520,
+        1800
+      ],
+      "id": "3c42e888-253e-4b64-8e3d-2b13df45d855"
     }
   ],
   "connections": {
@@ -1709,7 +1954,7 @@
       "main": [
         [
           {
-            "node": "Query: volume",
+            "node": "Build Query: volume",
             "type": "main",
             "index": 0
           }
@@ -1717,6 +1962,17 @@
         [
           {
             "node": "Respond 401: volume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query: volume": {
+      "main": [
+        [
+          {
+            "node": "Query: volume",
             "type": "main",
             "index": 0
           }
@@ -1771,7 +2027,7 @@
       "main": [
         [
           {
-            "node": "Query: relative-volume",
+            "node": "Build Query: relative-volume",
             "type": "main",
             "index": 0
           }
@@ -1779,6 +2035,17 @@
         [
           {
             "node": "Respond 401: relative-volume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query: relative-volume": {
+      "main": [
+        [
+          {
+            "node": "Query: relative-volume",
             "type": "main",
             "index": 0
           }
@@ -1833,7 +2100,7 @@
       "main": [
         [
           {
-            "node": "Query: top",
+            "node": "Build Query: top",
             "type": "main",
             "index": 0
           }
@@ -1841,6 +2108,17 @@
         [
           {
             "node": "Respond 401: top",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query: top": {
+      "main": [
+        [
+          {
+            "node": "Query: top",
             "type": "main",
             "index": 0
           }
@@ -1895,7 +2173,7 @@
       "main": [
         [
           {
-            "node": "Query: breakout",
+            "node": "Build Query: breakout",
             "type": "main",
             "index": 0
           }
@@ -1903,6 +2181,17 @@
         [
           {
             "node": "Respond 401: breakout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query: breakout": {
+      "main": [
+        [
+          {
+            "node": "Query: breakout",
             "type": "main",
             "index": 0
           }
@@ -1957,7 +2246,7 @@
       "main": [
         [
           {
-            "node": "Query: momentum",
+            "node": "Build Query: momentum",
             "type": "main",
             "index": 0
           }
@@ -1965,6 +2254,17 @@
         [
           {
             "node": "Respond 401: momentum",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query: momentum": {
+      "main": [
+        [
+          {
+            "node": "Query: momentum",
             "type": "main",
             "index": 0
           }
@@ -2019,7 +2319,7 @@
       "main": [
         [
           {
-            "node": "Query: pullback",
+            "node": "Build Query: pullback",
             "type": "main",
             "index": 0
           }
@@ -2027,6 +2327,17 @@
         [
           {
             "node": "Respond 401: pullback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query: pullback": {
+      "main": [
+        [
+          {
+            "node": "Query: pullback",
             "type": "main",
             "index": 0
           }
@@ -2081,7 +2392,7 @@
       "main": [
         [
           {
-            "node": "Query: reversal",
+            "node": "Build Query: reversal",
             "type": "main",
             "index": 0
           }
@@ -2089,6 +2400,17 @@
         [
           {
             "node": "Respond 401: reversal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query: reversal": {
+      "main": [
+        [
+          {
+            "node": "Query: reversal",
             "type": "main",
             "index": 0
           }
@@ -2419,6 +2741,68 @@
           }
         ]
       ]
+    },
+    "Authorized?: dates": {
+      "main": [
+        [
+          {
+            "node": "Query: dates",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401: dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query: dates": {
+      "main": [
+        [
+          {
+            "node": "Format: dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: dates": {
+      "main": [
+        [
+          {
+            "node": "Respond 200: dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: dates": {
+      "main": [
+        [
+          {
+            "node": "Check Auth: dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Auth: dates": {
+      "main": [
+        [
+          {
+            "node": "Authorized?: dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
@@ -2429,6 +2813,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "194eeb0d-8bcc-4359-902f-cf96c7cf4e63",
+  "id": "1d081da5-d334-4712-a32a-536e4c503192",
   "tags": []
 }

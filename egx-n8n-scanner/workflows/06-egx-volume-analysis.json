@@ -16,7 +16,7 @@
         "width": 480,
         "color": 5
       },
-      "id": "b45c6581-ef99-436d-b7be-d6639dbd12fc"
+      "id": "ba4a0910-14d1-4024-9d7b-8f106fac6ce3"
     },
     {
       "name": "Manual Trigger",
@@ -27,7 +27,7 @@
         0,
         0
       ],
-      "id": "e94bedea-0cb6-4c86-a5a5-0de979c5b462"
+      "id": "ed6886b9-89e5-4f26-ae1e-a39d2dfe9474"
     },
     {
       "name": "When Executed by Another Workflow",
@@ -40,7 +40,7 @@
         260,
         0
       ],
-      "id": "7c120417-f824-4c9b-808f-d65d58c2a794"
+      "id": "7b97a685-2ca3-466a-86f5-31c20bab37ab"
     },
     {
       "name": "Load Active Stocks",
@@ -58,7 +58,7 @@
         520,
         0
       ],
-      "id": "350a2d58-d45d-486e-b3e0-0c8bb4089832"
+      "id": "21708624-b1bb-4a53-90d4-53a6087b8fe0"
     },
     {
       "name": "Attach As-Of Date",
@@ -73,7 +73,7 @@
         780,
         0
       ],
-      "id": "35de18b5-2fb4-4cc9-88b5-93b3116968c4"
+      "id": "52e16fe3-9a3f-4b43-803f-fb85ea50a31c"
     },
     {
       "name": "Load Per-Stock Volume Snapshot",
@@ -91,7 +91,7 @@
         1040,
         0
       ],
-      "id": "154423b5-1c9a-4ef8-869c-b3a2e820f1bc"
+      "id": "46bb29a7-3242-4143-813f-b5a3d1e9721f"
     },
     {
       "name": "Compute Volume Metrics",
@@ -106,7 +106,7 @@
         1300,
         0
       ],
-      "id": "90520f30-c517-4039-af7b-5f392d1fab35"
+      "id": "fe7e60e2-e4c6-4fea-bfd7-1f5aaf7e50de"
     },
     {
       "name": "Build Market Rankings",
@@ -121,7 +121,7 @@
         1560,
         0
       ],
-      "id": "6bb376e7-f637-4f93-a9fb-3efe739f2606"
+      "id": "e98f1ac0-5282-4152-a208-0b2428973140"
     },
     {
       "name": "Has Data?",
@@ -136,7 +136,7 @@
           },
           "conditions": [
             {
-              "id": "be9eb216-2500-4d18-a9ca-7290965ba493",
+              "id": "87dfa944-4046-4038-8326-869ad6661006",
               "leftValue": "={{ $json.skipped }}",
               "rightValue": "",
               "operator": {
@@ -154,7 +154,7 @@
         1820,
         0
       ],
-      "id": "eab40f75-cd94-4f78-a436-63f134e30d96"
+      "id": "20fa1e90-a241-41ad-8b93-9cce86a275bb"
     },
     {
       "name": "Upsert Volume Analysis",
@@ -172,7 +172,7 @@
         2080,
         0
       ],
-      "id": "a5e8c7f3-0b20-4404-874c-32bb05208082"
+      "id": "40a27db5-9e47-4c93-8f35-6491b0e22b69"
     },
     {
       "name": "Join Branches",
@@ -183,7 +183,7 @@
         2340,
         0
       ],
-      "id": "53013bf7-5d0b-4582-a6a1-42d21258b541"
+      "id": "81600569-bbb9-43d0-9d20-a387fd7a5911"
     },
     {
       "name": "Count Volume Analysis Rows",
@@ -199,7 +199,7 @@
         2600,
         0
       ],
-      "id": "93ee3f06-ad5e-4da3-89cb-ed7fd0e21004"
+      "id": "21c4f6d1-4ae2-4778-8a0f-a58aca21ea8d"
     },
     {
       "name": "Build Summary",
@@ -214,7 +214,7 @@
         0,
         200
       ],
-      "id": "785e8cc5-2de2-4a89-82f5-c157aabbe5c3"
+      "id": "5aa15b55-d9c1-48fa-aa40-a450a43f4c0e"
     }
   ],
   "connections": {
@@ -355,6 +355,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "a88c903b-a858-4f90-9f20-6d5eb3cce1f3",
+  "id": "0e9881ed-fb12-4757-983c-d467ea81fd8e",
   "tags": []
 }
