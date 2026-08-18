@@ -83,6 +83,33 @@ def find_workflow_id(base_url, api_key, name):
     return data[0]["id"] if data else None
 
 
+def preserve_manual_url_patches(base_url, api_key, existing_id, body):
+    """Workflows 01/02/03 ship with placeholder HTTP Request URLs
+    (literal "CONFIGURE-..." segments — see docs/IMPORT-N8N.md) that get
+    manually patched to the real provider endpoint directly on the live
+    instance, by design (never committed to the repo). A naive PUT of the
+    generator's own JSON would silently overwrite that real URL back to
+    the placeholder on every re-sync — confirmed as a REAL regression via
+    live E2E testing (this exact bug broke daily data ingestion after a
+    routine re-sync). Fetch the current live node URLs first and keep
+    whichever side is NOT a placeholder.
+    """
+    existing = api(base_url, api_key, "GET", f"/workflows/{existing_id}")
+    existing_urls = {
+        n["name"]: n.get("parameters", {}).get("url")
+        for n in existing.get("nodes", [])
+        if n.get("type") == "n8n-nodes-base.httpRequest"
+    }
+    for n in body["nodes"]:
+        if n.get("type") != "n8n-nodes-base.httpRequest":
+            continue
+        new_url = n.get("parameters", {}).get("url", "")
+        old_url = existing_urls.get(n["name"])
+        if "CONFIGURE-" in new_url and old_url and "CONFIGURE-" not in old_url:
+            n["parameters"]["url"] = old_url
+            print(f"    preserved manually-configured URL on '{n['name']}' (generator's placeholder would have overwritten it)")
+
+
 def build_create_body(wf_json, cred_id, cred_name):
     nodes = json.loads(json.dumps(wf_json["nodes"]))  # deep copy
     for n in nodes:
@@ -133,6 +160,7 @@ def main():
         body = build_create_body(wf_json, cred_id, cred_name)
         existing_id = find_workflow_id(base_url, api_key, wf_json["name"])
         if existing_id:
+            preserve_manual_url_patches(base_url, api_key, existing_id, body)
             # publishIfActive=false: an already-published workflow's PUT
             # defaults to immediately re-publishing it, but at THIS point
             # Execute Workflow references are still blank (fixed in the
