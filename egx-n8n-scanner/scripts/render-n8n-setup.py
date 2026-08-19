@@ -25,6 +25,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS_DIR = REPO_ROOT / "workflows"
+
+# Minimum gap enforced between any two API calls (see _pace() below).
+MIN_REQUEST_GAP_SECONDS = 1.5
+_last_request_at = [0.0]
 PUBLISH_ORDER = [
     "01-egx-stock-universe.json",
     "02-egx-historical-import.json",
@@ -54,7 +58,25 @@ def env(name, required=True):
     return v
 
 
+def _pace():
+    """Enforce a minimum gap since the last API call. Confirmed live: a
+    burst of 13 back-to-back writes with zero delay ran fine through the
+    12th call, then got an HTML "Blocked" 403 (not from n8n) starting
+    exactly on the 13th — classic request-velocity/burst scoring by an
+    edge WAF/bot-protection layer, not a content or payload-size rule
+    (workflow 13's PUT body, ~4.5x bigger and full of SQL-looking and
+    "secret"-labelled strings, sails through every run). Spacing calls
+    out keeps the whole sync under that threshold.
+    """
+    elapsed = time.monotonic() - _last_request_at[0]
+    remaining = MIN_REQUEST_GAP_SECONDS - elapsed
+    if remaining > 0:
+        time.sleep(remaining)
+    _last_request_at[0] = time.monotonic()
+
+
 def api(base_url, api_key, method, path, body=None, _retry=0):
+    _pace()
     url = base_url.rstrip("/") + "/api/v1" + path
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
@@ -78,10 +100,12 @@ def api(base_url, api_key, method, path, body=None, _retry=0):
     except urllib.error.HTTPError as e:
         raw = e.read().decode(errors="replace")
         # A genuine WAF block (HTML page, not n8n's own JSON error shape) is
-        # sometimes transient/rate-based — one short retry before giving up.
-        if e.code == 403 and "<html" in raw.lower() and _retry < 1:
-            print(f"  HTTP 403 (blocked, not from n8n) on {method} {path} — retrying once after a short pause...", file=sys.stderr)
-            time.sleep(3)
+        # rate/burst-based here — back off hard and retry a few times before
+        # giving up, on top of the steady _pace() gap above.
+        if e.code == 403 and "<html" in raw.lower() and _retry < 3:
+            backoff = [8, 20, 45][_retry]
+            print(f"  HTTP 403 (blocked, not from n8n) on {method} {path} — backing off {backoff}s and retrying ({_retry + 1}/3)...", file=sys.stderr)
+            time.sleep(backoff)
             return api(base_url, api_key, method, path, body, _retry=_retry + 1)
         print(f"  HTTP {e.code} on {method} {path}: {raw[:500]}", file=sys.stderr)
         raise
@@ -190,31 +214,9 @@ def main():
             wf_id = existing_id
             print(f"  {filename} -> {wf_json['name']} ({wf_id}) [updated existing]")
         else:
-            # Two-step create: POST a tiny skeleton (just the name + a single
-            # no-op node) instead of the full body, then PUT the real content
-            # onto the new ID. Confirmed live: PUT with a large/complex body
-            # (workflows 01-11, all similarly-sized) goes through every time,
-            # but POST /workflows with a large body (17's is the biggest yet
-            # — full Anthropic request JSON embedded in Code-node strings)
-            # hits an HTML "Blocked" interstitial from Render's edge — a
-            # small POST body sidesteps whatever is inspecting/scoring it.
-            skeleton = {
-                "name": wf_json["name"],
-                "nodes": [{
-                    "id": "skeleton",
-                    "name": "Skeleton",
-                    "type": "n8n-nodes-base.noOp",
-                    "typeVersion": 1,
-                    "position": [0, 0],
-                    "parameters": {},
-                }],
-                "connections": {},
-                "settings": wf_json.get("settings", {}),
-            }
-            created = api(base_url, api_key, "POST", "/workflows", skeleton)
+            created = api(base_url, api_key, "POST", "/workflows", body)
             wf_id = created["id"]
-            api(base_url, api_key, "PUT", f"/workflows/{wf_id}?publishIfActive=false", body)
-            print(f"  {filename} -> {wf_json['name']} ({wf_id}) [created via skeleton+PUT]")
+            print(f"  {filename} -> {wf_json['name']} ({wf_id}) [created]")
         name_to_id[wf_json["name"]] = wf_id
         created_bodies[filename] = (wf_id, body)
 
