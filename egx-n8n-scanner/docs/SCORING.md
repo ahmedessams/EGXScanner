@@ -211,15 +211,23 @@ Assessment" section in the stock detail drawer.
 
 **Method**: for each Top 10 pick, `17` sends its technical/setup data
 (setup type, overall + sub-scores, RSI, MACD, trend classification,
-entry/target1/invalidation, gain %, `target1_estimated_days`) to the
-Anthropic Messages API (model: `claude-sonnet-5`), with forced tool-use so
-the response is always structured JSON rather than parsed prose. The
-model is explicitly told it has no real-time market access, no news, and
-only the data given — asked for (1) its own 0-100 probability estimate for
-reaching Target 1 within the estimated-days window, (2) a 0-100 conviction
-score, (3) brief reasoning. `ai_rank` is then derived locally by sorting
-that day's picks by conviction score — a second ordering of the same Top
-10, shown alongside `overall_rank`, never replacing it.
+entry/target1/invalidation, gain %, `target1_estimated_days`) — plus that
+setup type's own `historical_target1_hit_pct` / `historical_stop_hit_pct` /
+sample size, joined from `probability_stats` — to the Anthropic Messages
+API (model: `claude-sonnet-5`), with forced tool-use so the response is
+always structured JSON rather than parsed prose. The prompt is written as
+a calibrated-forecasting exercise: the model is told to treat the
+historical hit-rate as its starting anchor (flagged as a weak prior when
+the sample is under 20), explicitly reason through the setup-specific
+factors that argue for moving above vs. below that anchor, and avoid
+defaulting to round numbers or restating the composite `overall_score` as
+a probability. It's explicitly told it has no real-time market access, no
+news, and only the data given — asked for (1) its own 0-100 probability
+estimate for reaching Target 1 within the estimated-days window, (2) a
+0-100 conviction score, (3) brief reasoning citing the specific factors
+that moved it away from the anchor. `ai_rank` is then derived locally by
+sorting that day's picks by conviction score — a second ordering of the
+same Top 10, shown alongside `overall_rank`, never replacing it.
 
 **Requires `ANTHROPIC_API_KEY`** (real secret, never committed — see
 `env.example.txt`). If unset, invalid, or the API errors for any reason,
@@ -229,11 +237,13 @@ zero writes, not a crash or garbage data).
 
 **What this is not**: not a statistic like `historical_target1_hit_pct`
 (that's a measured rate over real past outcomes; this is one model's
-qualitative judgment from limited technical data on a single occasion) and
-not a guarantee. Treat disagreement between `ai_rank` and `overall_rank`,
-or between `ai_target1_probability_pct` and `historical_target1_hit_pct`,
-as exactly that — disagreement between three independent signals, not a
-sign either one is "right."
+qualitative judgment on a single occasion, now grounded in that same
+statistic as a starting anchor rather than computed independently of it)
+and not a guarantee. Treat disagreement between `ai_rank` and
+`overall_rank`, or a large gap between `ai_target1_probability_pct` and
+the `historical_target1_hit_pct` it was anchored on, as exactly that —
+the model's case-specific adjustment away from the base rate, not a sign
+either signal is "right."
 
 ## Liquidity filter (spec section 19)
 
