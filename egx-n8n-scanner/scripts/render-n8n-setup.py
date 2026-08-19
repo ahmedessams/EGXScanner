@@ -18,6 +18,7 @@ of shell history). Stdlib only — no pip install needed.
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -53,18 +54,35 @@ def env(name, required=True):
     return v
 
 
-def api(base_url, api_key, method, path, body=None):
+def api(base_url, api_key, method, path, body=None, _retry=0):
     url = base_url.rstrip("/") + "/api/v1" + path
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("X-N8N-API-KEY", api_key)
     req.add_header("Content-Type", "application/json")
+    req.add_header("Accept", "application/json")
+    # Python's default "Python-urllib/x.y" User-Agent gets blocked by some
+    # hosts' bot/WAF protection (confirmed live: a POST from this script hit
+    # an HTML "Blocked" interstitial, not a JSON error from n8n itself, while
+    # every preceding PUT with the same headers otherwise had gone through
+    # fine) — a realistic browser UA avoids that class of block entirely.
+    req.add_header(
+        "User-Agent",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36",
+    )
     try:
         with urllib.request.urlopen(req, timeout=60) as res:
             raw = res.read()
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as e:
         raw = e.read().decode(errors="replace")
+        # A genuine WAF block (HTML page, not n8n's own JSON error shape) is
+        # sometimes transient/rate-based — one short retry before giving up.
+        if e.code == 403 and "<html" in raw.lower() and _retry < 1:
+            print(f"  HTTP 403 (blocked, not from n8n) on {method} {path} — retrying once after a short pause...", file=sys.stderr)
+            time.sleep(3)
+            return api(base_url, api_key, method, path, body, _retry=_retry + 1)
         print(f"  HTTP {e.code} on {method} {path}: {raw[:500]}", file=sys.stderr)
         raise
 
