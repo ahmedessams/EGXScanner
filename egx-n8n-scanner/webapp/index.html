@@ -116,9 +116,18 @@
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   thead th {
     text-align: left; padding: 10px 12px; font-weight: 600; color: var(--text-muted);
-    border-bottom: 1px solid var(--border); white-space: nowrap; position: sticky; top: 49px; background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border); white-space: nowrap; position: sticky; top: 0; background: var(--bg-elevated);
     cursor: pointer; user-select: none;
   }
+  /* top must be 0, not the page navbar's height: .table-scroll's overflow-x:auto
+     forces overflow-y to also compute as "auto" too (CSS overflow spec: a UA
+     can't leave one axis visible while the other isn't), which silently makes
+     .table-scroll — not the page — the sticky positioning ancestor for this
+     th. .table-scroll never grows tall enough to need its own scrollbar, so
+     sticky here never actually tracks page scroll either way (confirmed
+     live) — but a nonzero top pinned it below its own static position,
+     overlapping row 1 (confirmed via DOM inspection: elementFromPoint at row
+     1's position returned this <th>, hiding rank #1 entirely). */
   thead th:hover { color: var(--text); }
   thead th .arrow { opacity: 0.5; font-size: 10px; margin-left: 3px; }
   tbody td { padding: 9px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
