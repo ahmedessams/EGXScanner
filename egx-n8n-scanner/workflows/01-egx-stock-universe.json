@@ -16,7 +16,7 @@
         "width": 460,
         "color": 5
       },
-      "id": "4013b5c6-04ee-4db8-b813-59db296a9cca"
+      "id": "3a0d328f-9c24-4131-950e-bc5b5ae221b4"
     },
     {
       "name": "Configure Endpoint Warning",
@@ -32,7 +32,7 @@
         "width": 460,
         "color": 7
       },
-      "id": "d0426b10-eb70-469f-a5d0-d9e9ff05c118"
+      "id": "d947c32f-6a38-4954-885d-65796d9fa68b"
     },
     {
       "name": "Manual Trigger",
@@ -43,7 +43,7 @@
         0,
         0
       ],
-      "id": "8646e3bb-2d56-4fad-a795-98f2b119728b"
+      "id": "f0661df0-d14c-4da7-afeb-ebc971245970"
     },
     {
       "name": "When Executed by Another Workflow",
@@ -56,7 +56,7 @@
         260,
         0
       ],
-      "id": "735cf612-da32-4ca2-b57b-b3aaf3a556b1"
+      "id": "ab032d50-cb73-414c-b6e5-eec666c8c254"
     },
     {
       "name": "Fetch EGX Universe (CONFIGURE ENDPOINT)",
@@ -96,7 +96,7 @@
         520,
         0
       ],
-      "id": "703f217e-a0a5-4015-98d1-fb0e68b9fe5e"
+      "id": "7b4d8738-7361-4ff1-88aa-a4e28f6a37aa"
     },
     {
       "name": "Normalize Universe Response",
@@ -111,7 +111,7 @@
         780,
         0
       ],
-      "id": "23334f12-e2b2-44ac-894d-9c24b6d0f0c9"
+      "id": "3450ba4d-0b15-4506-8e3f-989fd33ad82c"
     },
     {
       "name": "Is Valid Row?",
@@ -126,7 +126,7 @@
           },
           "conditions": [
             {
-              "id": "0d610a21-c131-4eb5-a85d-e2b4afa3a9c5",
+              "id": "4317f8d2-b78b-4dcb-b5a3-d486bf624021",
               "leftValue": "={{ $json._valid }}",
               "rightValue": "",
               "operator": {
@@ -144,7 +144,7 @@
         1040,
         0
       ],
-      "id": "12084adf-58e3-45bc-b70e-cb61220a19b0"
+      "id": "eee5ad0c-94f1-4328-aa78-86a582e9aff4"
     },
     {
       "name": "Upsert Stock",
@@ -162,7 +162,7 @@
         1300,
         0
       ],
-      "id": "b4af8ae9-d5a0-4714-afef-be24a47415c3"
+      "id": "bdffd049-192a-4d01-94d0-0f93e18e0118"
     },
     {
       "name": "Log Invalid Row",
@@ -180,7 +180,7 @@
         1560,
         0
       ],
-      "id": "f09a79da-aeb3-4552-8fe6-5371b3b373c7"
+      "id": "a4b963d3-e2b8-40dc-a5c0-13b8d9ae4fa8"
     },
     {
       "name": "Join Branches",
@@ -191,7 +191,7 @@
         1820,
         0
       ],
-      "id": "ba30760a-40e4-448d-a574-27648a13eed0"
+      "id": "79d7dc82-a764-42be-b8e1-a382be5ea4c4"
     },
     {
       "name": "Deactivate Stale Stocks",
@@ -209,7 +209,7 @@
         2080,
         0
       ],
-      "id": "73ffee76-8031-4e6d-badb-293903ce93c3"
+      "id": "58ad1a46-0454-40a2-bdbf-f888b1f7f1eb"
     },
     {
       "name": "Count Active Stocks",
@@ -227,7 +227,7 @@
         2340,
         0
       ],
-      "id": "eaa60bf6-44f6-4170-972a-97af337fab33"
+      "id": "73bf6801-64aa-4769-a98d-271551e84a79"
     },
     {
       "name": "Build Summary",
@@ -242,7 +242,7 @@
         2600,
         0
       ],
-      "id": "47d47a84-92ff-4135-bf08-61286b4b5a1c"
+      "id": "d7c3b2d7-7b03-4ebf-bc45-f352e6bb2950"
     }
   ],
   "connections": {
@@ -372,6 +372,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "4ea92ea6-2240-4313-b76b-ddcacea33c62",
+  "id": "2e1bed14-a5d1-46e5-8e84-d6fd1d64f530",
   "tags": []
 }

@@ -67,6 +67,9 @@ services:
       MARKET_API_KEY: ${MARKET_API_KEY:-}
       EGX_EXCHANGE_CODE: ${EGX_EXCHANGE_CODE:-EGX}
 
+      # Optional — 17-egx-ai-assessment no-ops (NULL AI columns) if unset.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+
       HISTORICAL_DAYS: ${HISTORICAL_DAYS:-750}
       API_BATCH_SIZE: ${API_BATCH_SIZE:-10}
       API_DELAY_MS: ${API_DELAY_MS:-500}

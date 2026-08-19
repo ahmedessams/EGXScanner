@@ -256,11 +256,45 @@ CREATE TABLE IF NOT EXISTS scanner_results (
     reasons_json              JSONB NOT NULL DEFAULT '[]'::jsonb,
     warnings_json              JSONB NOT NULL DEFAULT '[]'::jsonb,
 
+    -- AI Assessment (user-requested addition beyond the original spec):
+    -- a language model's qualitative read of the Top 10's technical setups,
+    -- populated only for overall_rank <= 10 AND eligible rows by
+    -- 17-egx-ai-assessment. Deliberately separate from, and never mixed
+    -- into, overall_score or historical_target1_hit_pct — those are a
+    -- deterministic formula and a measured historical rate respectively;
+    -- this is a model's judgment call, labeled as such everywhere it's
+    -- surfaced (see docs/SCORING.md "AI Assessment").
+    ai_target1_probability_pct NUMERIC(6,2),
+    ai_rank_score              NUMERIC(6,2),
+    ai_rank                    INTEGER,
+    ai_reasoning               TEXT,
+    ai_assessed_at             TIMESTAMPTZ,
+
     created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT uq_scanner_results_run_stock UNIQUE (scanner_run_id, stock_id)
 );
 
 COMMENT ON TABLE scanner_results IS 'Per-stock scoring output for a given scanner_run';
+
+-- CREATE TABLE IF NOT EXISTS above is a no-op on any database where
+-- scanner_results already existed before this AI Assessment addition — it
+-- does NOT retroactively add new columns to an existing table. These
+-- ALTER statements are what actually apply the columns anywhere except a
+-- genuinely fresh install (confirmed via live testing: the CREATE TABLE
+-- alone failed with "column ... does not exist" against the existing dev
+-- database when 003-views.sql's updated view tried to select them). Must
+-- run BEFORE the COMMENT ON COLUMN statements below — those require the
+-- column to already exist (also confirmed via live testing: the original
+-- ordering here failed the same way, just one statement type sooner).
+ALTER TABLE scanner_results ADD COLUMN IF NOT EXISTS ai_target1_probability_pct NUMERIC(6,2);
+ALTER TABLE scanner_results ADD COLUMN IF NOT EXISTS ai_rank_score NUMERIC(6,2);
+ALTER TABLE scanner_results ADD COLUMN IF NOT EXISTS ai_rank INTEGER;
+ALTER TABLE scanner_results ADD COLUMN IF NOT EXISTS ai_reasoning TEXT;
+ALTER TABLE scanner_results ADD COLUMN IF NOT EXISTS ai_assessed_at TIMESTAMPTZ;
+
+COMMENT ON COLUMN scanner_results.ai_target1_probability_pct IS 'AI Assessment: a language model''s own probability estimate (0-100) for reaching target1 within target1_estimated_days — NOT the measured historical_target1_hit_pct, and NOT a guarantee.';
+COMMENT ON COLUMN scanner_results.ai_rank_score IS 'AI Assessment: 0-100 conviction score used to derive ai_rank; independent of overall_score.';
+COMMENT ON COLUMN scanner_results.ai_rank IS 'Rank (1=highest) among that day''s Top 10 by ai_rank_score — a second, AI-driven ordering shown alongside overall_rank, not a replacement for it.';
 
 -- ---------------------------------------------------------------------
 -- prediction_evaluation: forward-looking evaluation of scanner_results

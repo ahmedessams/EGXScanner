@@ -110,6 +110,12 @@ services:
       - key: EGX_EXCHANGE_CODE
         value: EGX
 
+      # --- AI Assessment (17-egx-ai-assessment) — optional. Real secret,
+      #     fill in manually. If left unset, that workflow just no-ops
+      #     (every AI column stays NULL) rather than failing anything.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
       # --- import / liquidity / scoring config (mirrors env.example.txt) --
       - key: HISTORICAL_DAYS
         value: "750"

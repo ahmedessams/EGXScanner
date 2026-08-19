@@ -36,6 +36,7 @@ PUBLISH_ORDER = [
     "09-egx-pullback-scanner.json",
     "10-egx-reversal-scanner.json",
     "11-egx-overall-ranking.json",
+    "17-egx-ai-assessment.json",
     "12-egx-daily-master-workflow.json",
     "13-egx-report-api.json",
     "14-egx-prediction-evaluation.json",

@@ -199,6 +199,42 @@ Not updated in real time (the pipeline schedules `16` weekly, since the
 underlying sample only grows slowly) — check `probability_stats.updated_at`
 if you need to know how fresh it is.
 
+## AI Assessment (`17-egx-ai-assessment`)
+
+A third, deliberately distinct signal, alongside the ATR estimate above and
+the measured historical rate: a language model's own read of that day's
+Top 10 (`overall_rank <= 10`, eligible only — never the full universe, to
+keep this cheap). `ai_target1_probability_pct` / `ai_rank_score` /
+`ai_rank` / `ai_reasoning` on `scanner_results`, surfaced as "AI Prob % T1"
+/ "AI Rank" everywhere `target1_gain_pct` already is, plus a dedicated "AI
+Assessment" section in the stock detail drawer.
+
+**Method**: for each Top 10 pick, `17` sends its technical/setup data
+(setup type, overall + sub-scores, RSI, MACD, trend classification,
+entry/target1/invalidation, gain %, `target1_estimated_days`) to the
+Anthropic Messages API (model: `claude-sonnet-5`), with forced tool-use so
+the response is always structured JSON rather than parsed prose. The
+model is explicitly told it has no real-time market access, no news, and
+only the data given — asked for (1) its own 0-100 probability estimate for
+reaching Target 1 within the estimated-days window, (2) a 0-100 conviction
+score, (3) brief reasoning. `ai_rank` is then derived locally by sorting
+that day's picks by conviction score — a second ordering of the same Top
+10, shown alongside `overall_rank`, never replacing it.
+
+**Requires `ANTHROPIC_API_KEY`** (real secret, never committed — see
+`env.example.txt`). If unset, invalid, or the API errors for any reason,
+`17` doesn't fail — every row it would have touched simply keeps NULL AI
+columns, confirmed via live testing (a mocked auth-error response produced
+zero writes, not a crash or garbage data).
+
+**What this is not**: not a statistic like `historical_target1_hit_pct`
+(that's a measured rate over real past outcomes; this is one model's
+qualitative judgment from limited technical data on a single occasion) and
+not a guarantee. Treat disagreement between `ai_rank` and `overall_rank`,
+or between `ai_target1_probability_pct` and `historical_target1_hit_pct`,
+as exactly that — disagreement between three independent signals, not a
+sign either one is "right."
+
 ## Liquidity filter (spec section 19)
 
 Computed once per stock in `11`, from the trailing 20 `daily_prices` rows:

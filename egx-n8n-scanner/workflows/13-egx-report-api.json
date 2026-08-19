@@ -16,13 +16,13 @@
         "width": 560,
         "color": 5
       },
-      "id": "395dd089-54f6-4a46-af88-cf87b240f1b9"
+      "id": "2bedfa4a-99fe-4fa6-a21c-841c2d4f960a"
     },
     {
       "name": "Webhook: full-market",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "9ce3831f-5500-4bf9-9073-3dbb2c1ae5df",
+      "webhookId": "542b0b5d-2000-4bb3-bc0d-44b0c278af1f",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/stocks",
@@ -33,7 +33,7 @@
         0,
         0
       ],
-      "id": "a4828af8-bbf8-4046-852a-e1000c46edae"
+      "id": "2269e5f4-c64f-49b8-b987-9ddafa278416"
     },
     {
       "name": "Check Auth: full-market",
@@ -48,7 +48,7 @@
         260,
         0
       ],
-      "id": "d98b8707-dc01-4dd0-be61-1c865476d7ec"
+      "id": "0efcd42e-ff91-4c49-9dfd-b89af6bb56e3"
     },
     {
       "name": "Authorized?: full-market",
@@ -63,7 +63,7 @@
           },
           "conditions": [
             {
-              "id": "757357b7-f6ca-420a-abeb-66453d622cd4",
+              "id": "b3078ef2-66c8-45d3-a0fe-bc5438effe69",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -81,7 +81,7 @@
         520,
         0
       ],
-      "id": "02ec3a41-7453-4e00-9352-e1ab986913e4"
+      "id": "d52d7335-4f2d-4edb-bca3-e6300d514b48"
     },
     {
       "name": "Respond 401: full-market",
@@ -98,7 +98,7 @@
         780,
         0
       ],
-      "id": "ae2e062f-da9a-4419-8072-f8d7a06a89a6"
+      "id": "09f1025a-4711-4cd2-beaf-6e48a4695eb2"
     },
     {
       "name": "Build Query: full-market",
@@ -113,7 +113,7 @@
         1040,
         0
       ],
-      "id": "c099dd17-6a07-4c04-8f81-7f267c00c0ba"
+      "id": "165f4982-21aa-43ed-a30c-de64119c785a"
     },
     {
       "name": "Query: full-market",
@@ -131,7 +131,7 @@
         1300,
         0
       ],
-      "id": "4a0f082a-f0b1-487e-9ef7-0d50a976bcfa"
+      "id": "2749632d-a604-420b-b4a8-bc28f33f0268"
     },
     {
       "name": "Format: full-market",
@@ -146,7 +146,7 @@
         1560,
         0
       ],
-      "id": "96f864a0-f9fd-4d6a-9910-e97d6a202070"
+      "id": "c69d97d9-9109-49d0-83c3-89dd514c1117"
     },
     {
       "name": "Respond 200: full-market",
@@ -161,13 +161,13 @@
         1820,
         0
       ],
-      "id": "3e1c5a77-d0f0-40fa-8727-4a0992d4db7d"
+      "id": "acee90ef-5962-46cb-a3ea-a92f6eff73aa"
     },
     {
       "name": "Webhook: volume",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "9655015e-4cc1-4ebe-a04e-2be8ec893952",
+      "webhookId": "6057f186-ef26-48b2-a00b-18eabf7c2a58",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/stocks/volume",
@@ -178,7 +178,7 @@
         2080,
         0
       ],
-      "id": "527a3d53-ce14-460c-af8d-da3f2c5ced3c"
+      "id": "bf175233-2bd8-4c23-98d9-0cf1597d3751"
     },
     {
       "name": "Check Auth: volume",
@@ -193,7 +193,7 @@
         2340,
         0
       ],
-      "id": "e954a062-e07a-49f2-8e78-1bb4c58856ad"
+      "id": "79c67a8e-ec4a-47a7-bfd6-d67e45a028f7"
     },
     {
       "name": "Authorized?: volume",
@@ -208,7 +208,7 @@
           },
           "conditions": [
             {
-              "id": "f42ba3a8-5bee-48c1-99a0-8f77d8e085ed",
+              "id": "e89f003b-f022-4805-8e0b-81de73d08e95",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -226,7 +226,7 @@
         2600,
         0
       ],
-      "id": "7a063fd6-9f85-4d06-82c0-fc438184348a"
+      "id": "4d6c04b5-2697-469a-a7c5-5619c160ddaa"
     },
     {
       "name": "Respond 401: volume",
@@ -243,7 +243,7 @@
         0,
         200
       ],
-      "id": "95040299-07fb-4d46-a2fe-5767b45e357c"
+      "id": "f06c0d5c-3f49-4501-8329-e9b25d57c942"
     },
     {
       "name": "Build Query: volume",
@@ -258,7 +258,7 @@
         260,
         200
       ],
-      "id": "28d6a4c8-40fb-452e-9c49-34eeb1ea3a61"
+      "id": "38e5412b-4161-4499-9a9f-9f0d5f9bf197"
     },
     {
       "name": "Query: volume",
@@ -276,7 +276,7 @@
         520,
         200
       ],
-      "id": "3621cd5c-f06b-4b11-9933-5138c98e77ba"
+      "id": "adb0fe04-b248-42e8-9026-efc4a0dbc740"
     },
     {
       "name": "Format: volume",
@@ -291,7 +291,7 @@
         780,
         200
       ],
-      "id": "2a2300f4-011c-4e70-9273-11dd46756701"
+      "id": "9a18f80b-ba47-4926-a821-cbc5b5990459"
     },
     {
       "name": "Respond 200: volume",
@@ -306,13 +306,13 @@
         1040,
         200
       ],
-      "id": "c64ba6fc-b0a6-46a1-86a9-e80f7aa4d560"
+      "id": "7f31fff4-6f69-4baa-9e1f-0318d07fedfe"
     },
     {
       "name": "Webhook: relative-volume",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "b3b618dc-90a0-49be-b1f0-fb4ff710af5b",
+      "webhookId": "7b938390-af57-4ef6-a4ff-64febb70a66a",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/stocks/relative-volume",
@@ -323,7 +323,7 @@
         1300,
         200
       ],
-      "id": "ade36e68-eab3-424c-934f-d3f26b619fe2"
+      "id": "430dc0a6-ec3d-43ba-97a6-25f6e98f9e7b"
     },
     {
       "name": "Check Auth: relative-volume",
@@ -338,7 +338,7 @@
         1560,
         200
       ],
-      "id": "32762942-f1fd-4694-9ece-71fc80b72147"
+      "id": "b536ab24-244c-403e-9378-762a3ec2d434"
     },
     {
       "name": "Authorized?: relative-volume",
@@ -353,7 +353,7 @@
           },
           "conditions": [
             {
-              "id": "55b90e75-27ad-4912-8b11-9100150d6b33",
+              "id": "f9dc4f3d-11b0-428d-8845-1e0ff895fdaf",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -371,7 +371,7 @@
         1820,
         200
       ],
-      "id": "196e81ef-2a37-481e-be4a-d51a69964f0e"
+      "id": "b429bb63-394e-45b2-81c3-414889a88b88"
     },
     {
       "name": "Respond 401: relative-volume",
@@ -388,7 +388,7 @@
         2080,
         200
       ],
-      "id": "dadaf1f3-340c-4fbf-8cdd-f3d883926061"
+      "id": "a24527ca-17e4-4548-acdf-ab30d8b7d6d8"
     },
     {
       "name": "Build Query: relative-volume",
@@ -403,7 +403,7 @@
         2340,
         200
       ],
-      "id": "634afe17-ce66-4ead-96bd-c2d63e451d6e"
+      "id": "5bad89d8-0f77-4f1c-a057-23e52741c183"
     },
     {
       "name": "Query: relative-volume",
@@ -421,7 +421,7 @@
         2600,
         200
       ],
-      "id": "fbe5c901-381f-4b95-9736-a7b47baeb369"
+      "id": "5e108f52-e558-4adb-b5c3-b0008f02c379"
     },
     {
       "name": "Format: relative-volume",
@@ -436,7 +436,7 @@
         0,
         400
       ],
-      "id": "1b89bf62-dc30-4872-9d75-cb99ec5b63c6"
+      "id": "60936e4b-8d26-40cc-ad4b-cbf2562647cd"
     },
     {
       "name": "Respond 200: relative-volume",
@@ -451,13 +451,13 @@
         260,
         400
       ],
-      "id": "d11a2c5d-fd6c-4c40-903d-7c56beac36a2"
+      "id": "41cbe281-ad30-4469-b214-9012c116ffe6"
     },
     {
       "name": "Webhook: top",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "d8ff3065-a4d6-4d90-8e56-502387bcf31a",
+      "webhookId": "e4ffa9e0-4494-4a2e-8fd4-958232b8e0ee",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/top",
@@ -468,7 +468,7 @@
         520,
         400
       ],
-      "id": "1158597e-38fa-4da9-890b-e2a770263d01"
+      "id": "5554194c-bd73-4681-b06b-7c5069659ba4"
     },
     {
       "name": "Check Auth: top",
@@ -483,7 +483,7 @@
         780,
         400
       ],
-      "id": "fb131682-6cec-46c9-b6ef-4c07e55c8cd0"
+      "id": "ba25c97c-089e-473d-897a-aae0e22be574"
     },
     {
       "name": "Authorized?: top",
@@ -498,7 +498,7 @@
           },
           "conditions": [
             {
-              "id": "70c2aa11-1fb6-43fb-976a-787834769901",
+              "id": "e488db51-0492-40c5-b198-1f72ae5a3bd9",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -516,7 +516,7 @@
         1040,
         400
       ],
-      "id": "7d61bf67-b654-4f8e-88cc-9120bf4455e9"
+      "id": "28cae3d8-e368-4dde-a259-6075e91c0aef"
     },
     {
       "name": "Respond 401: top",
@@ -533,7 +533,7 @@
         1300,
         400
       ],
-      "id": "7fb1642c-bdb3-4120-83b3-82b5190a279c"
+      "id": "8c0508e5-3841-4d9e-8899-a743a4bb05b6"
     },
     {
       "name": "Build Query: top",
@@ -548,7 +548,7 @@
         1560,
         400
       ],
-      "id": "871b7fd4-e437-493e-9036-b2cc2841c802"
+      "id": "6ce442ef-abd6-4490-bc5f-5802ce3b82d7"
     },
     {
       "name": "Query: top",
@@ -567,7 +567,7 @@
         1820,
         400
       ],
-      "id": "5f0f9753-8f54-4728-9575-0054e397d942"
+      "id": "d019ebf7-f572-4aa6-b49a-3a331258a9f4"
     },
     {
       "name": "Format: top",
@@ -582,7 +582,7 @@
         2080,
         400
       ],
-      "id": "481f5e6f-06bb-46be-bfdd-23716c652570"
+      "id": "8d343555-52b7-4f41-87af-664afe90021b"
     },
     {
       "name": "Respond 200: top",
@@ -597,13 +597,13 @@
         2340,
         400
       ],
-      "id": "9b3c51cf-ba7e-4b24-904a-81ae277e4e5e"
+      "id": "5800d37c-1246-4a7a-9f45-0c920c78d885"
     },
     {
       "name": "Webhook: breakout",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "03151d2c-dbf3-414f-b362-89231518084b",
+      "webhookId": "0caecc6e-14b8-48b1-adc1-66047f84de0d",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/breakout",
@@ -614,7 +614,7 @@
         2600,
         400
       ],
-      "id": "ba62cedb-22de-40c9-bdfe-2518b45fea6b"
+      "id": "41dd3e27-c98d-4306-98c8-1c85f4302515"
     },
     {
       "name": "Check Auth: breakout",
@@ -629,7 +629,7 @@
         0,
         600
       ],
-      "id": "1b0e6a17-136a-4cae-ae8d-db6bfff63bab"
+      "id": "277276a5-a8d5-4915-bd67-10f82323aca4"
     },
     {
       "name": "Authorized?: breakout",
@@ -644,7 +644,7 @@
           },
           "conditions": [
             {
-              "id": "25ef5e31-9fa0-4b20-bab2-0baf1df6f1de",
+              "id": "21f324b2-0e6d-4704-a7d6-f57383854276",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -662,7 +662,7 @@
         260,
         600
       ],
-      "id": "93b7db1e-630a-46e1-8cfe-4869bf23f5a1"
+      "id": "a54b4537-62b5-4b0b-86da-8ec252595c90"
     },
     {
       "name": "Respond 401: breakout",
@@ -679,7 +679,7 @@
         520,
         600
       ],
-      "id": "b0814c96-6fb0-4402-9e1b-4c1f80355995"
+      "id": "02c8514c-ace0-4170-9643-f0ecbbdbf848"
     },
     {
       "name": "Build Query: breakout",
@@ -694,7 +694,7 @@
         780,
         600
       ],
-      "id": "de11bdd4-1883-495d-a392-75fe0dab2d17"
+      "id": "2f49bcde-035d-4066-925e-a0109ac97498"
     },
     {
       "name": "Query: breakout",
@@ -713,7 +713,7 @@
         1040,
         600
       ],
-      "id": "533131b9-3b39-455d-b848-1ac98594a27a"
+      "id": "935ebd55-e55a-4406-8b3c-fb32e1cd0ae9"
     },
     {
       "name": "Format: breakout",
@@ -728,7 +728,7 @@
         1300,
         600
       ],
-      "id": "e2288f04-2612-49b0-9825-89404be3f644"
+      "id": "eb32fe5c-29f2-4fe1-b4c9-9834a073377b"
     },
     {
       "name": "Respond 200: breakout",
@@ -743,13 +743,13 @@
         1560,
         600
       ],
-      "id": "4825f6ab-4ddb-43ac-85df-4fdae7d2f367"
+      "id": "b75470c2-9b28-4c53-9247-0b630bb5cbb0"
     },
     {
       "name": "Webhook: momentum",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "e27831d9-e59e-4acc-8f1f-869505caa53e",
+      "webhookId": "4f84d903-2bcb-46bd-a89b-a434a3e04ef5",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/momentum",
@@ -760,7 +760,7 @@
         1820,
         600
       ],
-      "id": "3d690562-b659-4e1d-b6de-80291f87b7aa"
+      "id": "c44e4c52-f74a-481a-8218-8909dd108035"
     },
     {
       "name": "Check Auth: momentum",
@@ -775,7 +775,7 @@
         2080,
         600
       ],
-      "id": "3900366c-759b-42ca-a5e4-54768e3a7735"
+      "id": "68ad31c9-8986-48a5-8a31-328c4eddf3d9"
     },
     {
       "name": "Authorized?: momentum",
@@ -790,7 +790,7 @@
           },
           "conditions": [
             {
-              "id": "83720923-62a8-45f5-b0a8-44c359365612",
+              "id": "13fa708b-a478-4943-95a0-bad1c7a00209",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -808,7 +808,7 @@
         2340,
         600
       ],
-      "id": "2a8ab9fa-f387-4175-883e-b6890c041574"
+      "id": "d726d849-406b-4fc3-b3de-e2c0a6563e24"
     },
     {
       "name": "Respond 401: momentum",
@@ -825,7 +825,7 @@
         2600,
         600
       ],
-      "id": "46b61608-6084-4293-a4e1-3b9056c8cc15"
+      "id": "ec8ad1d5-e336-4d24-8452-957cf8dca2a3"
     },
     {
       "name": "Build Query: momentum",
@@ -840,7 +840,7 @@
         0,
         800
       ],
-      "id": "21bb5acf-494f-4e23-a91a-1e3c2f184eeb"
+      "id": "1e3a521b-ab8c-43fe-a2f1-55fae8f77193"
     },
     {
       "name": "Query: momentum",
@@ -859,7 +859,7 @@
         260,
         800
       ],
-      "id": "af5a05f6-77db-401c-a0dd-36803f618a02"
+      "id": "031f1c44-ac39-4021-ac46-10990570b927"
     },
     {
       "name": "Format: momentum",
@@ -874,7 +874,7 @@
         520,
         800
       ],
-      "id": "1ed663fa-00ac-4a19-95d2-afb3bede5886"
+      "id": "243d937f-145e-41a6-b034-d8790ab7d219"
     },
     {
       "name": "Respond 200: momentum",
@@ -889,13 +889,13 @@
         780,
         800
       ],
-      "id": "393b2a0e-a88e-46d8-af11-1f8f016f75be"
+      "id": "5418ce0a-f733-4af7-9b9e-5bc117bf7366"
     },
     {
       "name": "Webhook: pullback",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "6e6c5abb-1510-4470-9773-1a53d53918c4",
+      "webhookId": "5af96c00-c3f3-460d-aa7e-c2ff0bb6c8df",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/pullback",
@@ -906,7 +906,7 @@
         1040,
         800
       ],
-      "id": "3e454304-5fed-428b-a6eb-573b98174301"
+      "id": "307e06b1-1ffe-4dd2-863c-ec74b10915cc"
     },
     {
       "name": "Check Auth: pullback",
@@ -921,7 +921,7 @@
         1300,
         800
       ],
-      "id": "ed2f0063-cf4a-4395-9f06-1b658405dc0c"
+      "id": "4db8afaa-ed85-4f7e-ac8f-28904a6b4282"
     },
     {
       "name": "Authorized?: pullback",
@@ -936,7 +936,7 @@
           },
           "conditions": [
             {
-              "id": "51c789fe-6b22-4594-bdb5-e934eaa9797e",
+              "id": "3e1c1256-d4be-4c10-8f77-c0842d5ea632",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -954,7 +954,7 @@
         1560,
         800
       ],
-      "id": "efdb74ea-7d87-4995-9d26-7233eba30564"
+      "id": "8e973049-4776-4a50-9b3e-19e78150beb3"
     },
     {
       "name": "Respond 401: pullback",
@@ -971,7 +971,7 @@
         1820,
         800
       ],
-      "id": "57a52c97-bcb7-425a-a217-0426868a1787"
+      "id": "a6ea702f-9e5d-46c4-b487-f7239cecca21"
     },
     {
       "name": "Build Query: pullback",
@@ -986,7 +986,7 @@
         2080,
         800
       ],
-      "id": "3c0fa2e6-9078-4a4e-9764-33d822bf46d7"
+      "id": "e848f24a-a12e-45e0-ac62-707337d79122"
     },
     {
       "name": "Query: pullback",
@@ -1005,7 +1005,7 @@
         2340,
         800
       ],
-      "id": "7866734e-a174-496d-be55-ad2cdb01d23a"
+      "id": "c51f2af1-2546-499a-9ccc-119e78114e35"
     },
     {
       "name": "Format: pullback",
@@ -1020,7 +1020,7 @@
         2600,
         800
       ],
-      "id": "3dda8c67-3607-4964-8b2a-417851f48483"
+      "id": "803b7877-4ed1-434f-be0a-e2c89dc5743b"
     },
     {
       "name": "Respond 200: pullback",
@@ -1035,13 +1035,13 @@
         0,
         1000
       ],
-      "id": "cdb143c3-606b-4872-b0cf-3e0bd1dc88a6"
+      "id": "6f6cbf15-383c-4837-94ec-b825d0ba5244"
     },
     {
       "name": "Webhook: reversal",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "dc74670a-f5d2-4fc2-b45c-8900a40999e4",
+      "webhookId": "1d8de357-8577-4c78-8968-41562b2c12c8",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/reversal",
@@ -1052,7 +1052,7 @@
         260,
         1000
       ],
-      "id": "846d88a4-ab20-4110-9492-771e9751a43e"
+      "id": "105094bf-d486-4fb0-9d64-2abc0d12821c"
     },
     {
       "name": "Check Auth: reversal",
@@ -1067,7 +1067,7 @@
         520,
         1000
       ],
-      "id": "9f03dbf4-fe01-4564-b3ff-5bef248fc0e0"
+      "id": "f9e423a8-f117-40ad-8d2c-62fcc0c82d08"
     },
     {
       "name": "Authorized?: reversal",
@@ -1082,7 +1082,7 @@
           },
           "conditions": [
             {
-              "id": "4c71499f-1306-4332-b051-ddb97817247c",
+              "id": "0f39228c-8d19-4c46-bd97-0448fd0e981b",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -1100,7 +1100,7 @@
         780,
         1000
       ],
-      "id": "c3f87309-77c2-4971-8f79-62325bbb5543"
+      "id": "bb12fc64-1173-4a82-ae99-c076b697b686"
     },
     {
       "name": "Respond 401: reversal",
@@ -1117,7 +1117,7 @@
         1040,
         1000
       ],
-      "id": "b9005b85-5eff-40e3-a4cd-adbdee87c923"
+      "id": "45f988b6-acc7-4681-aa70-bca892e7c965"
     },
     {
       "name": "Build Query: reversal",
@@ -1132,7 +1132,7 @@
         1300,
         1000
       ],
-      "id": "dc5f075c-fc81-45f9-ab82-8207f90d22de"
+      "id": "2bb8b2ed-9b58-429d-8ae3-6f9465898b9a"
     },
     {
       "name": "Query: reversal",
@@ -1151,7 +1151,7 @@
         1560,
         1000
       ],
-      "id": "3c09cf34-8bfe-4859-97e2-7cca850d0259"
+      "id": "9fc9c37a-449e-4de8-bc51-ed391738c27e"
     },
     {
       "name": "Format: reversal",
@@ -1166,7 +1166,7 @@
         1820,
         1000
       ],
-      "id": "ffc0328b-0090-44c2-9fa6-616303de0cdd"
+      "id": "d4d2bba0-f624-4ca7-8e1a-c27da1c67338"
     },
     {
       "name": "Respond 200: reversal",
@@ -1181,13 +1181,13 @@
         2080,
         1000
       ],
-      "id": "619ff6a4-63c1-4908-8437-d932c6c36cab"
+      "id": "6240cf69-5089-4c55-8ac9-e794d7a64780"
     },
     {
       "name": "Webhook: stock-detail",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "16632b62-e196-4ade-96d6-5c993bda4271",
+      "webhookId": "d106f522-a27b-402d-9f72-ab11f4bb5611",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/stock",
@@ -1198,7 +1198,7 @@
         2340,
         1000
       ],
-      "id": "f53e1518-4121-47f4-b2b2-9357eb218398"
+      "id": "4a485b8a-dd44-4309-8576-069a8a9365c9"
     },
     {
       "name": "Check Auth: stock-detail",
@@ -1213,7 +1213,7 @@
         2600,
         1000
       ],
-      "id": "0298ecd1-a20b-4139-b0ea-43925c5546cb"
+      "id": "733c0c5c-1deb-4332-97ae-f51429caa3ec"
     },
     {
       "name": "Authorized?: stock-detail",
@@ -1228,7 +1228,7 @@
           },
           "conditions": [
             {
-              "id": "821aa4d5-63cf-4b85-9593-e5330fd1dafc",
+              "id": "978f55f3-16ed-43ef-9872-c84e820696c2",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -1246,7 +1246,7 @@
         0,
         1200
       ],
-      "id": "3fb29e30-1086-43fb-9134-9f7c50f590d6"
+      "id": "24feee1c-5c13-4e02-a533-2039be5532d3"
     },
     {
       "name": "Respond 401: stock-detail",
@@ -1263,7 +1263,7 @@
         260,
         1200
       ],
-      "id": "ed36a0f1-4f58-4bec-af40-0e8ea1f0efd1"
+      "id": "22d908b8-8139-47ea-b9e7-b794f4e28cdb"
     },
     {
       "name": "Build Query: stock-detail",
@@ -1278,7 +1278,7 @@
         520,
         1200
       ],
-      "id": "dcf28826-afbe-4ffc-9311-fd999b8d22c3"
+      "id": "8158c389-f177-4e87-9636-6d4d0e29f718"
     },
     {
       "name": "Query: stock-detail",
@@ -1296,7 +1296,7 @@
         780,
         1200
       ],
-      "id": "eb142afe-bd43-4ab2-acd3-b1f7726f5e75"
+      "id": "9c7b45aa-0515-459b-8ea8-61e2ec165e60"
     },
     {
       "name": "Format: stock-detail",
@@ -1305,13 +1305,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const row = $input.first() ? $input.first().json : null;\nif (!row) return [{ json: { success: false, error: 'symbol not found' } }];\nreturn [{ json: {\n  success: true,\n  symbol: row.symbol, name: row.name, close: row.close, changePct: row.change_pct,\n  volume: row.volume, averageVolume20: row.avg_volume20, relativeVolume20: row.rvol20,\n  rsi14: row.rsi14,\n  macd: { line: row.macd, signal: row.macd_signal, histogram: row.macd_histogram, state: (row.macd_histogram > 0 ? 'BULLISH' : 'BEARISH') },\n  movingAverages: { ema9: row.ema9, ema20: row.ema20, ema50: row.ema50, ema200: row.ema200 },\n  support: [row.support1, row.support2, row.support3].filter((v) => v !== null),\n  resistance: [row.resistance1, row.resistance2, row.resistance3].filter((v) => v !== null),\n  scores: { overall: row.overall_score, breakout: row.breakout_score, momentum: row.momentum_score, pullback: row.pullback_score, reversal: row.reversal_score },\n  setup: row.setup_type,\n  eligible: row.eligible,\n  // gainPct is potential gain IF the target is reached, plain arithmetic on\n  // entry/target — NOT a forecast. estimatedDays is a rough ATR-based\n  // projection (this stock's own average daily range), NOT a historical\n  // statistic or a guarantee of when (or whether) the target is hit — see\n  // docs/SCORING.md for the exact method.\n  tradeStructure: {\n    entry: row.entry_price, invalidation: row.invalidation_price,\n    target1: row.target1, target2: row.target2, target3: row.target3,\n    riskReward: { t1: row.risk_reward_t1, t2: row.risk_reward_t2, t3: row.risk_reward_t3 },\n    gainPct: { t1: row.target1_gain_pct, t2: row.target2_gain_pct, t3: row.target3_gain_pct },\n    estimatedDays: { t1: row.target1_estimated_days, t2: row.target2_estimated_days, t3: row.target3_estimated_days },\n  },\n  // Measured historical outcome rate for this setup_type, walking forward\n  // up to target1_estimated_days trading sessions across every past\n  // eligible pick of the same setup — NOT a forecast for THIS stock, and\n  // not reliable when sampleSize is small (see docs/SCORING.md).\n  historicalProbability: {\n    setupType: row.setup_type,\n    target1HitPct: row.historical_target1_hit_pct,\n    stopHitPct: row.historical_stop_hit_pct,\n    sampleSize: row.historical_sample_size,\n  },\n} }];"
+        "jsCode": "const row = $input.first() ? $input.first().json : null;\nif (!row) return [{ json: { success: false, error: 'symbol not found' } }];\nreturn [{ json: {\n  success: true,\n  symbol: row.symbol, name: row.name, close: row.close, changePct: row.change_pct,\n  volume: row.volume, averageVolume20: row.avg_volume20, relativeVolume20: row.rvol20,\n  rsi14: row.rsi14,\n  macd: { line: row.macd, signal: row.macd_signal, histogram: row.macd_histogram, state: (row.macd_histogram > 0 ? 'BULLISH' : 'BEARISH') },\n  movingAverages: { ema9: row.ema9, ema20: row.ema20, ema50: row.ema50, ema200: row.ema200 },\n  support: [row.support1, row.support2, row.support3].filter((v) => v !== null),\n  resistance: [row.resistance1, row.resistance2, row.resistance3].filter((v) => v !== null),\n  scores: { overall: row.overall_score, breakout: row.breakout_score, momentum: row.momentum_score, pullback: row.pullback_score, reversal: row.reversal_score },\n  setup: row.setup_type,\n  eligible: row.eligible,\n  // gainPct is potential gain IF the target is reached, plain arithmetic on\n  // entry/target — NOT a forecast. estimatedDays is a rough ATR-based\n  // projection (this stock's own average daily range), NOT a historical\n  // statistic or a guarantee of when (or whether) the target is hit — see\n  // docs/SCORING.md for the exact method.\n  tradeStructure: {\n    entry: row.entry_price, invalidation: row.invalidation_price,\n    target1: row.target1, target2: row.target2, target3: row.target3,\n    riskReward: { t1: row.risk_reward_t1, t2: row.risk_reward_t2, t3: row.risk_reward_t3 },\n    gainPct: { t1: row.target1_gain_pct, t2: row.target2_gain_pct, t3: row.target3_gain_pct },\n    estimatedDays: { t1: row.target1_estimated_days, t2: row.target2_estimated_days, t3: row.target3_estimated_days },\n  },\n  // Measured historical outcome rate for this setup_type, walking forward\n  // up to target1_estimated_days trading sessions across every past\n  // eligible pick of the same setup — NOT a forecast for THIS stock, and\n  // not reliable when sampleSize is small (see docs/SCORING.md).\n  historicalProbability: {\n    setupType: row.setup_type,\n    target1HitPct: row.historical_target1_hit_pct,\n    stopHitPct: row.historical_stop_hit_pct,\n    sampleSize: row.historical_sample_size,\n  },\n  // A language model's own read of this setup — only computed for that\n  // day's Top 10 (rank/ai_reasoning null otherwise). A judgment call from\n  // limited technical data, not a statistic, not a guarantee.\n  aiAssessment: {\n    rank: row.ai_rank,\n    target1ProbabilityPct: row.ai_target1_probability_pct,\n    rankScore: row.ai_rank_score,\n    reasoning: row.ai_reasoning,\n  },\n} }];"
       },
       "position": [
         1040,
         1200
       ],
-      "id": "e204e43a-879d-42f9-bb28-71ec1d0f6f19"
+      "id": "0a5acfdc-891c-4608-8cc7-14255ff45e5b"
     },
     {
       "name": "Respond 200: stock-detail",
@@ -1326,13 +1326,13 @@
         1300,
         1200
       ],
-      "id": "a35cee0f-a15f-480a-a1af-6fcc8aa3a8bd"
+      "id": "20e7fcf6-b83b-48e4-a036-860845988597"
     },
     {
       "name": "Webhook: stock-technicals",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "9f199d33-97e3-4ec0-ab54-052f33c8b67b",
+      "webhookId": "c44f7ca1-e0a6-4724-9620-50f8ec575bad",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/stock/technicals",
@@ -1343,7 +1343,7 @@
         1560,
         1200
       ],
-      "id": "74aa1a39-d12e-4975-ad1e-6cbca28e2645"
+      "id": "2665207b-3992-48c5-ace0-ddd2cbac004c"
     },
     {
       "name": "Check Auth: stock-technicals",
@@ -1358,7 +1358,7 @@
         1820,
         1200
       ],
-      "id": "ceaa71b1-6d43-423f-98a5-dc8fdace692e"
+      "id": "579cebbf-2330-4df6-9c9e-a3a8764867a7"
     },
     {
       "name": "Authorized?: stock-technicals",
@@ -1373,7 +1373,7 @@
           },
           "conditions": [
             {
-              "id": "ae3a49cb-61a0-4bb5-b456-45461afc215a",
+              "id": "725ff4fe-b420-4a0e-bef9-2dd0f15105c7",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -1391,7 +1391,7 @@
         2080,
         1200
       ],
-      "id": "b69c4323-dcda-464c-a3dc-bbb99c5df9db"
+      "id": "178d3f03-1a9b-4b7b-b8f2-f21c7659819b"
     },
     {
       "name": "Respond 401: stock-technicals",
@@ -1408,7 +1408,7 @@
         2340,
         1200
       ],
-      "id": "13832914-82ec-44df-a870-43b1e010d448"
+      "id": "898514af-4529-4812-b8e8-41cfa8d254b3"
     },
     {
       "name": "Build Query: stock-technicals",
@@ -1423,7 +1423,7 @@
         2600,
         1200
       ],
-      "id": "f1e1eaa5-386b-4375-9f37-808d02b59ae3"
+      "id": "b34459c8-b536-48ae-87c8-9adad946c8b4"
     },
     {
       "name": "Query: stock-technicals",
@@ -1441,7 +1441,7 @@
         0,
         1400
       ],
-      "id": "324935f8-aebf-4252-ae5c-0373908a0a22"
+      "id": "515ef6ef-8450-49e6-b3a5-7d681b3556fb"
     },
     {
       "name": "Format: stock-technicals",
@@ -1456,7 +1456,7 @@
         260,
         1400
       ],
-      "id": "ed340c1a-f620-4589-abab-dd4de554e454"
+      "id": "c1570e70-bbdc-4d55-a8de-a68f2ef28d49"
     },
     {
       "name": "Respond 200: stock-technicals",
@@ -1471,13 +1471,13 @@
         520,
         1400
       ],
-      "id": "6f4c9213-bc73-47ba-99a5-e45e78647ba5"
+      "id": "3cdcb868-d71d-474a-95d4-e4c716ce4b54"
     },
     {
       "name": "Webhook: stock-support-resistance",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "27a9638b-e14d-48a8-b279-3f16e463f3c0",
+      "webhookId": "b8d6095c-e45a-4a64-a0d3-be12b5a234c0",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/stock/support-resistance",
@@ -1488,7 +1488,7 @@
         780,
         1400
       ],
-      "id": "fff92216-a38f-403d-93d2-00be9d81f934"
+      "id": "31bf6efd-0da3-4992-8d12-5d32cc20f5ef"
     },
     {
       "name": "Check Auth: stock-support-resistance",
@@ -1503,7 +1503,7 @@
         1040,
         1400
       ],
-      "id": "d20c1530-e363-482b-b6ee-ae70af6114e5"
+      "id": "35be5465-692e-48f9-bd75-916a5160f8e7"
     },
     {
       "name": "Authorized?: stock-support-resistance",
@@ -1518,7 +1518,7 @@
           },
           "conditions": [
             {
-              "id": "7439e07a-86af-4e94-a3ef-4c928018142e",
+              "id": "cecf1c9d-b36c-4f36-b17d-be472d877c71",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -1536,7 +1536,7 @@
         1300,
         1400
       ],
-      "id": "c20138e9-267d-4602-b79a-8da848ea3125"
+      "id": "53834fe1-3637-4ce9-b05c-18de5c0476cd"
     },
     {
       "name": "Respond 401: stock-support-resistance",
@@ -1553,7 +1553,7 @@
         1560,
         1400
       ],
-      "id": "eb394a03-ba6b-46bc-84aa-e95b0f86ed55"
+      "id": "f4a02902-2f3f-41e0-94ca-2d44a873fa6c"
     },
     {
       "name": "Build Query: stock-support-resistance",
@@ -1568,7 +1568,7 @@
         1820,
         1400
       ],
-      "id": "6d5658be-1561-4dac-82ea-993fbc7d7b52"
+      "id": "77fc1d7a-3a7b-4a47-94f5-2722f9aa7d2e"
     },
     {
       "name": "Query: stock-support-resistance",
@@ -1586,7 +1586,7 @@
         2080,
         1400
       ],
-      "id": "a9e203a7-eebc-4d43-b4f8-4088db2a124f"
+      "id": "6f7354f4-53e0-4ebd-bfb3-9a4ce4e247f3"
     },
     {
       "name": "Format: stock-support-resistance",
@@ -1601,7 +1601,7 @@
         2340,
         1400
       ],
-      "id": "c3c74a07-33f3-4387-93bc-993a730ecaa0"
+      "id": "00c3954c-2ff2-4784-8811-d77c0648fdc5"
     },
     {
       "name": "Respond 200: stock-support-resistance",
@@ -1616,13 +1616,13 @@
         2600,
         1400
       ],
-      "id": "8dcd50e9-e5c6-407c-b350-3d67ccfbc7b3"
+      "id": "1a9478ec-bdde-4238-a6a8-730ed71689bb"
     },
     {
       "name": "Webhook: market",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "d191672e-6da1-4e6b-a1c6-d0c7b27e706e",
+      "webhookId": "46ed7ded-2289-4054-b8e4-a6c2ee720df3",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/market",
@@ -1633,7 +1633,7 @@
         0,
         1600
       ],
-      "id": "31fd37c4-d207-4a34-bcca-4187a6c87ced"
+      "id": "dbf2302f-f7a1-4413-b8a2-9a95cad02ba7"
     },
     {
       "name": "Check Auth: market",
@@ -1648,7 +1648,7 @@
         260,
         1600
       ],
-      "id": "fc248446-d0bd-44d9-b307-8858e0f4e6f9"
+      "id": "411476a4-b205-4219-87fb-ff4c713cde7c"
     },
     {
       "name": "Authorized?: market",
@@ -1663,7 +1663,7 @@
           },
           "conditions": [
             {
-              "id": "a7140519-9432-478f-8b20-d2565602b4d9",
+              "id": "e91d6950-e475-4d0b-a3fa-141b70e3673e",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -1681,7 +1681,7 @@
         520,
         1600
       ],
-      "id": "f8a3b8ea-dfbf-41c0-aa13-3b6109559717"
+      "id": "8c2a9f5f-afe8-468e-9bb8-87c50be74c40"
     },
     {
       "name": "Respond 401: market",
@@ -1698,7 +1698,7 @@
         780,
         1600
       ],
-      "id": "793a0db2-5853-4f59-b106-9e2afce7bfde"
+      "id": "0f3e9f9c-284b-498b-9e61-2db5aa0e5bc7"
     },
     {
       "name": "Query: market",
@@ -1714,7 +1714,7 @@
         1040,
         1600
       ],
-      "id": "839a52a6-651e-461b-bc9e-51b9a138d12c"
+      "id": "8ba410b7-0a10-4b85-902e-a947150ff3b6"
     },
     {
       "name": "Format: market",
@@ -1729,7 +1729,7 @@
         1300,
         1600
       ],
-      "id": "eefd904a-ffe9-4b37-bb72-1a6384cfbc29"
+      "id": "f7004a27-4bfd-4e90-9df6-91317425bd8b"
     },
     {
       "name": "Respond 200: market",
@@ -1744,13 +1744,13 @@
         1560,
         1600
       ],
-      "id": "28ec3a59-18c2-4030-8831-52b79bc82b56"
+      "id": "5b85fa53-071d-4fda-bd12-9ffcf418d723"
     },
     {
       "name": "Webhook: dates",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "d834f817-e955-4051-8381-d8976ba1e7fe",
+      "webhookId": "a4e74208-ff9a-4554-a417-6cfac98a3ac4",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/dates",
@@ -1761,7 +1761,7 @@
         1820,
         1600
       ],
-      "id": "6f6b7cab-c1f6-4422-82ab-c11a52fc2a35"
+      "id": "9fd233c6-43ca-4b09-b0c3-6bb81d0ca7ec"
     },
     {
       "name": "Check Auth: dates",
@@ -1776,7 +1776,7 @@
         2080,
         1600
       ],
-      "id": "e2881f4e-c33e-4cab-8b5b-0bef17c9bf7c"
+      "id": "91eb6d30-35c2-40ec-ba41-d36ff5316d9d"
     },
     {
       "name": "Authorized?: dates",
@@ -1791,7 +1791,7 @@
           },
           "conditions": [
             {
-              "id": "cb5f3531-1aa7-466b-91e5-fbc789303cc5",
+              "id": "e11f146c-542d-4d2c-a798-a47b8e0fc6d9",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -1809,7 +1809,7 @@
         2340,
         1600
       ],
-      "id": "97fcdb62-1e55-49ca-bcf7-ba6461d0d41c"
+      "id": "739d216a-4f3c-4bb7-a30a-6ca7417c87d9"
     },
     {
       "name": "Respond 401: dates",
@@ -1826,7 +1826,7 @@
         2600,
         1600
       ],
-      "id": "34116883-c565-40bc-89ae-7d0bed5f967d"
+      "id": "7990e0af-c473-43cf-ad23-6bfff3df8432"
     },
     {
       "name": "Query: dates",
@@ -1843,7 +1843,7 @@
         0,
         1800
       ],
-      "id": "f9bcc3c0-1024-4bb8-a17d-c959f9ee3af8"
+      "id": "93cd4d70-a6fc-487f-a7e0-83163c69127a"
     },
     {
       "name": "Format: dates",
@@ -1858,7 +1858,7 @@
         260,
         1800
       ],
-      "id": "428df1e7-1c83-4107-b66e-fdabef657c1f"
+      "id": "7c5a8853-dbc1-494a-9bd7-3984b4c6e4ba"
     },
     {
       "name": "Respond 200: dates",
@@ -1873,7 +1873,7 @@
         520,
         1800
       ],
-      "id": "3c42e888-253e-4b64-8e3d-2b13df45d855"
+      "id": "4f30ce53-8eb6-4c2a-8c23-934b79a5e57f"
     }
   ],
   "connections": {
@@ -2813,6 +2813,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "1d081da5-d334-4712-a32a-536e4c503192",
+  "id": "e5c234b3-be9d-45b9-89de-fd95dd6a3162",
   "tags": []
 }

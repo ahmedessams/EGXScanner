@@ -98,9 +98,29 @@ Schedule Trigger (`30 15 * * 0-4` — edit to match `DAILY_SCAN_HOUR`/
 can't read the env vars directly) or Manual Trigger ("Run EGX Scanner Now").
 Calls `01`, `03`, then gates on `isTradingDay`, then `04`→`05`→`06`→`07`→
 `08`→`09`→`10`→`11` in sequence (each hop re-injects `{asOfDate}` via a
-"Prep for X" node — see ARCHITECTURE.md), then loads the Top 10 + market
-regime and generates the plain-text daily report (section 24/53 format) as
-its final output item's `reportText` field.
+"Prep for X" node — see ARCHITECTURE.md). After `11`, fans out to TWO
+parallel branches (not sequential — `17` makes slower external API calls
+and shouldn't gate the report): loads the Top 10 + market regime and
+generates the plain-text daily report (section 24/53 format) as its final
+output item's `reportText` field; and separately calls `17` for that same
+Top 10.
+
+## 17 - EGX AI Assessment
+
+User-requested addition beyond the original spec. For each of that day's
+Top 10 (`overall_rank <= 10`, eligible only — never the full 241-stock
+universe, to keep this cheap), sends its technical/setup data to the
+Anthropic Messages API with forced tool-use for structured JSON output,
+asking for an independent probability estimate (reaching Target 1 within
+`target1_estimated_days`) and a conviction score. `ai_rank` is then derived
+locally by sorting that batch by conviction score — a second ranking shown
+alongside `overall_rank`, not a replacement. Requires `ANTHROPIC_API_KEY`;
+if unset/invalid/erroring, every row simply keeps NULL AI columns rather
+than the workflow failing (confirmed via live testing with a mocked
+auth-error response). See docs/SCORING.md "AI Assessment" for the full
+methodology and the honesty framing around it (this is a model's judgment
+call, not a statistic and not a guarantee). Callable standalone via Manual
+Trigger for the latest date.
 
 ## 13 - EGX Report API
 

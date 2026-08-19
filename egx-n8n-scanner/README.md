@@ -141,6 +141,10 @@ See `env.example.txt` for the full, commented list (POSTGRES_*, n8n auth,
 workflow JSON files — everything is read via `$env.*` expressions or left as
 an unassigned n8n credential for you to configure after import.
 
+`ANTHROPIC_API_KEY` is optional — powers `17 - EGX AI Assessment`'s "AI
+Rank"/"AI Prob % T1" columns (see docs/SCORING.md "AI Assessment"). Leave
+it blank and that workflow just no-ops; nothing else depends on it.
+
 ## Running the scanner
 
 - **Manual, right now:** open `12 - EGX Daily Master Workflow` in n8n and

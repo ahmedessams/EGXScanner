@@ -134,6 +134,11 @@
   }
   .detail-btn:hover { background: var(--accent-weak); border-color: var(--accent); }
 
+  .ai-badge {
+    display: inline-block; padding: 2px 7px; border-radius: 6px; font-weight: 600;
+    font-size: 12px; background: #f0e4fb; color: #8a3fd6;
+  }
+
   .rank-badge {
     display: inline-flex; align-items: center; justify-content: center;
     width: 22px; height: 22px; border-radius: 6px; font-weight: 700; font-size: 11px;
@@ -391,6 +396,8 @@ const RANKED_COLUMNS = [
   { key: 'target1_estimated_days', label: 'Est. Days T1', num: true, title: 'Rough ATR-based projection, not a historical statistic or guarantee', render: (r) => fmtDays(r.target1_estimated_days) },
   { key: 'historical_target1_hit_pct', label: 'P(T1) %', num: true, title: 'Historical rate: % of past eligible picks with this setup type that reached Target 1 within their own estimated-days window. Not a forecast for this specific stock — hover the value for sample size.', render: (r) => probCell(r.historical_target1_hit_pct, r.historical_sample_size, true) },
   { key: 'historical_stop_hit_pct', label: 'P(Stop) %', num: true, title: 'Historical rate: % of past eligible picks with this setup type that hit the stop/invalidation level first, within that same window. Hover the value for sample size.', render: (r) => probCell(r.historical_stop_hit_pct, r.historical_sample_size, false) },
+  { key: 'ai_rank', label: 'AI Rank', num: true, title: 'AI Assessment: a language model\'s own re-ranking of that day\'s Top 10, from the same technical data — a second opinion shown alongside Overall Rank, not a replacement for it. Only computed for the Top 10, not the full market.', render: (r) => aiRankCell(r.ai_rank) },
+  { key: 'ai_target1_probability_pct', label: 'AI Prob % T1', num: true, title: 'AI Assessment: a language model\'s own probability estimate for reaching Target 1 within its estimated-days window. A qualitative judgment call from limited technical data — NOT the measured P(T1) % above, and NOT a guarantee. Hover for the model\'s stated reasoning.', render: (r) => aiProbCell(r.ai_target1_probability_pct, r.ai_reasoning) },
 ];
 
 const VOLUME_COLUMNS = [
@@ -511,6 +518,16 @@ function probCell(v, sampleSize, positive) {
   const style = lowConfidence ? 'opacity:0.6;font-style:italic;' : '';
   const note = lowConfidence ? ' — small sample, treat with caution' : '';
   return `<span class="${cls}" style="${style}" title="Sample size: n=${size}${note}">${n.toFixed(1)}%</span>`;
+}
+function aiRankCell(v) {
+  if (v === null || v === undefined || v === '') return '—';
+  return `<span class="ai-badge">🤖 ${esc(String(v))}</span>`;
+}
+function aiProbCell(v, reasoning) {
+  if (v === null || v === undefined || v === '') return '—';
+  const n = Number(v);
+  const title = reasoning ? `AI reasoning: ${reasoning}` : 'AI Assessment';
+  return `<span class="ai-badge" title="${esc(title)}">${n.toFixed(0)}%</span>`;
 }
 function changeCell(v) {
   if (v === null || v === undefined || v === '') return '—';
@@ -888,6 +905,20 @@ async function openDetail(symbol) {
           Measured outcome rate across ${data.historicalProbability.sampleSize ?? 0} past ${esc(data.historicalProbability.setupType || '')}-setup
           picks, walking forward up to each pick's own estimated-days window — NOT a
           forecast for this specific stock, and not reliable when the sample size is small.
+        </div>
+      ` : ''}
+
+      ${data.aiAssessment && data.aiAssessment.target1ProbabilityPct !== null && data.aiAssessment.target1ProbabilityPct !== undefined ? `
+        <div class="section-title">AI Assessment</div>
+        <div class="kv-grid">
+          <div class="kv"><div class="label">AI Rank (of Top 10)</div><div class="value">${aiRankCell(data.aiAssessment.rank)}</div></div>
+          <div class="kv"><div class="label">AI Probability T1</div><div class="value">${aiProbCell(data.aiAssessment.target1ProbabilityPct)}</div></div>
+        </div>
+        ${data.aiAssessment.reasoning ? `<div style="font-size:12px;margin-top:8px;">${esc(data.aiAssessment.reasoning)}</div>` : ''}
+        <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">
+          A language model's own read of this setup, from the same technical data —
+          a judgment call, not a statistic like Historical Probability above, and not
+          a guarantee. Only computed for that day's Top 10.
         </div>
       ` : ''}
 

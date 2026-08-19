@@ -158,7 +158,11 @@ SELECT
     res.target1_estimated_days, res.target2_estimated_days, res.target3_estimated_days,
     ps.target1_hit_pct::float8 AS historical_target1_hit_pct,
     ps.stop_hit_pct::float8 AS historical_stop_hit_pct,
-    ps.sample_size AS historical_sample_size
+    ps.sample_size AS historical_sample_size,
+    res.ai_target1_probability_pct::float8 AS ai_target1_probability_pct,
+    res.ai_rank_score::float8 AS ai_rank_score,
+    res.ai_rank,
+    res.ai_reasoning
 
 FROM stocks s
 LEFT JOIN v_latest_prices lp ON lp.stock_id = s.id
@@ -228,7 +232,11 @@ RETURNS SETOF v_full_market AS $$
       res.target1_estimated_days, res.target2_estimated_days, res.target3_estimated_days,
       ps.target1_hit_pct::float8 AS historical_target1_hit_pct,
       ps.stop_hit_pct::float8 AS historical_stop_hit_pct,
-      ps.sample_size AS historical_sample_size
+      ps.sample_size AS historical_sample_size,
+      res.ai_target1_probability_pct::float8 AS ai_target1_probability_pct,
+      res.ai_rank_score::float8 AS ai_rank_score,
+      res.ai_rank,
+      res.ai_reasoning
 
   FROM stocks s
   LEFT JOIN prices_as_of(p_date) lp ON lp.stock_id = s.id
@@ -287,7 +295,11 @@ SELECT
     res.setup_confidence::float8 AS setup_confidence,
     ps.target1_hit_pct::float8 AS historical_target1_hit_pct,
     ps.stop_hit_pct::float8 AS historical_stop_hit_pct,
-    ps.sample_size AS historical_sample_size
+    ps.sample_size AS historical_sample_size,
+    res.ai_target1_probability_pct::float8 AS ai_target1_probability_pct,
+    res.ai_rank_score::float8 AS ai_rank_score,
+    res.ai_rank,
+    res.ai_reasoning
 FROM scanner_results res
 JOIN scanner_runs run ON run.id = res.scanner_run_id
 JOIN stocks s ON s.id = res.stock_id

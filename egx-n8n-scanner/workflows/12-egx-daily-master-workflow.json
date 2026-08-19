@@ -16,7 +16,7 @@
         "width": 560,
         "color": 5
       },
-      "id": "9fa4ff47-da28-47fc-b129-0ddf36bf8f03"
+      "id": "0e6de3f1-f3e0-448d-9500-ab2f69735903"
     },
     {
       "name": "Schedule Trigger (Daily After Close)",
@@ -36,7 +36,7 @@
         0,
         0
       ],
-      "id": "6754181e-9e21-437d-8c12-6c2bc9168ae7"
+      "id": "774975b4-80db-4e00-9040-4874cb35594a"
     },
     {
       "name": "Manual Trigger (Run EGX Scanner Now)",
@@ -47,7 +47,7 @@
         260,
         0
       ],
-      "id": "e7d1e739-70ff-4a79-9eb8-874fd6493472"
+      "id": "9643408e-ea91-4302-a344-9f3db61c2e5d"
     },
     {
       "name": "Compute Trading Date",
@@ -62,7 +62,7 @@
         520,
         0
       ],
-      "id": "36786e48-c659-4b49-92e0-afc3b898a820"
+      "id": "3ec187a4-306c-4beb-88ae-f6460fbd2369"
     },
     {
       "name": "Execute: 01 Stock Universe",
@@ -82,7 +82,7 @@
         780,
         0
       ],
-      "id": "113343a4-6525-4fde-b34e-e2a6b0ecf399"
+      "id": "c2341a35-e592-4c23-85c4-2e1c569aea70"
     },
     {
       "name": "Prep for 03",
@@ -97,7 +97,7 @@
         1040,
         0
       ],
-      "id": "3d4e3201-59ab-41cc-8b00-cc2c92282d1a"
+      "id": "20f442e3-71da-4031-8b7f-63f7cc063d71"
     },
     {
       "name": "Execute: 03 Daily Market Update",
@@ -117,7 +117,7 @@
         1300,
         0
       ],
-      "id": "6f2d18c8-3062-439d-9630-b8eafc97a775"
+      "id": "89f8c51a-8c35-4e8d-9980-52f270e18fee"
     },
     {
       "name": "Is Trading Day?",
@@ -132,7 +132,7 @@
           },
           "conditions": [
             {
-              "id": "e1fc4373-4ecf-4523-ae6b-b5d2014ba568",
+              "id": "7a32311c-828b-442d-aaf2-820393b364da",
               "leftValue": "={{ $json.isTradingDay }}",
               "rightValue": "",
               "operator": {
@@ -150,7 +150,7 @@
         1560,
         0
       ],
-      "id": "016d3f2f-78b1-4145-ae3e-1f15da879c20"
+      "id": "f039772b-bc2f-460b-b025-5f0098884aa4"
     },
     {
       "name": "Skip - Non-Trading Day",
@@ -161,7 +161,7 @@
         1820,
         0
       ],
-      "id": "a1b5b8bc-cce8-4dbe-96ea-3914971043e4"
+      "id": "d830099f-0a4d-4fb2-928d-a66f34e70bdc"
     },
     {
       "name": "Prep for 04",
@@ -176,7 +176,7 @@
         2080,
         0
       ],
-      "id": "49761178-808c-4a56-adb3-90744746cff7"
+      "id": "3048bcdd-daaf-4a3a-929c-376041fed22a"
     },
     {
       "name": "Execute: 04 Technical Analysis",
@@ -196,7 +196,7 @@
         2340,
         0
       ],
-      "id": "5e278dfa-409b-49ad-a9eb-4f1358aafe90"
+      "id": "9db98c88-4a6a-42f4-a363-32ded7ea3d76"
     },
     {
       "name": "Prep for 05",
@@ -211,7 +211,7 @@
         2600,
         0
       ],
-      "id": "fed92a64-cb71-4064-81a4-22abf1d91385"
+      "id": "e76f9c6d-124b-4020-b0fd-343918088aef"
     },
     {
       "name": "Execute: 05 Support Resistance",
@@ -231,7 +231,7 @@
         0,
         200
       ],
-      "id": "bb198346-5a67-40c0-b4b7-5f60dc8b708c"
+      "id": "7b7a31fe-3986-4832-adaa-39bf01e94489"
     },
     {
       "name": "Prep for 06",
@@ -246,7 +246,7 @@
         260,
         200
       ],
-      "id": "d56d96fe-d0d6-4d9d-8605-515dd7a7bbc3"
+      "id": "2ecd9f02-1487-4737-8ecc-8f1633cfaec3"
     },
     {
       "name": "Execute: 06 Volume Analysis",
@@ -266,7 +266,7 @@
         520,
         200
       ],
-      "id": "5d2ccfe8-8d5e-4e9c-8270-ddf759eef396"
+      "id": "fe9ab008-fbee-42e6-9184-9efd1d1b60e2"
     },
     {
       "name": "Prep for 07",
@@ -281,7 +281,7 @@
         780,
         200
       ],
-      "id": "8c1174e2-501f-4a89-afd3-32c2155462d6"
+      "id": "2f77968b-4fdb-4e64-ac6c-92ccf73d26cb"
     },
     {
       "name": "Execute: 07 Breakout Scanner",
@@ -301,7 +301,7 @@
         1040,
         200
       ],
-      "id": "7f77f0cb-a6f1-4f29-b87a-b34867a5eaf1"
+      "id": "2aa237cc-a14f-43bd-a20c-76c8bb226e44"
     },
     {
       "name": "Prep for 08",
@@ -316,7 +316,7 @@
         1300,
         200
       ],
-      "id": "28b89680-b34a-4f30-a40f-8a4890506fa7"
+      "id": "632a53e3-b626-4824-9333-310aa048c2c8"
     },
     {
       "name": "Execute: 08 Momentum Scanner",
@@ -336,7 +336,7 @@
         1560,
         200
       ],
-      "id": "c0b6f8fa-927b-4f46-a94c-77023a57a296"
+      "id": "bbd9a65d-814f-4f1f-b37b-a8399f80043e"
     },
     {
       "name": "Prep for 09",
@@ -351,7 +351,7 @@
         1820,
         200
       ],
-      "id": "ff2f1938-5803-4978-b404-f2a6deb2099f"
+      "id": "8a055a6c-e7dc-488c-880d-773b42f785d2"
     },
     {
       "name": "Execute: 09 Pullback Scanner",
@@ -371,7 +371,7 @@
         2080,
         200
       ],
-      "id": "3dadd642-ca61-477d-9f04-e3a1fba9858b"
+      "id": "f5878bb1-96f4-4080-9abf-20447538f6cd"
     },
     {
       "name": "Prep for 10",
@@ -386,7 +386,7 @@
         2340,
         200
       ],
-      "id": "e27eaec6-d1d1-4700-a3ca-d6f303c91dca"
+      "id": "57c3cd4e-6011-4b59-91aa-ec04d41578ae"
     },
     {
       "name": "Execute: 10 Reversal Scanner",
@@ -406,7 +406,7 @@
         2600,
         200
       ],
-      "id": "70b633db-628e-48d1-9106-f3d1fa74c158"
+      "id": "14c78001-64f4-4127-b021-1f9426f748ca"
     },
     {
       "name": "Prep for 11",
@@ -421,7 +421,7 @@
         0,
         400
       ],
-      "id": "97ef1466-c3d4-41f8-bd05-d797c8c73c30"
+      "id": "a39dacf0-1880-49a6-a774-2074249f7bb3"
     },
     {
       "name": "Execute: 11 Overall Ranking",
@@ -441,7 +441,42 @@
         260,
         400
       ],
-      "id": "ab9f7249-3541-4e3f-bc33-10a77049e8c4"
+      "id": "dba2d741-55a8-4794-bf0c-8905996671a2"
+    },
+    {
+      "name": "Prep for 17",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+      },
+      "position": [
+        520,
+        400
+      ],
+      "id": "fd926614-e426-4e35-95c6-c13aeec7ad6a"
+    },
+    {
+      "name": "Execute: 17 AI Assessment",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "17 - EGX AI Assessment"
+        },
+        "options": {}
+      },
+      "position": [
+        780,
+        400
+      ],
+      "id": "c0b92830-eb2f-49db-9e49-7690bf94d2e6"
     },
     {
       "name": "Load Report Data",
@@ -456,10 +491,10 @@
       },
       "executeOnce": true,
       "position": [
-        520,
+        1040,
         400
       ],
-      "id": "cc9ef9df-00b2-4069-a866-8993c1bccb45"
+      "id": "1ef143a3-750b-4ca8-b569-2a11663c36b3"
     },
     {
       "name": "Generate Daily Report Text",
@@ -471,10 +506,10 @@
         "jsCode": "const row = $input.first().json;\nconst top10 = row.top10 || [];\n\nconst lines = [];\nlines.push('EGX DAILY SCANNER');\nlines.push('Trading Date: ' + row.trading_date);\nlines.push('');\nlines.push('MARKET');\nlines.push('--------------------------------');\nlines.push('Market Regime: ' + row.market_regime);\nlines.push('Market Score: ' + row.market_score + '/100');\nlines.push('Stocks Scanned: ' + row.stocks_scanned);\nlines.push('Eligible Stocks: ' + row.eligible_stocks);\nlines.push('');\nlines.push('OVERALL TOP 10 (Bullish Setup Score)');\nlines.push('--------------------------------');\n\nif (!top10.length) {\n  lines.push('No eligible stocks scored above the ranking threshold today.');\n} else {\n  for (const t of top10) {\n    lines.push(`${t.overall_rank}. ${t.symbol} - ${t.name}`);\n    lines.push(`   Score: ${t.overall_score}  Setup: ${t.setup_type}  RVOL: ${t.rvol20 ?? 'n/a'}x  RSI: ${t.rsi14 ?? 'n/a'}`);\n    lines.push(`   Support: ${t.support1 ?? 'n/a'}  Resistance: ${t.resistance1 ?? 'n/a'}`);\n    lines.push(`   Entry Trigger: ${t.entry_price ?? 'n/a'}  Invalidation: ${t.invalidation_price ?? 'n/a'}`);\n    lines.push(`   Target 1: ${t.target1 ?? 'n/a'}  Target 2: ${t.target2 ?? 'n/a'}  R:R T2: ${t.risk_reward_t2 ?? 'n/a'}`);\n    lines.push('');\n  }\n}\n\nlines.push('This is a quantitative Scanner Rank based on Historical Probability, not a');\nlines.push('guaranteed prediction. See docs/SCORING.md for methodology.');\n\nreturn [{ json: {\n  workflow: '12-egx-daily-master-workflow',\n  finishedAt: new Date().toISOString(),\n  tradingDate: row.trading_date,\n  marketRegime: row.market_regime,\n  marketScore: row.market_score,\n  top10Count: top10.length,\n  reportText: lines.join('\\n'),\n} }];"
       },
       "position": [
-        780,
+        1300,
         400
       ],
-      "id": "027d0d2d-95a5-42ff-b164-63d5dd928277"
+      "id": "6bc58c9b-6f27-4770-a14b-d5f342a7ed9f"
     }
   ],
   "connections": {
@@ -734,6 +769,22 @@
             "node": "Load Report Data",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Prep for 17",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep for 17": {
+      "main": [
+        [
+          {
+            "node": "Execute: 17 AI Assessment",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -758,6 +809,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "aab6248a-16a3-40b2-963a-b2464191ed22",
+  "id": "a58511ca-a23f-4098-9add-906df8305ca3",
   "tags": []
 }
