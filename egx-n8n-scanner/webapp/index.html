@@ -127,6 +127,13 @@
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .table-scroll { overflow-x: auto; border-radius: var(--radius); }
 
+  .detail-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg-inset); font-size: 13px; cursor: pointer; padding: 0;
+  }
+  .detail-btn:hover { background: var(--accent-weak); border-color: var(--accent); }
+
   .rank-badge {
     display: inline-flex; align-items: center; justify-content: center;
     width: 22px; height: 22px; border-radius: 6px; font-weight: 700; font-size: 11px;
@@ -313,7 +320,14 @@ const state = {
   hiddenColumns: JSON.parse(localStorage.getItem('egx_hidden_columns') || '{}'),
 };
 
-const PINNED_COLUMN_KEY = 'symbol';
+const PINNED_COLUMN_KEYS = new Set(['_detail', 'symbol']);
+
+const DETAIL_BUTTON_COLUMN = {
+  key: '_detail',
+  label: '',
+  sortKey: null,
+  render: (r) => `<button class="detail-btn" data-symbol="${esc(r.symbol)}" title="View ${esc(r.symbol)} details" type="button">🔍</button>`,
+};
 
 const DAYS_FILTER_OPTIONS = [
   { value: 'any', label: 'Any' },
@@ -358,6 +372,7 @@ const TABS = [
 ];
 
 const RANKED_COLUMNS = [
+  DETAIL_BUTTON_COLUMN,
   { key: 'overall_rank', label: '#', render: (r) => rankBadge(r.overall_rank) },
   { key: 'symbol', label: 'Symbol', render: (r) => `<strong>${esc(r.symbol)}</strong>` },
   { key: 'name', label: 'Name', render: (r) => `<span style="color:var(--text-muted)">${esc(r.name || '')}</span>` },
@@ -379,6 +394,7 @@ const RANKED_COLUMNS = [
 ];
 
 const VOLUME_COLUMNS = [
+  DETAIL_BUTTON_COLUMN,
   { key: 'symbol', label: 'Symbol', render: (r) => `<strong>${esc(r.symbol)}</strong>` },
   { key: 'name', label: 'Name', render: (r) => `<span style="color:var(--text-muted)">${esc(r.name || '')}</span>` },
   { key: 'close', label: 'Close', num: true, render: (r) => fmt(r.close) },
@@ -394,6 +410,7 @@ const VOLUME_COLUMNS = [
 ];
 
 const FULL_MARKET_COLUMNS = [
+  DETAIL_BUTTON_COLUMN,
   { key: 'symbol', label: 'Symbol', render: (r) => `<strong>${esc(r.symbol)}</strong>`, sortKey: null },
   { key: 'name', label: 'Name', render: (r) => `<span style="color:var(--text-muted)">${esc(r.name || '')}</span>`, sortKey: null },
   { key: 'close', label: 'Close', num: true, render: (r) => fmt(r.close), sortKey: null },
@@ -635,7 +652,7 @@ function hiddenSetForTab() {
 
 function visibleColumnsForTab() {
   const hidden = hiddenSetForTab();
-  return columnsForTab().filter((c) => c.key === PINNED_COLUMN_KEY || !hidden.has(c.key));
+  return columnsForTab().filter((c) => PINNED_COLUMN_KEYS.has(c.key) || !hidden.has(c.key));
 }
 
 function saveHiddenColumns() {
@@ -654,8 +671,8 @@ function renderColumnsMenu() {
   const menu = document.getElementById('columnsMenu');
   menu.style.display = 'none';
   const hidden = hiddenSetForTab();
-  menu.innerHTML = columnsForTab().map((c) => {
-    const pinned = c.key === PINNED_COLUMN_KEY;
+  menu.innerHTML = columnsForTab().filter((c) => c.key !== '_detail').map((c) => {
+    const pinned = PINNED_COLUMN_KEYS.has(c.key);
     const checked = pinned || !hidden.has(c.key);
     return `<label class="${pinned ? 'disabled' : ''}" title="${pinned ? 'Symbol is always shown' : ''}">
       <input type="checkbox" data-key="${esc(c.key)}" ${checked ? 'checked' : ''} ${pinned ? 'disabled' : ''}>
@@ -739,6 +756,12 @@ function renderTable() {
 
   body.querySelectorAll('tr').forEach((tr) => {
     tr.addEventListener('click', () => openDetail(tr.dataset.symbol));
+  });
+  body.querySelectorAll('.detail-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openDetail(btn.dataset.symbol);
+    });
   });
 }
 
