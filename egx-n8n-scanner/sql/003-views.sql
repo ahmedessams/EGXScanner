@@ -160,10 +160,17 @@ SELECT
     ps.stop_hit_pct::float8 AS historical_stop_hit_pct,
     ps.sample_size AS historical_sample_size,
     res.ai_target1_probability_pct::float8 AS ai_target1_probability_pct,
-    res.ai_stop_probability_pct::float8 AS ai_stop_probability_pct,
     res.ai_rank_score::float8 AS ai_rank_score,
     res.ai_rank,
-    res.ai_reasoning
+    res.ai_reasoning,
+    -- Appended at the END, not grouped with the other ai_* columns above:
+    -- CREATE OR REPLACE VIEW can only ADD columns at the end of the list,
+    -- never insert/reorder existing ones (confirmed live: inserting this
+    -- mid-list broke a real deploy with "cannot change name of view column
+    -- ai_rank_score to ai_stop_probability_pct"). Nothing reads these views
+    -- positionally (n8n's Postgres node returns column-name-keyed JSON), so
+    -- the ordering has no functional effect.
+    res.ai_stop_probability_pct::float8 AS ai_stop_probability_pct
 
 FROM stocks s
 LEFT JOIN v_latest_prices lp ON lp.stock_id = s.id
@@ -235,10 +242,13 @@ RETURNS SETOF v_full_market AS $$
       ps.stop_hit_pct::float8 AS historical_stop_hit_pct,
       ps.sample_size AS historical_sample_size,
       res.ai_target1_probability_pct::float8 AS ai_target1_probability_pct,
-      res.ai_stop_probability_pct::float8 AS ai_stop_probability_pct,
       res.ai_rank_score::float8 AS ai_rank_score,
       res.ai_rank,
-      res.ai_reasoning
+      res.ai_reasoning,
+      -- Same column order as v_full_market's SELECT list, appended at the
+      -- end (see the comment on that view's definition) — this function's
+      -- RETURNS SETOF v_full_market requires an exact positional match.
+      res.ai_stop_probability_pct::float8 AS ai_stop_probability_pct
 
   FROM stocks s
   LEFT JOIN prices_as_of(p_date) lp ON lp.stock_id = s.id
@@ -299,10 +309,11 @@ SELECT
     ps.stop_hit_pct::float8 AS historical_stop_hit_pct,
     ps.sample_size AS historical_sample_size,
     res.ai_target1_probability_pct::float8 AS ai_target1_probability_pct,
-    res.ai_stop_probability_pct::float8 AS ai_stop_probability_pct,
     res.ai_rank_score::float8 AS ai_rank_score,
     res.ai_rank,
-    res.ai_reasoning
+    res.ai_reasoning,
+    -- Appended at the end for the same reason as v_full_market above.
+    res.ai_stop_probability_pct::float8 AS ai_stop_probability_pct
 FROM scanner_results res
 JOIN scanner_runs run ON run.id = res.scanner_run_id
 JOIN stocks s ON s.id = res.stock_id
