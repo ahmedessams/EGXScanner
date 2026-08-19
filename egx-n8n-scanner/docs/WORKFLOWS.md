@@ -140,6 +140,7 @@ toggle; older n8n versions use the Active toggle directly.
 | `GET /webhook/egx/stocks/volume` | Sorted by raw volume. `?date=YYYY-MM-DD` |
 | `GET /webhook/egx/stocks/relative-volume` | Sorted by RVOL20. `?date=YYYY-MM-DD` |
 | `GET /webhook/egx/top` | Overall Top N (eligible only). `?limit=`, `?date=YYYY-MM-DD` |
+| `GET /webhook/egx/top-picks` | Curated Top 3 trade ideas: eligible Top 10 picks filtered to ≥5% potential gain to Target 1, capped at 3 rows — fewer (down to zero) on a day nothing clears the bar. `?date=YYYY-MM-DD` |
 | `GET /webhook/egx/breakout` | Top N by breakout_score. `?date=YYYY-MM-DD` |
 | `GET /webhook/egx/momentum` | Top N by momentum_score. `?date=YYYY-MM-DD` |
 | `GET /webhook/egx/pullback` | Top N by pullback_score. `?date=YYYY-MM-DD` |

@@ -204,10 +204,14 @@ if you need to know how fresh it is.
 A third, deliberately distinct signal, alongside the ATR estimate above and
 the measured historical rate: a language model's own read of that day's
 Top 10 (`overall_rank <= 10`, eligible only — never the full universe, to
-keep this cheap). `ai_target1_probability_pct` / `ai_rank_score` /
-`ai_rank` / `ai_reasoning` on `scanner_results`, surfaced as "AI Prob % T1"
-/ "AI Rank" everywhere `target1_gain_pct` already is, plus a dedicated "AI
-Assessment" section in the stock detail drawer.
+keep this cheap). `ai_target1_probability_pct` / `ai_stop_probability_pct`
+/ `ai_rank_score` / `ai_rank` / `ai_reasoning` on `scanner_results`,
+surfaced as "AI Prob % T1" / "AI Rank" everywhere `target1_gain_pct`
+already is, plus a dedicated "AI Assessment" section in the stock detail
+drawer. `ai_stop_probability_pct` is the same kind of estimate for the
+opposite outcome — the stop/invalidation being hit before Target 1 — and
+is not required to sum to 100 with `ai_target1_probability_pct` (price can
+do neither within the window).
 
 **Method**: for each Top 10 pick, `17` sends its technical/setup data
 (setup type, overall + sub-scores, RSI, MACD, trend classification,

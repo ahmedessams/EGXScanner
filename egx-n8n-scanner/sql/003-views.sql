@@ -160,6 +160,7 @@ SELECT
     ps.stop_hit_pct::float8 AS historical_stop_hit_pct,
     ps.sample_size AS historical_sample_size,
     res.ai_target1_probability_pct::float8 AS ai_target1_probability_pct,
+    res.ai_stop_probability_pct::float8 AS ai_stop_probability_pct,
     res.ai_rank_score::float8 AS ai_rank_score,
     res.ai_rank,
     res.ai_reasoning
@@ -234,6 +235,7 @@ RETURNS SETOF v_full_market AS $$
       ps.stop_hit_pct::float8 AS historical_stop_hit_pct,
       ps.sample_size AS historical_sample_size,
       res.ai_target1_probability_pct::float8 AS ai_target1_probability_pct,
+      res.ai_stop_probability_pct::float8 AS ai_stop_probability_pct,
       res.ai_rank_score::float8 AS ai_rank_score,
       res.ai_rank,
       res.ai_reasoning
@@ -297,6 +299,7 @@ SELECT
     ps.stop_hit_pct::float8 AS historical_stop_hit_pct,
     ps.sample_size AS historical_sample_size,
     res.ai_target1_probability_pct::float8 AS ai_target1_probability_pct,
+    res.ai_stop_probability_pct::float8 AS ai_stop_probability_pct,
     res.ai_rank_score::float8 AS ai_rank_score,
     res.ai_rank,
     res.ai_reasoning

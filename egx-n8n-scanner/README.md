@@ -185,7 +185,9 @@ curl -H "Authorization: Bearer $REPORT_WEBHOOK_SECRET" http://localhost:5678/web
 ## Dashboard
 
 `webapp/index.html` is a small, dependency-free (vanilla HTML/CSS/JS) dashboard
-over the Report API — market regime header, sortable Top 10 / per-setup /
+over the Report API — market regime header, a curated "Top 3 Trade Ideas" tab
+(eligible Top 10 picks filtered to ≥5% potential gain to Target 1, fewer or
+zero rows on a day nothing clears that bar), sortable Top 10 / per-setup /
 full-market tables, and a stock detail drawer with reasons, sub-scores, moving
 averages, and support/resistance. Docker Compose serves it via nginx at
 `http://localhost:8090`. On first load, click **Settings** (gear icon) and set

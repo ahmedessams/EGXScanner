@@ -11,7 +11,7 @@
         -400
       ],
       "parameters": {
-        "content": "## 13 - EGX Report API\n\nRead-only webhook endpoints over the scanner's Postgres views (section 25/26/36). Each route checks `Authorization: Bearer $REPORT_WEBHOOK_SECRET` — if the secret env var is empty, the route stays open (documented public-read choice, section 38). All queries are parameterized or built from a strict server-side whitelist — no raw user input is ever concatenated into SQL.\n\nRequires 11-egx-overall-ranking to have run at least once (reads from v_full_market / v_scanner_top / v_latest_scanner_run).\n\n**After import:** each Webhook node needs the workflow ACTIVATED (top-right toggle) for its production URL to respond — see docs/IMPORT-N8N.md.",
+        "content": "## 13 - EGX Report API\n\nRead-only webhook endpoints over the scanner's Postgres views (section 25/26/36). Each route checks `Authorization: Bearer $REPORT_WEBHOOK_SECRET` \u2014 if the secret env var is empty, the route stays open (documented public-read choice, section 38). All queries are parameterized or built from a strict server-side whitelist \u2014 no raw user input is ever concatenated into SQL.\n\nRequires 11-egx-overall-ranking to have run at least once (reads from v_full_market / v_scanner_top / v_latest_scanner_run).\n\n**After import:** each Webhook node needs the workflow ACTIVATED (top-right toggle) for its production URL to respond \u2014 see docs/IMPORT-N8N.md.",
         "height": 340,
         "width": 560,
         "color": 5
@@ -576,7 +576,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "// alwaysOutputData means a genuinely-empty result (no scanner run for the\n// requested date) still arrives as one placeholder item with an empty\n// json object — filter it back out rather than treating it as a row.\nconst rows = $input.all().map((i) => i.json).filter((r) => r && Object.keys(r).length > 0);\nreturn [{ json: {\n  success: true,\n  tradingDate: rows[0] ? rows[0].trading_date : null,\n  results: rows,\n} }];"
+        "jsCode": "// alwaysOutputData means a genuinely-empty result (no scanner run for the\n// requested date) still arrives as one placeholder item with an empty\n// json object \u2014 filter it back out rather than treating it as a row.\nconst rows = $input.all().map((i) => i.json).filter((r) => r && Object.keys(r).length > 0);\nreturn [{ json: {\n  success: true,\n  tradingDate: rows[0] ? rows[0].trading_date : null,\n  results: rows,\n} }];"
       },
       "position": [
         2080,
@@ -1305,7 +1305,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const row = $input.first() ? $input.first().json : null;\nif (!row) return [{ json: { success: false, error: 'symbol not found' } }];\nreturn [{ json: {\n  success: true,\n  symbol: row.symbol, name: row.name, close: row.close, changePct: row.change_pct,\n  volume: row.volume, averageVolume20: row.avg_volume20, relativeVolume20: row.rvol20,\n  rsi14: row.rsi14,\n  macd: { line: row.macd, signal: row.macd_signal, histogram: row.macd_histogram, state: (row.macd_histogram > 0 ? 'BULLISH' : 'BEARISH') },\n  movingAverages: { ema9: row.ema9, ema20: row.ema20, ema50: row.ema50, ema200: row.ema200 },\n  support: [row.support1, row.support2, row.support3].filter((v) => v !== null),\n  resistance: [row.resistance1, row.resistance2, row.resistance3].filter((v) => v !== null),\n  scores: { overall: row.overall_score, breakout: row.breakout_score, momentum: row.momentum_score, pullback: row.pullback_score, reversal: row.reversal_score },\n  setup: row.setup_type,\n  eligible: row.eligible,\n  // gainPct is potential gain IF the target is reached, plain arithmetic on\n  // entry/target — NOT a forecast. estimatedDays is a rough ATR-based\n  // projection (this stock's own average daily range), NOT a historical\n  // statistic or a guarantee of when (or whether) the target is hit — see\n  // docs/SCORING.md for the exact method.\n  tradeStructure: {\n    entry: row.entry_price, invalidation: row.invalidation_price,\n    target1: row.target1, target2: row.target2, target3: row.target3,\n    riskReward: { t1: row.risk_reward_t1, t2: row.risk_reward_t2, t3: row.risk_reward_t3 },\n    gainPct: { t1: row.target1_gain_pct, t2: row.target2_gain_pct, t3: row.target3_gain_pct },\n    estimatedDays: { t1: row.target1_estimated_days, t2: row.target2_estimated_days, t3: row.target3_estimated_days },\n  },\n  // Measured historical outcome rate for this setup_type, walking forward\n  // up to target1_estimated_days trading sessions across every past\n  // eligible pick of the same setup — NOT a forecast for THIS stock, and\n  // not reliable when sampleSize is small (see docs/SCORING.md).\n  historicalProbability: {\n    setupType: row.setup_type,\n    target1HitPct: row.historical_target1_hit_pct,\n    stopHitPct: row.historical_stop_hit_pct,\n    sampleSize: row.historical_sample_size,\n  },\n  // A language model's own read of this setup — only computed for that\n  // day's Top 10 (rank/ai_reasoning null otherwise). A judgment call from\n  // limited technical data, not a statistic, not a guarantee.\n  aiAssessment: {\n    rank: row.ai_rank,\n    target1ProbabilityPct: row.ai_target1_probability_pct,\n    rankScore: row.ai_rank_score,\n    reasoning: row.ai_reasoning,\n  },\n} }];"
+        "jsCode": "const row = $input.first() ? $input.first().json : null;\nif (!row) return [{ json: { success: false, error: 'symbol not found' } }];\nreturn [{ json: {\n  success: true,\n  symbol: row.symbol, name: row.name, close: row.close, changePct: row.change_pct,\n  volume: row.volume, averageVolume20: row.avg_volume20, relativeVolume20: row.rvol20,\n  rsi14: row.rsi14,\n  macd: { line: row.macd, signal: row.macd_signal, histogram: row.macd_histogram, state: (row.macd_histogram > 0 ? 'BULLISH' : 'BEARISH') },\n  movingAverages: { ema9: row.ema9, ema20: row.ema20, ema50: row.ema50, ema200: row.ema200 },\n  support: [row.support1, row.support2, row.support3].filter((v) => v !== null),\n  resistance: [row.resistance1, row.resistance2, row.resistance3].filter((v) => v !== null),\n  scores: { overall: row.overall_score, breakout: row.breakout_score, momentum: row.momentum_score, pullback: row.pullback_score, reversal: row.reversal_score },\n  setup: row.setup_type,\n  eligible: row.eligible,\n  // gainPct is potential gain IF the target is reached, plain arithmetic on\n  // entry/target \u2014 NOT a forecast. estimatedDays is a rough ATR-based\n  // projection (this stock's own average daily range), NOT a historical\n  // statistic or a guarantee of when (or whether) the target is hit \u2014 see\n  // docs/SCORING.md for the exact method.\n  tradeStructure: {\n    entry: row.entry_price, invalidation: row.invalidation_price,\n    target1: row.target1, target2: row.target2, target3: row.target3,\n    riskReward: { t1: row.risk_reward_t1, t2: row.risk_reward_t2, t3: row.risk_reward_t3 },\n    gainPct: { t1: row.target1_gain_pct, t2: row.target2_gain_pct, t3: row.target3_gain_pct },\n    estimatedDays: { t1: row.target1_estimated_days, t2: row.target2_estimated_days, t3: row.target3_estimated_days },\n  },\n  // Measured historical outcome rate for this setup_type, walking forward\n  // up to target1_estimated_days trading sessions across every past\n  // eligible pick of the same setup \u2014 NOT a forecast for THIS stock, and\n  // not reliable when sampleSize is small (see docs/SCORING.md).\n  historicalProbability: {\n    setupType: row.setup_type,\n    target1HitPct: row.historical_target1_hit_pct,\n    stopHitPct: row.historical_stop_hit_pct,\n    sampleSize: row.historical_sample_size,\n  },\n  // A language model's own read of this setup \u2014 only computed for that\n  // day's Top 10 (rank/ai_reasoning null otherwise). A judgment call from\n  // limited technical data, not a statistic, not a guarantee.\n  aiAssessment: {\n    rank: row.ai_rank,\n    target1ProbabilityPct: row.ai_target1_probability_pct,\n    stopProbabilityPct: row.ai_stop_probability_pct,\n    rankScore: row.ai_rank_score,\n    reasoning: row.ai_reasoning,\n  },\n} }];"
       },
       "position": [
         1040,
@@ -1874,6 +1874,152 @@
         1800
       ],
       "id": "4f30ce53-8eb6-4c2a-8c23-934b79a5e57f"
+    },
+    {
+      "name": "Webhook: top-picks",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "d5a590b8-0380-4c3d-a08e-187cef307d62",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/top-picks",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        2600,
+        400
+      ],
+      "id": "853496c9-c91b-4eac-af2f-49ed87bc75ba"
+    },
+    {
+      "name": "Check Auth: top-picks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        0,
+        600
+      ],
+      "id": "3e01e42e-c2af-4ae2-8b7a-f61d7fd5c3b0"
+    },
+    {
+      "name": "Authorized?: top-picks",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "ba6b2818-124b-4e7b-982c-7fa5fab4a5f9",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        260,
+        600
+      ],
+      "id": "2d26c6d5-6f45-4eda-b676-1ff0e36ccc32"
+    },
+    {
+      "name": "Respond 401: top-picks",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        520,
+        600
+      ],
+      "id": "0bd79dee-debe-4fe1-98b4-e2fad3f92b53"
+    },
+    {
+      "name": "Build Query: top-picks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, dateParam } }];"
+      },
+      "position": [
+        780,
+        600
+      ],
+      "id": "9dd45273-3527-4242-9f8a-77cbc210ed68"
+    },
+    {
+      "name": "Query: top-picks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($1))\n  AND eligible = TRUE AND target1_gain_pct >= 5\nORDER BY overall_rank ASC\nLIMIT 3;",
+        "options": {
+          "queryReplacement": "={{ [$json.dateParam] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "position": [
+        1040,
+        600
+      ],
+      "id": "3cde2eff-177b-44b5-97ae-65436f592cdb"
+    },
+    {
+      "name": "Format: top-picks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rows = $input.all().map((i) => i.json).filter((r) => r && Object.keys(r).length > 0);\nreturn [{ json: {\n  success: true,\n  tradingDate: rows[0] ? rows[0].trading_date : null,\n  results: rows,\n} }];"
+      },
+      "position": [
+        1300,
+        600
+      ],
+      "id": "00d2fe08-3411-49b5-b8b7-a5c68abdf471"
+    },
+    {
+      "name": "Respond 200: top-picks",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        1560,
+        600
+      ],
+      "id": "a6bd4549-184a-4740-aa60-dd1b2af391a0"
     }
   ],
   "connections": {
@@ -2798,6 +2944,79 @@
         [
           {
             "node": "Authorized?: dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized?: top-picks": {
+      "main": [
+        [
+          {
+            "node": "Build Query: top-picks",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401: top-picks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query: top-picks": {
+      "main": [
+        [
+          {
+            "node": "Query: top-picks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query: top-picks": {
+      "main": [
+        [
+          {
+            "node": "Format: top-picks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: top-picks": {
+      "main": [
+        [
+          {
+            "node": "Respond 200: top-picks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: top-picks": {
+      "main": [
+        [
+          {
+            "node": "Check Auth: top-picks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Auth: top-picks": {
+      "main": [
+        [
+          {
+            "node": "Authorized?: top-picks",
             "type": "main",
             "index": 0
           }

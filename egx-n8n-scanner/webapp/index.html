@@ -375,6 +375,7 @@ function dateQS(s, sep) {
 }
 
 const TABS = [
+  { id: 'top-picks', label: 'Top 3 Trade Ideas', endpoint: (s) => `/top-picks${dateQS(s, '?')}` },
   { id: 'top', label: 'Overall Top 10', endpoint: (s) => `/top?limit=10${dateQS(s, '&')}` },
   { id: 'breakout', label: 'Breakout', endpoint: (s) => `/breakout?limit=10${dateQS(s, '&')}` },
   { id: 'momentum', label: 'Momentum', endpoint: (s) => `/momentum?limit=10${dateQS(s, '&')}` },
@@ -407,6 +408,27 @@ const RANKED_COLUMNS = [
   { key: 'historical_stop_hit_pct', label: 'P(Stop) %', num: true, title: 'Historical rate: % of past eligible picks with this setup type that hit the stop/invalidation level first, within that same window. Hover the value for sample size.', render: (r) => probCell(r.historical_stop_hit_pct, r.historical_sample_size, false) },
   { key: 'ai_rank', label: 'AI Rank', num: true, title: 'AI Assessment: a language model\'s own re-ranking of that day\'s Top 10, from the same technical data — a second opinion shown alongside Overall Rank, not a replacement for it. Only computed for the Top 10, not the full market.', render: (r) => aiRankCell(r.ai_rank) },
   { key: 'ai_target1_probability_pct', label: 'AI Prob % T1', num: true, title: 'AI Assessment: a language model\'s own probability estimate for reaching Target 1 within its estimated-days window. A qualitative judgment call from limited technical data — NOT the measured P(T1) % above, and NOT a guarantee. Hover for the model\'s stated reasoning.', render: (r) => aiProbCell(r.ai_target1_probability_pct, r.ai_reasoning) },
+];
+
+// Top 3 Trade Ideas: a curated subset of the eligible Top 10, filtered
+// server-side to a minimum 5% potential gain to Target 1 (see /top-picks
+// in 13-egx-report-api). A day with nothing worth trading legitimately
+// returns fewer than 3 rows, down to zero — not padded with weak setups.
+const TOP_PICKS_COLUMNS = [
+  DETAIL_BUTTON_COLUMN,
+  { key: 'overall_rank', label: '#', render: (r) => rankBadge(r.overall_rank) },
+  { key: 'symbol', label: 'Symbol', render: (r) => `<strong>${esc(r.symbol)}</strong>` },
+  { key: 'name', label: 'Name', render: (r) => `<span style="color:var(--text-muted)">${esc(r.name || '')}</span>` },
+  { key: 'setup_type', label: 'Setup', render: (r) => setupBadge(r.setup_type) },
+  { key: 'entry_price', label: 'Entry', num: true, render: (r) => fmt(r.entry_price) },
+  { key: 'target1', label: 'TP1', num: true, render: (r) => fmt(r.target1) },
+  { key: 'target2', label: 'TP2', num: true, render: (r) => fmt(r.target2) },
+  { key: 'invalidation_price', label: 'Stop Loss', num: true, render: (r) => fmt(r.invalidation_price) },
+  { key: 'target1_gain_pct', label: 'Profit Margin', num: true, title: 'Potential gain to Target 1 if reached — not a forecast. This table only includes picks with at least 5% potential gain to Target 1.', render: (r) => gainCell(r.target1_gain_pct) },
+  { key: 'ai_target1_probability_pct', label: 'AI Profit Prob', num: true, title: 'AI Assessment: a language model\'s own probability estimate for reaching Target 1. A qualitative judgment call from limited technical data, not a guarantee. Hover for the model\'s stated reasoning.', render: (r) => aiProbCell(r.ai_target1_probability_pct, r.ai_reasoning) },
+  { key: 'historical_target1_hit_pct', label: 'Hist. Profit Prob', num: true, title: 'Historical rate: % of past eligible picks with this setup type that reached Target 1 within their own estimated-days window. Not a forecast for this specific stock — hover for sample size.', render: (r) => probCell(r.historical_target1_hit_pct, r.historical_sample_size, true) },
+  { key: 'ai_stop_probability_pct', label: 'AI Stop Prob', num: true, title: 'AI Assessment: a language model\'s own probability estimate that the stop/invalidation is hit before Target 1. A qualitative judgment call from limited technical data, not a guarantee. Hover for the model\'s stated reasoning.', render: (r) => aiProbCell(r.ai_stop_probability_pct, r.ai_reasoning) },
+  { key: 'historical_stop_hit_pct', label: 'Hist. Stop Prob', num: true, title: 'Historical rate: % of past eligible picks with this setup type that hit the stop/invalidation level first, within that same window. Hover for sample size.', render: (r) => probCell(r.historical_stop_hit_pct, r.historical_sample_size, false) },
 ];
 
 const VOLUME_COLUMNS = [
@@ -611,6 +633,7 @@ function renderTabs() {
 }
 
 function columnsForTab() {
+  if (state.tab === 'top-picks') return TOP_PICKS_COLUMNS;
   if (state.tab === 'volume' || state.tab === 'rvol') return VOLUME_COLUMNS;
   if (state.tab === 'full') return FULL_MARKET_COLUMNS;
   return RANKED_COLUMNS;
@@ -771,7 +794,11 @@ function renderTable() {
     empty.style.display = 'block';
     empty.textContent = state.loading
       ? 'Loading…'
-      : (state.rows.length ? 'No rows match the current filters.' : 'No rows returned. Check API settings, or run the scanner pipeline first.');
+      : (state.rows.length
+        ? 'No rows match the current filters.'
+        : (state.tab === 'top-picks'
+          ? 'No stocks currently meet the ≥5% potential-gain-to-Target-1 bar for a Top 3 pick.'
+          : 'No rows returned. Check API settings, or run the scanner pipeline first.'));
     return;
   }
   empty.style.display = 'none';
@@ -922,6 +949,7 @@ async function openDetail(symbol) {
         <div class="kv-grid">
           <div class="kv"><div class="label">AI Rank (of Top 10)</div><div class="value">${aiRankCell(data.aiAssessment.rank)}</div></div>
           <div class="kv"><div class="label">AI Probability T1</div><div class="value">${aiProbCell(data.aiAssessment.target1ProbabilityPct)}</div></div>
+          <div class="kv"><div class="label">AI Probability Stop</div><div class="value">${aiProbCell(data.aiAssessment.stopProbabilityPct)}</div></div>
         </div>
         ${data.aiAssessment.reasoning ? `<div style="font-size:12px;margin-top:8px;">${esc(data.aiAssessment.reasoning)}</div>` : ''}
         <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">

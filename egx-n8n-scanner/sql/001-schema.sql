@@ -265,6 +265,7 @@ CREATE TABLE IF NOT EXISTS scanner_results (
     -- this is a model's judgment call, labeled as such everywhere it's
     -- surfaced (see docs/SCORING.md "AI Assessment").
     ai_target1_probability_pct NUMERIC(6,2),
+    ai_stop_probability_pct    NUMERIC(6,2),
     ai_rank_score              NUMERIC(6,2),
     ai_rank                    INTEGER,
     ai_reasoning               TEXT,
@@ -287,12 +288,14 @@ COMMENT ON TABLE scanner_results IS 'Per-stock scoring output for a given scanne
 -- column to already exist (also confirmed via live testing: the original
 -- ordering here failed the same way, just one statement type sooner).
 ALTER TABLE scanner_results ADD COLUMN IF NOT EXISTS ai_target1_probability_pct NUMERIC(6,2);
+ALTER TABLE scanner_results ADD COLUMN IF NOT EXISTS ai_stop_probability_pct NUMERIC(6,2);
 ALTER TABLE scanner_results ADD COLUMN IF NOT EXISTS ai_rank_score NUMERIC(6,2);
 ALTER TABLE scanner_results ADD COLUMN IF NOT EXISTS ai_rank INTEGER;
 ALTER TABLE scanner_results ADD COLUMN IF NOT EXISTS ai_reasoning TEXT;
 ALTER TABLE scanner_results ADD COLUMN IF NOT EXISTS ai_assessed_at TIMESTAMPTZ;
 
 COMMENT ON COLUMN scanner_results.ai_target1_probability_pct IS 'AI Assessment: a language model''s own probability estimate (0-100) for reaching target1 within target1_estimated_days — NOT the measured historical_target1_hit_pct, and NOT a guarantee.';
+COMMENT ON COLUMN scanner_results.ai_stop_probability_pct IS 'AI Assessment: a language model''s own probability estimate (0-100) that the invalidation/stop price is hit before target1 — NOT the measured historical_stop_hit_pct, and NOT a guarantee.';
 COMMENT ON COLUMN scanner_results.ai_rank_score IS 'AI Assessment: 0-100 conviction score used to derive ai_rank; independent of overall_score.';
 COMMENT ON COLUMN scanner_results.ai_rank IS 'Rank (1=highest) among that day''s Top 10 by ai_rank_score — a second, AI-driven ordering shown alongside overall_rank, not a replacement for it.';
 
