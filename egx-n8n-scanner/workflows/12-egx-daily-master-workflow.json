@@ -16,7 +16,7 @@
         "width": 560,
         "color": 5
       },
-      "id": "0e6de3f1-f3e0-448d-9500-ab2f69735903"
+      "id": "91aec3e1-d085-488c-acfa-461061efa230"
     },
     {
       "name": "Schedule Trigger (Daily After Close)",
@@ -36,7 +36,7 @@
         0,
         0
       ],
-      "id": "774975b4-80db-4e00-9040-4874cb35594a"
+      "id": "3197c072-644b-42d6-b3b2-b7867c3518cf"
     },
     {
       "name": "Manual Trigger (Run EGX Scanner Now)",
@@ -47,7 +47,20 @@
         260,
         0
       ],
-      "id": "9643408e-ea91-4302-a344-9f3db61c2e5d"
+      "id": "f30445e3-b471-451f-923e-d3b8e045f612"
+    },
+    {
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "position": [
+        520,
+        0
+      ],
+      "id": "f6bc36df-f56a-4c01-81cd-72518441cbe8"
     },
     {
       "name": "Compute Trading Date",
@@ -56,13 +69,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "return [{ json: { asOfDate: new Date().toISOString().slice(0, 10) } }];"
+        "jsCode": "// Same defensive try/catch as every other workflow's trigger-lookup code\n// (see scannerCommon.js attachAsOfDateNode) — reading a trigger node that\n// never fired throws in this n8n version. Schedule/Manual paths carry no\n// market, so they keep today's exact EGX-only behavior; only an explicit\n// Execute Workflow call (Phase 3's per-market schedules, or manual testing\n// via MCP) can select a different market.\nlet trigger = {};\ntry {\n  const triggerItems = $('When Executed by Another Workflow').all();\n  trigger = triggerItems.length ? triggerItems[0].json : {};\n} catch (e) { trigger = {}; }\nconst market = trigger.market || 'EGX';\nreturn [{ json: { asOfDate: new Date().toISOString().slice(0, 10), market } }];"
       },
       "position": [
-        520,
+        780,
         0
       ],
-      "id": "3ec187a4-306c-4beb-88ae-f6460fbd2369"
+      "id": "aa76e1d6-b15b-4255-940d-3a2fc01c82ab"
     },
     {
       "name": "Execute: 01 Stock Universe",
@@ -79,10 +92,10 @@
         "options": {}
       },
       "position": [
-        780,
+        1040,
         0
       ],
-      "id": "c2341a35-e592-4c23-85c4-2e1c569aea70"
+      "id": "3dd9a3e2-7a72-41ed-b426-34df06b752de"
     },
     {
       "name": "Prep for 03",
@@ -91,13 +104,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nconst market = $('Compute Trading Date').first().json.market;\nreturn [{ json: { asOfDate, market } }];"
       },
       "position": [
-        1040,
+        1300,
         0
       ],
-      "id": "20f442e3-71da-4031-8b7f-63f7cc063d71"
+      "id": "56220df4-4ede-4e9a-9b6a-70951e999bc9"
     },
     {
       "name": "Execute: 03 Daily Market Update",
@@ -114,10 +127,10 @@
         "options": {}
       },
       "position": [
-        1300,
+        1560,
         0
       ],
-      "id": "89f8c51a-8c35-4e8d-9980-52f270e18fee"
+      "id": "f9e218d1-1931-466c-bd9b-5a65559e2618"
     },
     {
       "name": "Is Trading Day?",
@@ -132,7 +145,7 @@
           },
           "conditions": [
             {
-              "id": "7a32311c-828b-442d-aaf2-820393b364da",
+              "id": "a13796e7-78c5-41e9-a94b-977a4708a896",
               "leftValue": "={{ $json.isTradingDay }}",
               "rightValue": "",
               "operator": {
@@ -147,10 +160,10 @@
         "options": {}
       },
       "position": [
-        1560,
+        1820,
         0
       ],
-      "id": "f039772b-bc2f-460b-b025-5f0098884aa4"
+      "id": "ba2f35d9-7a0d-4e67-adc6-d0a10ba59fb0"
     },
     {
       "name": "Skip - Non-Trading Day",
@@ -158,10 +171,10 @@
       "typeVersion": 1,
       "parameters": {},
       "position": [
-        1820,
+        2080,
         0
       ],
-      "id": "d830099f-0a4d-4fb2-928d-a66f34e70bdc"
+      "id": "ed191b89-1e14-4d12-bee6-2531311f166e"
     },
     {
       "name": "Prep for 04",
@@ -170,13 +183,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nconst market = $('Compute Trading Date').first().json.market;\nreturn [{ json: { asOfDate, market } }];"
       },
       "position": [
-        2080,
+        2340,
         0
       ],
-      "id": "3048bcdd-daaf-4a3a-929c-376041fed22a"
+      "id": "cac1aec0-e059-4bc1-8c30-3035711b0b6c"
     },
     {
       "name": "Execute: 04 Technical Analysis",
@@ -193,10 +206,10 @@
         "options": {}
       },
       "position": [
-        2340,
+        2600,
         0
       ],
-      "id": "9db98c88-4a6a-42f4-a363-32ded7ea3d76"
+      "id": "33a10da2-ccc4-43d1-8c62-bbc179b64c05"
     },
     {
       "name": "Prep for 05",
@@ -205,13 +218,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nconst market = $('Compute Trading Date').first().json.market;\nreturn [{ json: { asOfDate, market } }];"
       },
       "position": [
-        2600,
-        0
+        0,
+        200
       ],
-      "id": "e76f9c6d-124b-4020-b0fd-343918088aef"
+      "id": "d309d542-e32e-44db-93ed-2b425c95e47e"
     },
     {
       "name": "Execute: 05 Support Resistance",
@@ -228,10 +241,10 @@
         "options": {}
       },
       "position": [
-        0,
+        260,
         200
       ],
-      "id": "7b7a31fe-3986-4832-adaa-39bf01e94489"
+      "id": "886bbaad-a2ad-466f-a005-d5850dcba351"
     },
     {
       "name": "Prep for 06",
@@ -240,13 +253,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nconst market = $('Compute Trading Date').first().json.market;\nreturn [{ json: { asOfDate, market } }];"
       },
       "position": [
-        260,
+        520,
         200
       ],
-      "id": "2ecd9f02-1487-4737-8ecc-8f1633cfaec3"
+      "id": "803e3492-4d8e-4082-9114-52e6ada2d95d"
     },
     {
       "name": "Execute: 06 Volume Analysis",
@@ -263,10 +276,10 @@
         "options": {}
       },
       "position": [
-        520,
+        780,
         200
       ],
-      "id": "fe9ab008-fbee-42e6-9184-9efd1d1b60e2"
+      "id": "d3dd60cc-1552-4d63-94b7-8f6da3c23d47"
     },
     {
       "name": "Prep for 07",
@@ -275,13 +288,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nconst market = $('Compute Trading Date').first().json.market;\nreturn [{ json: { asOfDate, market } }];"
       },
       "position": [
-        780,
+        1040,
         200
       ],
-      "id": "2f77968b-4fdb-4e64-ac6c-92ccf73d26cb"
+      "id": "7bc534f1-f182-43d3-bce5-59010f31f3f3"
     },
     {
       "name": "Execute: 07 Breakout Scanner",
@@ -298,10 +311,10 @@
         "options": {}
       },
       "position": [
-        1040,
+        1300,
         200
       ],
-      "id": "2aa237cc-a14f-43bd-a20c-76c8bb226e44"
+      "id": "1f1de024-f9c1-45a0-ba4b-8a726d2f8919"
     },
     {
       "name": "Prep for 08",
@@ -310,13 +323,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nconst market = $('Compute Trading Date').first().json.market;\nreturn [{ json: { asOfDate, market } }];"
       },
       "position": [
-        1300,
+        1560,
         200
       ],
-      "id": "632a53e3-b626-4824-9333-310aa048c2c8"
+      "id": "01409fe6-2fcd-46ba-b2ba-1daa308dc13f"
     },
     {
       "name": "Execute: 08 Momentum Scanner",
@@ -333,10 +346,10 @@
         "options": {}
       },
       "position": [
-        1560,
+        1820,
         200
       ],
-      "id": "bbd9a65d-814f-4f1f-b37b-a8399f80043e"
+      "id": "dbfbaf55-759a-44ce-a255-59860ec995a0"
     },
     {
       "name": "Prep for 09",
@@ -345,13 +358,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nconst market = $('Compute Trading Date').first().json.market;\nreturn [{ json: { asOfDate, market } }];"
       },
       "position": [
-        1820,
+        2080,
         200
       ],
-      "id": "8a055a6c-e7dc-488c-880d-773b42f785d2"
+      "id": "067b1fc9-1129-421a-9ed5-0df20fa1822a"
     },
     {
       "name": "Execute: 09 Pullback Scanner",
@@ -368,10 +381,10 @@
         "options": {}
       },
       "position": [
-        2080,
+        2340,
         200
       ],
-      "id": "f5878bb1-96f4-4080-9abf-20447538f6cd"
+      "id": "1dbf81e6-386d-4ec8-8650-dea5ca4a35f7"
     },
     {
       "name": "Prep for 10",
@@ -380,13 +393,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nconst market = $('Compute Trading Date').first().json.market;\nreturn [{ json: { asOfDate, market } }];"
       },
       "position": [
-        2340,
+        2600,
         200
       ],
-      "id": "57c3cd4e-6011-4b59-91aa-ec04d41578ae"
+      "id": "d30909ff-ce4b-4104-8df4-b86d6edbc183"
     },
     {
       "name": "Execute: 10 Reversal Scanner",
@@ -403,10 +416,10 @@
         "options": {}
       },
       "position": [
-        2600,
-        200
+        0,
+        400
       ],
-      "id": "14c78001-64f4-4127-b021-1f9426f748ca"
+      "id": "b06d2c18-bc8d-4439-938a-aa866b80cfc6"
     },
     {
       "name": "Prep for 11",
@@ -415,13 +428,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nconst market = $('Compute Trading Date').first().json.market;\nreturn [{ json: { asOfDate, market } }];"
       },
       "position": [
-        0,
+        260,
         400
       ],
-      "id": "a39dacf0-1880-49a6-a774-2074249f7bb3"
+      "id": "6e1f1fdd-d020-4424-8200-13f3a1e6b613"
     },
     {
       "name": "Execute: 11 Overall Ranking",
@@ -438,10 +451,10 @@
         "options": {}
       },
       "position": [
-        260,
+        520,
         400
       ],
-      "id": "dba2d741-55a8-4794-bf0c-8905996671a2"
+      "id": "f18d0b13-ec54-4f8a-9cdc-7278df40f9b4"
     },
     {
       "name": "Prep for 17",
@@ -450,13 +463,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nreturn [{ json: { asOfDate } }];"
+        "jsCode": "const asOfDate = $('Compute Trading Date').first().json.asOfDate;\nconst market = $('Compute Trading Date').first().json.market;\nreturn [{ json: { asOfDate, market } }];"
       },
       "position": [
-        520,
+        780,
         400
       ],
-      "id": "fd926614-e426-4e35-95c6-c13aeec7ad6a"
+      "id": "35ec60b0-7ad8-49a1-9bf8-59149c5a25fb"
     },
     {
       "name": "Execute: 17 AI Assessment",
@@ -473,10 +486,10 @@
         "options": {}
       },
       "position": [
-        780,
+        1040,
         400
       ],
-      "id": "c0b92830-eb2f-49db-9e49-7690bf94d2e6"
+      "id": "020a253e-dee4-4cdc-acde-1abe51b1b862"
     },
     {
       "name": "Load Report Data",
@@ -491,10 +504,10 @@
       },
       "executeOnce": true,
       "position": [
-        1040,
+        1300,
         400
       ],
-      "id": "1ef143a3-750b-4ca8-b569-2a11663c36b3"
+      "id": "cefb575e-6848-4910-b08d-26e1f67acfd5"
     },
     {
       "name": "Generate Daily Report Text",
@@ -503,13 +516,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const row = $input.first().json;\nconst top10 = row.top10 || [];\n\nconst lines = [];\nlines.push('EGX DAILY SCANNER');\nlines.push('Trading Date: ' + row.trading_date);\nlines.push('');\nlines.push('MARKET');\nlines.push('--------------------------------');\nlines.push('Market Regime: ' + row.market_regime);\nlines.push('Market Score: ' + row.market_score + '/100');\nlines.push('Stocks Scanned: ' + row.stocks_scanned);\nlines.push('Eligible Stocks: ' + row.eligible_stocks);\nlines.push('');\nlines.push('OVERALL TOP 10 (Bullish Setup Score)');\nlines.push('--------------------------------');\n\nif (!top10.length) {\n  lines.push('No eligible stocks scored above the ranking threshold today.');\n} else {\n  for (const t of top10) {\n    lines.push(`${t.overall_rank}. ${t.symbol} - ${t.name}`);\n    lines.push(`   Score: ${t.overall_score}  Setup: ${t.setup_type}  RVOL: ${t.rvol20 ?? 'n/a'}x  RSI: ${t.rsi14 ?? 'n/a'}`);\n    lines.push(`   Support: ${t.support1 ?? 'n/a'}  Resistance: ${t.resistance1 ?? 'n/a'}`);\n    lines.push(`   Entry Trigger: ${t.entry_price ?? 'n/a'}  Invalidation: ${t.invalidation_price ?? 'n/a'}`);\n    lines.push(`   Target 1: ${t.target1 ?? 'n/a'}  Target 2: ${t.target2 ?? 'n/a'}  R:R T2: ${t.risk_reward_t2 ?? 'n/a'}`);\n    lines.push('');\n  }\n}\n\nlines.push('This is a quantitative Scanner Rank based on Historical Probability, not a');\nlines.push('guaranteed prediction. See docs/SCORING.md for methodology.');\n\nreturn [{ json: {\n  workflow: '12-egx-daily-master-workflow',\n  finishedAt: new Date().toISOString(),\n  tradingDate: row.trading_date,\n  marketRegime: row.market_regime,\n  marketScore: row.market_score,\n  top10Count: top10.length,\n  reportText: lines.join('\\n'),\n} }];"
+        "jsCode": "const row = $input.first().json;\nconst top10 = row.top10 || [];\nconst market = $('Compute Trading Date').first().json.market;\n\nconst lines = [];\nlines.push(market + ' DAILY SCANNER');\nlines.push('Trading Date: ' + row.trading_date);\nlines.push('');\nlines.push('MARKET');\nlines.push('--------------------------------');\nlines.push('Market Regime: ' + row.market_regime);\nlines.push('Market Score: ' + row.market_score + '/100');\nlines.push('Stocks Scanned: ' + row.stocks_scanned);\nlines.push('Eligible Stocks: ' + row.eligible_stocks);\nlines.push('');\nlines.push('OVERALL TOP 10 (Bullish Setup Score)');\nlines.push('--------------------------------');\n\nif (!top10.length) {\n  lines.push('No eligible stocks scored above the ranking threshold today.');\n} else {\n  for (const t of top10) {\n    lines.push(`${t.overall_rank}. ${t.symbol} - ${t.name}`);\n    lines.push(`   Score: ${t.overall_score}  Setup: ${t.setup_type}  RVOL: ${t.rvol20 ?? 'n/a'}x  RSI: ${t.rsi14 ?? 'n/a'}`);\n    lines.push(`   Support: ${t.support1 ?? 'n/a'}  Resistance: ${t.resistance1 ?? 'n/a'}`);\n    lines.push(`   Entry Trigger: ${t.entry_price ?? 'n/a'}  Invalidation: ${t.invalidation_price ?? 'n/a'}`);\n    lines.push(`   Target 1: ${t.target1 ?? 'n/a'}  Target 2: ${t.target2 ?? 'n/a'}  R:R T2: ${t.risk_reward_t2 ?? 'n/a'}`);\n    lines.push('');\n  }\n}\n\nlines.push('This is a quantitative Scanner Rank based on Historical Probability, not a');\nlines.push('guaranteed prediction. See docs/SCORING.md for methodology.');\n\nreturn [{ json: {\n  workflow: '12-egx-daily-master-workflow',\n  finishedAt: new Date().toISOString(),\n  tradingDate: row.trading_date,\n  marketRegime: row.market_regime,\n  marketScore: row.market_score,\n  top10Count: top10.length,\n  reportText: lines.join('\\n'),\n} }];"
       },
       "position": [
-        1300,
+        1560,
         400
       ],
-      "id": "6bc58c9b-6f27-4770-a14b-d5f342a7ed9f"
+      "id": "ea8b2465-a56c-4adc-a486-171b24d98e45"
     }
   ],
   "connections": {
@@ -525,6 +538,17 @@
       ]
     },
     "Manual Trigger (Run EGX Scanner Now)": {
+      "main": [
+        [
+          {
+            "node": "Compute Trading Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
       "main": [
         [
           {
@@ -809,6 +833,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "a58511ca-a23f-4098-9add-906df8305ca3",
+  "id": "ed430e84-1eee-4788-82cb-092f3419b8d8",
   "tags": []
 }

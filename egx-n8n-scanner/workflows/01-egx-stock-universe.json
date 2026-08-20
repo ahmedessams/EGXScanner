@@ -16,7 +16,7 @@
         "width": 460,
         "color": 5
       },
-      "id": "3a0d328f-9c24-4131-950e-bc5b5ae221b4"
+      "id": "c9af8bfb-6839-4ae5-9c3b-b19a89cef1f9"
     },
     {
       "name": "Configure Endpoint Warning",
@@ -32,7 +32,7 @@
         "width": 460,
         "color": 7
       },
-      "id": "d947c32f-6a38-4954-885d-65796d9fa68b"
+      "id": "fcb4e26e-431b-44f9-9730-90f07684cc82"
     },
     {
       "name": "Manual Trigger",
@@ -43,7 +43,7 @@
         0,
         0
       ],
-      "id": "f0661df0-d14c-4da7-afeb-ebc971245970"
+      "id": "abbb2a7e-5621-43b8-ae5d-80994e89d829"
     },
     {
       "name": "When Executed by Another Workflow",
@@ -56,7 +56,22 @@
         260,
         0
       ],
-      "id": "ab032d50-cb73-414c-b6e5-eec666c8c254"
+      "id": "84d99f97-810f-495b-bff1-a3e58bb6b3c9"
+    },
+    {
+      "name": "Attach Market",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "let trigger = {};\ntry {\n  const triggerItems = $('When Executed by Another Workflow').all();\n  trigger = triggerItems.length ? triggerItems[0].json : {};\n} catch (e) { trigger = {}; }\nconst market = trigger.market || 'EGX';\nreturn [{ json: { market } }];"
+      },
+      "position": [
+        520,
+        0
+      ],
+      "id": "09095867-30bb-4e69-8812-030645bdb857"
     },
     {
       "name": "Fetch EGX Universe (CONFIGURE ENDPOINT)",
@@ -82,7 +97,7 @@
             },
             {
               "name": "exchange",
-              "value": "={{ $env.EGX_EXCHANGE_CODE }}"
+              "value": "={{ $('Attach Market').first().json.market }}"
             },
             {
               "name": "fmt",
@@ -93,10 +108,10 @@
       },
       "onError": "continueRegularOutput",
       "position": [
-        520,
+        780,
         0
       ],
-      "id": "7b4d8738-7361-4ff1-88aa-a4e28f6a37aa"
+      "id": "9bb24eef-8282-4859-b524-0449960ecd9c"
     },
     {
       "name": "Normalize Universe Response",
@@ -105,13 +120,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "// Normalizes a raw provider response into the internal stock-universe row shape:\n// { symbol, name, isin, sector, exchange, currency, _valid, errors[] }\n// Tolerant of shape differences between providers (array directly, or wrapped in\n// a \"data\"/\"symbols\" property) since the exact provider contract varies.\n//\n// IMPORTANT: n8n's HTTP Request node auto-splits a top-level JSON ARRAY\n// response into one item per element — confirmed via live E2E testing\n// against EODHD's exchange-symbol-list endpoint (241 real tickers arrived\n// as 241 separate items, not one item holding a 241-element array). Must\n// use $input.all(), not $input.first().\nconst exchange = $env.EGX_EXCHANGE_CODE || 'EGX';\nconst items = $input.all().map((i) => i.json);\n\nfunction looksLikeSymbolRecord(v) {\n  return v && typeof v === 'object' && !Array.isArray(v)\n    && (v.Code || v.symbol || v.Symbol || v.ticker);\n}\n\nlet list;\nif (items.length > 1 || looksLikeSymbolRecord(items[0])) {\n  // Auto-split case: every item IS already one symbol object (also covers\n  // the single-ticker edge case, detected by shape rather than count).\n  list = items;\n} else {\n  // Single-item case wrapping an array, e.g. { data: [...] }.\n  const raw = items[0];\n  list = raw;\n  if (!Array.isArray(list)) {\n    list = (raw && (raw.data || raw.symbols || raw.results)) || [];\n  }\n}\nif (!Array.isArray(list)) {\n  throw new Error('Provider response for the stock universe was not a recognizable list. Check the HTTP Request node URL/response shape.');\n}\n\nconst rows = list.map((entry) => {\n  const symbol = entry.Code || entry.symbol || entry.Symbol || entry.ticker || null;\n  const name = entry.Name || entry.name || entry.CompanyName || null;\n  const isin = entry.Isin || entry.isin || null;\n  const sector = entry.Sector || entry.sector || null;\n  const currency = entry.Currency || entry.currency || 'EGP';\n\n  const errors = [];\n  if (!symbol || typeof symbol !== 'string') errors.push('missing/invalid symbol');\n  if (!name || typeof name !== 'string') errors.push('missing/invalid name');\n\n  return {\n    symbol: symbol ? String(symbol).trim().toUpperCase() : null,\n    name: name ? String(name).trim() : null,\n    isin: isin || null,\n    sector: sector || null,\n    exchange,\n    currency,\n    _valid: errors.length === 0,\n    errors,\n  };\n});\n\n// De-duplicate by symbol, keeping the last occurrence.\nconst bySymbol = new Map();\nfor (const row of rows) {\n  const key = row.symbol || `__invalid_${Math.random()}`;\n  bySymbol.set(key, row);\n}\n\nreturn Array.from(bySymbol.values()).map((json) => ({ json }));"
+        "jsCode": "// Normalizes a raw provider response into the internal stock-universe row shape:\n// { symbol, name, isin, sector, exchange, currency, _valid, errors[] }\n// Tolerant of shape differences between providers (array directly, or wrapped in\n// a \"data\"/\"symbols\" property) since the exact provider contract varies.\n//\n// IMPORTANT: n8n's HTTP Request node auto-splits a top-level JSON ARRAY\n// response into one item per element — confirmed via live E2E testing\n// against EODHD's exchange-symbol-list endpoint (241 real tickers arrived\n// as 241 separate items, not one item holding a 241-element array). Must\n// use $input.all(), not $input.first().\nconst exchange = $('Attach Market').first().json.market;\nconst items = $input.all().map((i) => i.json);\n\nfunction looksLikeSymbolRecord(v) {\n  return v && typeof v === 'object' && !Array.isArray(v)\n    && (v.Code || v.symbol || v.Symbol || v.ticker);\n}\n\nlet list;\nif (items.length > 1 || looksLikeSymbolRecord(items[0])) {\n  // Auto-split case: every item IS already one symbol object (also covers\n  // the single-ticker edge case, detected by shape rather than count).\n  list = items;\n} else {\n  // Single-item case wrapping an array, e.g. { data: [...] }.\n  const raw = items[0];\n  list = raw;\n  if (!Array.isArray(list)) {\n    list = (raw && (raw.data || raw.symbols || raw.results)) || [];\n  }\n}\nif (!Array.isArray(list)) {\n  throw new Error('Provider response for the stock universe was not a recognizable list. Check the HTTP Request node URL/response shape.');\n}\n\nconst rows = list.map((entry) => {\n  const symbol = entry.Code || entry.symbol || entry.Symbol || entry.ticker || null;\n  const name = entry.Name || entry.name || entry.CompanyName || null;\n  const isin = entry.Isin || entry.isin || null;\n  const sector = entry.Sector || entry.sector || null;\n  // Provider-supplied currency wins when present; otherwise fall back to\n  // this market's known currency rather than always assuming EGP — a\n  // small, deliberately duplicated map (also present in the markets seed\n  // row) rather than a DB round-trip for what should be a rarely-hit path\n  // (EODHD's exchange-symbol-list normally does include Currency).\n  const marketCurrency = { EGX: 'EGP', US: 'USD' }[exchange] || 'EGP';\n  const currency = entry.Currency || entry.currency || marketCurrency;\n\n  const errors = [];\n  if (!symbol || typeof symbol !== 'string') errors.push('missing/invalid symbol');\n  if (!name || typeof name !== 'string') errors.push('missing/invalid name');\n\n  return {\n    symbol: symbol ? String(symbol).trim().toUpperCase() : null,\n    name: name ? String(name).trim() : null,\n    isin: isin || null,\n    sector: sector || null,\n    exchange,\n    currency,\n    _valid: errors.length === 0,\n    errors,\n  };\n});\n\n// De-duplicate by symbol, keeping the last occurrence.\nconst bySymbol = new Map();\nfor (const row of rows) {\n  const key = row.symbol || `__invalid_${Math.random()}`;\n  bySymbol.set(key, row);\n}\n\nreturn Array.from(bySymbol.values()).map((json) => ({ json }));"
       },
       "position": [
-        780,
+        1040,
         0
       ],
-      "id": "3450ba4d-0b15-4506-8e3f-989fd33ad82c"
+      "id": "a0a3389f-b863-4bdc-a4ed-622abd2d56de"
     },
     {
       "name": "Is Valid Row?",
@@ -126,7 +141,7 @@
           },
           "conditions": [
             {
-              "id": "4317f8d2-b78b-4dcb-b5a3-d486bf624021",
+              "id": "f478f856-94eb-449a-b9ba-d5c644912b6c",
               "leftValue": "={{ $json._valid }}",
               "rightValue": "",
               "operator": {
@@ -141,10 +156,10 @@
         "options": {}
       },
       "position": [
-        1040,
+        1300,
         0
       ],
-      "id": "eee5ad0c-94f1-4328-aa78-86a582e9aff4"
+      "id": "ec0cfb73-68e0-43ee-9cb4-50fe556e6980"
     },
     {
       "name": "Upsert Stock",
@@ -159,10 +174,10 @@
       },
       "onError": "continueRegularOutput",
       "position": [
-        1300,
+        1560,
         0
       ],
-      "id": "bdffd049-192a-4d01-94d0-0f93e18e0118"
+      "id": "72bc49fa-8538-467a-9e87-0a060aeaf71d"
     },
     {
       "name": "Log Invalid Row",
@@ -177,10 +192,10 @@
       },
       "onError": "continueRegularOutput",
       "position": [
-        1560,
+        1820,
         0
       ],
-      "id": "a4b963d3-e2b8-40dc-a5c0-13b8d9ae4fa8"
+      "id": "a532f9fd-4384-4640-be77-a7e6edc99f0b"
     },
     {
       "name": "Join Branches",
@@ -188,10 +203,10 @@
       "typeVersion": 1,
       "parameters": {},
       "position": [
-        1820,
+        2080,
         0
       ],
-      "id": "79d7dc82-a764-42be-b8e1-a382be5ea4c4"
+      "id": "2bc6a761-fde2-4ae1-b9b6-47908bc6bae5"
     },
     {
       "name": "Deactivate Stale Stocks",
@@ -201,15 +216,15 @@
         "operation": "executeQuery",
         "query": "UPDATE stocks SET active = FALSE, updated_at = now()\nWHERE exchange = $1 AND (last_seen IS NULL OR last_seen < CURRENT_DATE) AND active = TRUE;",
         "options": {
-          "queryReplacement": "={{ [$env.EGX_EXCHANGE_CODE || \"EGX\"] }}"
+          "queryReplacement": "={{ [$('Attach Market').first().json.market] }}"
         }
       },
       "executeOnce": true,
       "position": [
-        2080,
+        2340,
         0
       ],
-      "id": "58ad1a46-0454-40a2-bdbf-f888b1f7f1eb"
+      "id": "4967957a-fff8-46b0-9580-b4a3ffbc8568"
     },
     {
       "name": "Count Active Stocks",
@@ -219,15 +234,15 @@
         "operation": "executeQuery",
         "query": "SELECT COUNT(*)::int AS active_stock_count FROM stocks WHERE exchange = $1 AND active = TRUE;",
         "options": {
-          "queryReplacement": "={{ [$env.EGX_EXCHANGE_CODE || \"EGX\"] }}"
+          "queryReplacement": "={{ [$('Attach Market').first().json.market] }}"
         }
       },
       "executeOnce": true,
       "position": [
-        2340,
+        2600,
         0
       ],
-      "id": "73bf6801-64aa-4769-a98d-271551e84a79"
+      "id": "13cff536-e80c-4b1c-8ddc-06c32bb75bc3"
     },
     {
       "name": "Build Summary",
@@ -239,10 +254,10 @@
         "jsCode": "const count = $input.first().json.active_stock_count;\nreturn [{ json: {\n  workflow: '01-egx-stock-universe',\n  finishedAt: new Date().toISOString(),\n  activeStockCount: count,\n  message: `Stock universe refreshed. ${count} active EGX stocks.`,\n} }];"
       },
       "position": [
-        2600,
-        0
+        0,
+        200
       ],
-      "id": "d7c3b2d7-7b03-4ebf-bc45-f352e6bb2950"
+      "id": "84b19bdf-72b6-4516-a65b-ec1fc17aa234"
     }
   ],
   "connections": {
@@ -250,7 +265,7 @@
       "main": [
         [
           {
-            "node": "Fetch EGX Universe (CONFIGURE ENDPOINT)",
+            "node": "Attach Market",
             "type": "main",
             "index": 0
           }
@@ -258,6 +273,17 @@
       ]
     },
     "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Attach Market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Market": {
       "main": [
         [
           {
@@ -372,6 +398,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "2e1bed14-a5d1-46e5-8e84-d6fd1d64f530",
+  "id": "98c1e186-206b-49f0-ae69-25ba8d2c4c71",
   "tags": []
 }

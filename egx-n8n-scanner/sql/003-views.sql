@@ -13,11 +13,18 @@
 -- ---------------------------------------------------------------------
 -- v_latest_scanner_run: most recent completed LIVE run
 -- ---------------------------------------------------------------------
+-- Explicitly EGX-scoped (not just implicitly, now that scanner_runs spans
+-- multiple markets) — this view's whole contract is "the one single latest
+-- run, unchanged since before multi-market support", consumed by
+-- v_full_market below which makes the same "always EGX, untouched" promise.
+-- scanner_run_as_of(p_date, p_market) below is the general, multi-market
+-- version everything else should use.
 CREATE OR REPLACE VIEW v_latest_scanner_run AS
 SELECT sr.*
 FROM scanner_runs sr
 WHERE sr.run_type = 'LIVE'
   AND sr.status = 'COMPLETED'
+  AND sr.market = 'EGX'
 ORDER BY sr.trading_date DESC
 LIMIT 1;
 
@@ -55,18 +62,30 @@ ORDER BY dp.stock_id, dp.trading_date DESC;
 -- date gives the most recent qualifying row ON OR BEFORE that date, so
 -- picking a non-trading day (weekend/holiday) still resolves sensibly.
 -- ---------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION scanner_run_as_of(p_date DATE)
+-- p_market defaults to 'EGX' so every existing single-arg caller
+-- (scanner_run_as_of($1)) keeps its exact prior EGX-only behavior
+-- unchanged. CREATE OR REPLACE does NOT collapse this into the old
+-- single-arg version, though — Postgres identifies functions by name AND
+-- argument list, so adding a parameter (even a defaulted one) creates a
+-- SEPARATE overload alongside the old one rather than replacing it
+-- (confirmed live: re-applying this file left both scanner_run_as_of(date)
+-- and scanner_run_as_of(date, varchar) defined simultaneously, and the
+-- next CREATE FUNCTION in this file failed with "function name ... is not
+-- unique"). The explicit DROP below is required, not just tidiness.
+DROP FUNCTION IF EXISTS scanner_run_as_of(DATE);
+CREATE OR REPLACE FUNCTION scanner_run_as_of(p_date DATE, p_market VARCHAR DEFAULT 'EGX')
 RETURNS SETOF scanner_runs AS $$
   SELECT sr.*
   FROM scanner_runs sr
   WHERE sr.run_type = 'LIVE'
     AND sr.status = 'COMPLETED'
+    AND sr.market = p_market
     AND (p_date IS NULL OR sr.trading_date <= p_date)
   ORDER BY sr.trading_date DESC
   LIMIT 1;
 $$ LANGUAGE SQL STABLE;
 
-COMMENT ON FUNCTION scanner_run_as_of IS 'Most recent completed LIVE scanner run on or before p_date (or the true latest when p_date IS NULL) — parameterized sibling of v_latest_scanner_run.';
+COMMENT ON FUNCTION scanner_run_as_of IS 'Most recent completed LIVE scanner run for p_market on or before p_date (or the true latest when p_date IS NULL) — parameterized, multi-market sibling of v_latest_scanner_run.';
 
 CREATE OR REPLACE FUNCTION prices_as_of(p_date DATE)
 RETURNS TABLE (
@@ -183,10 +202,10 @@ LEFT JOIN volume_analysis va
 LEFT JOIN v_latest_scanner_run latest_run ON TRUE
 LEFT JOIN scanner_results res
     ON res.stock_id = s.id AND res.scanner_run_id = latest_run.id
-LEFT JOIN probability_stats ps ON ps.setup_type = res.setup_type
-WHERE s.active = TRUE;
+LEFT JOIN probability_stats ps ON ps.setup_type = res.setup_type AND ps.market = 'EGX'
+WHERE s.active = TRUE AND s.exchange = 'EGX';
 
-COMMENT ON VIEW v_full_market IS 'One row per active stock with latest price/indicator/scanner snapshot; used by GET /webhook/egx/stocks';
+COMMENT ON VIEW v_full_market IS 'One row per active EGX stock with latest price/indicator/scanner snapshot — explicitly EGX-scoped, unchanged since before multi-market support (see v_latest_scanner_run comment). market_snapshot(p_date, p_market) below is the general, multi-market sibling; used by GET /webhook/egx/stocks';
 
 -- ---------------------------------------------------------------------
 -- market_snapshot(p_date): parameterized sibling of v_full_market for the
@@ -195,8 +214,11 @@ COMMENT ON VIEW v_full_market IS 'One row per active stock with latest price/ind
 -- hand — v_full_market itself is untouched and keeps its exact current
 -- "always latest" behavior; market_snapshot(NULL) reproduces that same
 -- behavior exactly (via scanner_run_as_of/prices_as_of's NULL handling).
+-- Same DROP-before-CREATE requirement as scanner_run_as_of above: adding a
+-- parameter is a new overload, not a replacement of the old single-arg form.
 -- ---------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION market_snapshot(p_date DATE)
+DROP FUNCTION IF EXISTS market_snapshot(DATE);
+CREATE OR REPLACE FUNCTION market_snapshot(p_date DATE, p_market VARCHAR DEFAULT 'EGX')
 RETURNS SETOF v_full_market AS $$
   SELECT
       s.id::int AS stock_id, s.symbol, s.name, s.sector, s.active,
@@ -258,14 +280,14 @@ RETURNS SETOF v_full_market AS $$
       ON srz.stock_id = s.id AND srz.trading_date = lp.trading_date
   LEFT JOIN volume_analysis va
       ON va.stock_id = s.id AND va.trading_date = lp.trading_date
-  LEFT JOIN scanner_run_as_of(p_date) run ON TRUE
+  LEFT JOIN scanner_run_as_of(p_date, p_market) run ON TRUE
   LEFT JOIN scanner_results res
       ON res.stock_id = s.id AND res.scanner_run_id = run.id
-  LEFT JOIN probability_stats ps ON ps.setup_type = res.setup_type
-  WHERE s.active = TRUE;
+  LEFT JOIN probability_stats ps ON ps.setup_type = res.setup_type AND ps.market = p_market
+  WHERE s.active = TRUE AND s.exchange = p_market;
 $$ LANGUAGE SQL STABLE;
 
-COMMENT ON FUNCTION market_snapshot IS 'Same row shape as v_full_market, parameterized to any historical date (on-or-before semantics; NULL = always latest, identical to v_full_market). Backs GET /webhook/egx/stocks(/volume|/relative-volume)''s optional ?date= filter.';
+COMMENT ON FUNCTION market_snapshot IS 'Same row shape as v_full_market, parameterized to any historical date (on-or-before semantics; NULL = always latest, identical to v_full_market for p_market=EGX) and any market (default EGX, for backward-compatible single-arg callers). Backs GET /webhook/egx/stocks(/volume|/relative-volume)''s optional ?date=/?market= filters.';
 
 -- ---------------------------------------------------------------------
 -- v_scanner_top: latest run results joined with stock + price info, ranked
@@ -322,9 +344,14 @@ LEFT JOIN technical_analysis ta
     ON ta.stock_id = s.id AND ta.trading_date = run.trading_date
 LEFT JOIN support_resistance srz
     ON srz.stock_id = s.id AND srz.trading_date = run.trading_date
-LEFT JOIN probability_stats ps ON ps.setup_type = res.setup_type;
+-- ps.market = run.market (not a fixed value): this view spans every run,
+-- every market — probability_stats' PK is now (setup_type, market), so
+-- joining on setup_type alone would multiply rows (one per market per
+-- setup_type) once more than one market has stats. run.market gives the
+-- correct per-row market context directly, no separate parameter needed.
+LEFT JOIN probability_stats ps ON ps.setup_type = res.setup_type AND ps.market = run.market;
 
-COMMENT ON VIEW v_scanner_top IS 'Flattened scanner_results for the latest or any given run, used by ranking webhook endpoints';
+COMMENT ON VIEW v_scanner_top IS 'Flattened scanner_results for the latest or any given run/market, used by ranking webhook endpoints — callers scope both via scanner_run_as_of(p_date, p_market)';
 
 -- ---------------------------------------------------------------------
 -- v_prediction_stats: aggregate success metrics grouped by setup_type

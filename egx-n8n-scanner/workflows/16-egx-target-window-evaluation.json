@@ -16,7 +16,7 @@
         "width": 560,
         "color": 5
       },
-      "id": "ac118efb-0c3a-4fce-ba4b-aa6d0c984386"
+      "id": "d5e8e8ed-2024-4cba-9251-8c3cb9968c3b"
     },
     {
       "name": "Manual Trigger",
@@ -27,7 +27,7 @@
         0,
         0
       ],
-      "id": "7f545db0-33cc-4a61-ab9b-ce705066eda4"
+      "id": "c04e6b6a-08d7-42c9-bf07-dd1cb7ed1302"
     },
     {
       "name": "Schedule Trigger (Weekly)",
@@ -47,7 +47,7 @@
         260,
         0
       ],
-      "id": "816f9587-c3fb-4c47-a29c-6b543f8645ec"
+      "id": "af72a051-25af-44a7-a9aa-73f7e8537780"
     },
     {
       "name": "When Executed by Another Workflow",
@@ -60,7 +60,7 @@
         520,
         0
       ],
-      "id": "573756b6-66c2-4879-abf4-107eae575965"
+      "id": "d6341e7b-7446-4803-8228-1e609de48280"
     },
     {
       "name": "Load Evaluable Scanner Results",
@@ -76,7 +76,7 @@
         780,
         0
       ],
-      "id": "9c10b73b-957f-4d18-92aa-2dcbea316792"
+      "id": "32f771ab-6136-4602-a3f1-79bfbde4fdf3"
     },
     {
       "name": "Load Forward Candles (as JSON array)",
@@ -94,7 +94,7 @@
         1040,
         0
       ],
-      "id": "64f34eeb-9c45-4019-8718-3b9359d53fa6"
+      "id": "2a27d9e9-6fd3-4087-a1b5-27d5c8762f9c"
     },
     {
       "name": "Compute Window Outcome",
@@ -109,7 +109,7 @@
         1300,
         0
       ],
-      "id": "7571d418-2ea7-47b0-9b75-2d1c4e7f9268"
+      "id": "347d3438-e3be-416a-800c-13dc4f79a575"
     },
     {
       "name": "Has Outcome?",
@@ -124,7 +124,7 @@
           },
           "conditions": [
             {
-              "id": "0e7fc7d2-6d26-4736-b4d8-7b44b4591526",
+              "id": "060fb4be-6efb-4b8a-80ea-6449d6c3a649",
               "leftValue": "={{ $json._skip }}",
               "rightValue": "",
               "operator": {
@@ -142,7 +142,7 @@
         1560,
         0
       ],
-      "id": "8227d1a0-8af5-47b7-855a-b807a29c0e1e"
+      "id": "ada315cd-95c3-4c78-bb86-a335abbaf311"
     },
     {
       "name": "Upsert Target Window Evaluation",
@@ -160,7 +160,7 @@
         1820,
         0
       ],
-      "id": "16d543f9-5c0a-46f9-ac41-0f6f3a1fe890"
+      "id": "b970297f-9bbd-48df-b2d3-d483ed8a9eca"
     },
     {
       "name": "Join Branches",
@@ -171,7 +171,7 @@
         2080,
         0
       ],
-      "id": "73f96a18-a3e6-4732-9056-4af81fe820c2"
+      "id": "eb22964a-b735-42b6-86c2-dcdad5445fc3"
     },
     {
       "name": "Refresh Probability Stats",
@@ -179,7 +179,7 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO probability_stats (\n  setup_type, sample_size, target1_hit_pct, stop_hit_pct, expired_no_hit_pct, updated_at\n)\nSELECT r.setup_type,\n       COUNT(*)::int,\n       ROUND(100.0 * COUNT(*) FILTER (WHERE twe.outcome = 'TARGET1_HIT') / COUNT(*), 2),\n       ROUND(100.0 * COUNT(*) FILTER (WHERE twe.outcome = 'STOP_HIT') / COUNT(*), 2),\n       ROUND(100.0 * COUNT(*) FILTER (WHERE twe.outcome = 'EXPIRED_NO_HIT') / COUNT(*), 2),\n       now()\nFROM target_window_evaluation twe\nJOIN scanner_results r ON r.id = twe.scanner_result_id\nGROUP BY r.setup_type\nON CONFLICT (setup_type) DO UPDATE SET\n  sample_size = EXCLUDED.sample_size,\n  target1_hit_pct = EXCLUDED.target1_hit_pct,\n  stop_hit_pct = EXCLUDED.stop_hit_pct,\n  expired_no_hit_pct = EXCLUDED.expired_no_hit_pct,\n  updated_at = now();",
+        "query": "INSERT INTO probability_stats (\n  setup_type, market, sample_size, target1_hit_pct, stop_hit_pct, expired_no_hit_pct, updated_at\n)\nSELECT r.setup_type, run.market,\n       COUNT(*)::int,\n       ROUND(100.0 * COUNT(*) FILTER (WHERE twe.outcome = 'TARGET1_HIT') / COUNT(*), 2),\n       ROUND(100.0 * COUNT(*) FILTER (WHERE twe.outcome = 'STOP_HIT') / COUNT(*), 2),\n       ROUND(100.0 * COUNT(*) FILTER (WHERE twe.outcome = 'EXPIRED_NO_HIT') / COUNT(*), 2),\n       now()\nFROM target_window_evaluation twe\nJOIN scanner_results r ON r.id = twe.scanner_result_id\nJOIN scanner_runs run ON run.id = r.scanner_run_id\nGROUP BY r.setup_type, run.market\nON CONFLICT (setup_type, market) DO UPDATE SET\n  sample_size = EXCLUDED.sample_size,\n  target1_hit_pct = EXCLUDED.target1_hit_pct,\n  stop_hit_pct = EXCLUDED.stop_hit_pct,\n  expired_no_hit_pct = EXCLUDED.expired_no_hit_pct,\n  updated_at = now();",
         "options": {}
       },
       "executeOnce": true,
@@ -187,7 +187,7 @@
         2340,
         0
       ],
-      "id": "00269e54-8824-42ed-bc1b-9532b5648b69"
+      "id": "e7b651f6-2d41-4ac8-90b3-0050099cbb54"
     },
     {
       "name": "Count Evaluated Rows",
@@ -203,7 +203,7 @@
         2600,
         0
       ],
-      "id": "9d330e5e-fac0-413b-8fa7-f3c9e0ad55c1"
+      "id": "763bd8b3-442e-4d9c-b229-844f98f8ead9"
     },
     {
       "name": "Build Summary",
@@ -218,7 +218,7 @@
         0,
         200
       ],
-      "id": "8ccf55c2-5bda-45cd-b1d4-9ecf1e676c38"
+      "id": "be3b4ffe-8b54-4ac5-938b-c7e1e397dc7f"
     }
   ],
   "connections": {
@@ -359,6 +359,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "ff39b9ba-f252-42b5-a8cd-e4930756c973",
+  "id": "2cc5ce18-f8fd-449c-8da1-4370356420d1",
   "tags": []
 }

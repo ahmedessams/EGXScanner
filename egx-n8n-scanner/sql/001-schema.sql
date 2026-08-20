@@ -29,6 +29,40 @@ CREATE TABLE IF NOT EXISTS stocks (
 COMMENT ON TABLE stocks IS 'EGX stock universe / master data';
 
 -- ---------------------------------------------------------------------
+-- markets: multi-market config (user-requested addition beyond the
+-- original single-market/EGX spec). One row per market the pipeline
+-- knows how to scan — currency, timezone, the EODHD exchange-code
+-- suffix, and per-market liquidity thresholds (EGX's are EGP-denominated,
+-- a US market's are USD, so these can't share one flat env var). `active`
+-- controls whether the daily master workflow's schedule triggers include
+-- this market; a market can exist here (and be run manually / shown in
+-- the dashboard) before it has its own automatic daily schedule wired up
+-- in n8n — adding a market via the future Settings UI doesn't by itself
+-- create a new Schedule Trigger node, that's still a one-time n8n step.
+-- `stocks.exchange` values are expected to match a `markets.code` here,
+-- but that's not an FK: seeding order (this table is empty until
+-- 004-seed-settings.sql, but `stocks` rows only start existing once an
+-- n8n run populates them, well after seeding) makes enforcing it more
+-- trouble than it's worth for a two-market start.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS markets (
+    code                  VARCHAR(16) PRIMARY KEY,
+    name                  VARCHAR(64) NOT NULL,
+    currency              VARCHAR(8) NOT NULL,
+    timezone              VARCHAR(64) NOT NULL,
+    eodhd_exchange_code   VARCHAR(16) NOT NULL,
+    index_code            VARCHAR(32),
+    min_avg_traded_value  NUMERIC,
+    min_avg_volume        NUMERIC,
+    min_active_days_20    INTEGER,
+    active                BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+COMMENT ON TABLE markets IS 'Multi-market configuration: one row per market the pipeline can scan (currency, timezone, EODHD exchange code, per-market liquidity thresholds). Seeded in 004-seed-settings.sql.';
+COMMENT ON COLUMN markets.active IS 'Whether this market has an automatic daily Schedule Trigger in 12-egx-daily-master-workflow — not the same as "exists and is manually runnable", which any row here already is.';
+
+-- ---------------------------------------------------------------------
 -- daily_prices: OHLCV history per stock
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS daily_prices (
@@ -194,10 +228,30 @@ CREATE TABLE IF NOT EXISTS scanner_runs (
     run_type            VARCHAR(20) NOT NULL DEFAULT 'LIVE'
                             CHECK (run_type IN ('LIVE','BACKTEST','MANUAL')),
     metadata            JSONB NOT NULL DEFAULT '{}'::jsonb,
-    CONSTRAINT uq_scanner_runs_date_type UNIQUE (trading_date, run_type)
+    market              VARCHAR(16) NOT NULL DEFAULT 'EGX',
+    CONSTRAINT uq_scanner_runs_date_type UNIQUE (trading_date, run_type, market)
 );
 
-COMMENT ON TABLE scanner_runs IS 'One record per scanner execution (daily live run or backtest step)';
+COMMENT ON TABLE scanner_runs IS 'One record per scanner execution (daily live run or backtest step), scoped to one market';
+
+-- CREATE TABLE IF NOT EXISTS above is a no-op against an existing database
+-- (see the ai_stop_probability_pct precedent above for why) — these apply
+-- the market column and widen the uniqueness constraint on any database
+-- that already has scanner_runs from before multi-market support. Every
+-- workflow (07-11) that does "INSERT ... ON CONFLICT (trading_date,
+-- run_type) DO UPDATE" to get-or-create a scanner_run must be updated to
+-- match the new 3-column conflict target, or those upserts start failing
+-- with "no unique or exclusion constraint matching the ON CONFLICT
+-- specification" the moment this constraint changes underneath them.
+-- Must run BEFORE the COMMENT ON COLUMN below — that requires the column
+-- to already exist (confirmed live: the original ordering here failed
+-- with "column market of relation scanner_runs does not exist", same
+-- mistake as the ai_stop_probability_pct column earlier this session).
+ALTER TABLE scanner_runs ADD COLUMN IF NOT EXISTS market VARCHAR(16) NOT NULL DEFAULT 'EGX';
+ALTER TABLE scanner_runs DROP CONSTRAINT IF EXISTS uq_scanner_runs_date_type;
+ALTER TABLE scanner_runs ADD CONSTRAINT uq_scanner_runs_date_type UNIQUE (trading_date, run_type, market);
+
+COMMENT ON COLUMN scanner_runs.market IS 'References markets.code (not an FK — see markets table comment). A LIVE run for the same trading_date exists once per market, not once globally.';
 
 -- ---------------------------------------------------------------------
 -- scanner_results: ranked output per stock per scanner_run
@@ -422,12 +476,39 @@ COMMENT ON COLUMN target_window_evaluation.outcome IS 'TARGET1_HIT: high touched
 COMMENT ON COLUMN target_window_evaluation.resolved_day_number IS 'Which trading day (1-indexed from the scan date) the outcome resolved on; NULL for EXPIRED_NO_HIT.';
 
 CREATE TABLE IF NOT EXISTS probability_stats (
-    setup_type          VARCHAR(20) PRIMARY KEY,
+    setup_type          VARCHAR(20) NOT NULL,
+    market              VARCHAR(16) NOT NULL DEFAULT 'EGX',
     sample_size         INTEGER NOT NULL,
     target1_hit_pct     NUMERIC(6,2) NOT NULL,
     stop_hit_pct        NUMERIC(6,2) NOT NULL,
     expired_no_hit_pct  NUMERIC(6,2) NOT NULL,
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT pk_probability_stats PRIMARY KEY (setup_type, market)
 );
 
-COMMENT ON TABLE probability_stats IS 'Historical, per-setup-type outcome rates from target_window_evaluation — NOT a forecast, a measured track record over whatever data has accumulated so far (see sample_size).';
+COMMENT ON TABLE probability_stats IS 'Historical, per-setup-type-per-market outcome rates from target_window_evaluation — NOT a forecast, a measured track record over whatever data has accumulated so far (see sample_size). A setup type''s base rate is tracked separately per market: EGX MOMENTUM picks and US MOMENTUM picks do not share a hit rate.';
+
+-- CREATE TABLE IF NOT EXISTS above is a no-op against an existing
+-- database — this applies the market column and widens the primary key
+-- on any database that already has probability_stats from before
+-- multi-market support (same pattern as scanner_runs above). Dropping and
+-- re-adding a PRIMARY KEY (rather than a plain named UNIQUE constraint)
+-- needs its auto-generated name looked up first, since Postgres names it
+-- "probability_stats_pkey" by default on a fresh install but this ALTER
+-- can't assume that name wasn't already replaced by an earlier version of
+-- this same migration running twice.
+ALTER TABLE probability_stats ADD COLUMN IF NOT EXISTS market VARCHAR(16) NOT NULL DEFAULT 'EGX';
+DO $$
+DECLARE pk_name text;
+BEGIN
+  SELECT tc.constraint_name INTO pk_name
+  FROM information_schema.table_constraints tc
+  WHERE tc.table_name = 'probability_stats' AND tc.constraint_type = 'PRIMARY KEY';
+  IF pk_name IS NOT NULL AND pk_name != 'pk_probability_stats' THEN
+    EXECUTE format('ALTER TABLE probability_stats DROP CONSTRAINT %I', pk_name);
+    pk_name := NULL;
+  END IF;
+  IF pk_name IS NULL THEN
+    ALTER TABLE probability_stats ADD CONSTRAINT pk_probability_stats PRIMARY KEY (setup_type, market);
+  END IF;
+END $$;

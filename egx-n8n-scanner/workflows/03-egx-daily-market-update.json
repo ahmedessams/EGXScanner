@@ -11,12 +11,12 @@
         -300
       ],
       "parameters": {
-        "content": "## 03 - EGX Daily Market Update\n\nFetches the most recent trading sessions (a short lookback window, not the full history) per active stock, upserts into `daily_prices`, and reports whether TODAY actually has data — EGX does not trade every weekday (holidays), so this workflow never assumes a session happened; it verifies.\n\nOptionally fetches EGX30 index candles into `index_prices` for market-regime use.\n\nCalled by 12-egx-daily-master-workflow after 01; can also be run manually.",
+        "content": "## 03 - EGX Daily Market Update\n\nFetches the most recent trading sessions (a short lookback window, not the full history) per active stock, upserts into `daily_prices`, and reports whether TODAY actually has data — EGX does not trade every weekday (holidays), so this workflow never assumes a session happened; it verifies.\n\nOptionally fetches that market's broad index candles (EGX30 for EGX, per-market via markets.index_code) into `index_prices` for market-regime use.\n\nCalled by 12-egx-daily-master-workflow after 01; can also be run manually.",
         "height": 320,
         "width": 480,
         "color": 5
       },
-      "id": "1de8282e-46f2-4e5f-b854-58440180bfbb"
+      "id": "1fcc5b92-b4fa-4b96-bab2-f92d67809ed8"
     },
     {
       "name": "Configure Endpoint Warning",
@@ -27,12 +27,12 @@
         -300
       ],
       "parameters": {
-        "content": "### ⚠️ CONFIGURE BEFORE USE\n\nSame endpoint-configuration note as workflow 02 — edit the HTTP Request node URLs to match your provider's documented endpoints. The index fetch is OPTIONAL and tolerant of failure (continues without EGX30 data).",
+        "content": "### ⚠️ CONFIGURE BEFORE USE\n\nSame endpoint-configuration note as workflow 02 — edit the HTTP Request node URLs to match your provider's documented endpoints. The index fetch is OPTIONAL and tolerant of failure (continues without index data).",
         "height": 220,
         "width": 440,
         "color": 7
       },
-      "id": "37b73060-ec32-4b4f-a685-865edb9bc47e"
+      "id": "7877227f-5ff9-4440-9434-ca2f8ec60a34"
     },
     {
       "name": "Manual Trigger",
@@ -43,7 +43,7 @@
         0,
         0
       ],
-      "id": "ea6f1929-3c0c-4f1d-94a3-19ba7e5461da"
+      "id": "142ee206-b2d8-403a-992a-af3e5447bb10"
     },
     {
       "name": "When Executed by Another Workflow",
@@ -56,7 +56,7 @@
         260,
         0
       ],
-      "id": "0712d2c9-cf84-4d82-a266-1fcb986e7cc6"
+      "id": "859ff0dd-4a3c-43d9-afd3-4d333d07f801"
     },
     {
       "name": "Schedule Trigger (Retry Import)",
@@ -76,7 +76,7 @@
         520,
         0
       ],
-      "id": "4e5b4ef7-a0a2-4136-a1b7-3e41b4f0a68b"
+      "id": "439785aa-80a5-43d2-b2f5-3c7172f53379"
     },
     {
       "name": "Load Active Stocks",
@@ -84,9 +84,9 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT id, symbol FROM stocks WHERE exchange = $1 AND active = TRUE ORDER BY symbol;",
+        "query": "SELECT s.id, s.symbol, $1 AS market, m.index_code\nFROM stocks s LEFT JOIN (SELECT index_code FROM markets WHERE code = $1) m ON TRUE\nWHERE s.exchange = $1 AND s.active = TRUE ORDER BY s.symbol;",
         "options": {
-          "queryReplacement": "={{ [$env.EGX_EXCHANGE_CODE || \"EGX\"] }}"
+          "queryReplacement": "={{ [$json.market || \"EGX\"] }}"
         }
       },
       "executeOnce": true,
@@ -94,7 +94,7 @@
         780,
         0
       ],
-      "id": "2e00dc29-1ca8-4bd5-9108-3a03dab5d44e"
+      "id": "1eb1da82-3cbd-482d-981b-f299f01295fe"
     },
     {
       "name": "Loop Over Stocks (Batch)",
@@ -108,7 +108,7 @@
         1040,
         0
       ],
-      "id": "011095dc-6cdc-4163-b427-6014aed44db9"
+      "id": "ae8cd477-0d72-48e6-a65f-4cb3680445db"
     },
     {
       "name": "Fetch Recent OHLCV (CONFIGURE ENDPOINT)",
@@ -116,7 +116,7 @@
       "typeVersion": 4.2,
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.MARKET_API_BASE_URL }}/CONFIGURE-EOD-ENDPOINT/{{ $json.symbol }}.{{ $env.EGX_EXCHANGE_CODE }}",
+        "url": "={{ $env.MARKET_API_BASE_URL }}/CONFIGURE-EOD-ENDPOINT/{{ $json.symbol }}.{{ $json.market }}",
         "options": {
           "timeout": 30000,
           "response": {
@@ -156,7 +156,7 @@
         1300,
         0
       ],
-      "id": "dd755cc4-018c-459d-92e6-baa25b78bc06"
+      "id": "23eb1e8f-6b0b-4039-9888-47ce5de7cbe2"
     },
     {
       "name": "Normalize OHLCV Response",
@@ -171,7 +171,7 @@
         1560,
         0
       ],
-      "id": "b51b6331-5188-4895-a073-951ddbda101f"
+      "id": "7602bf35-474b-4941-8c68-72ad1c38fddb"
     },
     {
       "name": "Validate, Dedupe & Derive Traded Value",
@@ -186,7 +186,7 @@
         1820,
         0
       ],
-      "id": "a2a1525a-5561-4213-889a-1c774c9a401c"
+      "id": "49f4e1f6-13da-41eb-818a-cfc153e2a17f"
     },
     {
       "name": "Is Valid Candle?",
@@ -201,7 +201,7 @@
           },
           "conditions": [
             {
-              "id": "42964019-b8a2-4a63-a242-2de9f290011f",
+              "id": "6d3a5537-284c-46a7-96b0-26758d7d66f7",
               "leftValue": "={{ $json._valid }}",
               "rightValue": "",
               "operator": {
@@ -219,7 +219,7 @@
         2080,
         0
       ],
-      "id": "b699d98d-256c-4f4c-a478-634509f935fd"
+      "id": "af63cd0a-c3cc-4e2a-afe8-d9347cc5e7a9"
     },
     {
       "name": "Upsert Daily Price",
@@ -237,7 +237,7 @@
         2340,
         0
       ],
-      "id": "ceea9aad-5f0b-47ff-b1b5-5084ff33c08d"
+      "id": "1f913a3d-aafe-4308-aa6b-e0d318e1d776"
     },
     {
       "name": "Log Failed Symbol/Candle",
@@ -255,7 +255,7 @@
         2600,
         0
       ],
-      "id": "742ba22e-dfec-48b9-b991-ea2f6582600c"
+      "id": "e22469f0-e771-4923-8665-1ed9a040244b"
     },
     {
       "name": "Join Branches",
@@ -266,7 +266,7 @@
         0,
         200
       ],
-      "id": "d764c668-925c-4bee-8d5c-382d0bb6341e"
+      "id": "c7589d76-2f91-4c62-9438-f8769e467642"
     },
     {
       "name": "Rate Limit Delay",
@@ -281,15 +281,15 @@
         260,
         200
       ],
-      "id": "50704fb7-96a0-4bdf-a442-de62901efda5"
+      "id": "bc78bd6c-43c8-4657-87ec-aabaa694d168"
     },
     {
-      "name": "Fetch EGX30 Index (OPTIONAL, CONFIGURE ENDPOINT)",
+      "name": "Fetch Market Index (OPTIONAL, CONFIGURE ENDPOINT)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.MARKET_API_BASE_URL }}/CONFIGURE-INDEX-ENDPOINT/EGX30",
+        "url": "={{ $env.MARKET_API_BASE_URL }}/CONFIGURE-INDEX-ENDPOINT/{{ $('Load Active Stocks').first().json.index_code }}",
         "options": {
           "timeout": 20000,
           "response": {
@@ -329,7 +329,7 @@
         520,
         200
       ],
-      "id": "9e3f14aa-cc9a-4e73-b5f2-ee05121a0226"
+      "id": "af4d80d7-766f-4b6e-9630-2b4e5c557588"
     },
     {
       "name": "Normalize & Upsert Index (Skip on Failure)",
@@ -338,14 +338,14 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "function numOrNull(v) {\n  const n = Number(v);\n  return Number.isFinite(n) ? n : null;\n}\nfunction toIndexCandle(entry) {\n  return {\n    indexCode: 'EGX30',\n    date: entry.date || entry.Date || entry.datetime || null,\n    open: numOrNull(entry.open ?? entry.Open),\n    high: numOrNull(entry.high ?? entry.High),\n    low: numOrNull(entry.low ?? entry.Low),\n    close: numOrNull(entry.close ?? entry.Close),\n    volume: numOrNull(entry.volume ?? entry.Volume),\n    indexUpserted: true,\n  };\n}\n\nconst items = $input.all().map((i) => i.json);\nif (!items.length || (items.length === 1 && items[0] && items[0].error)) {\n  return [{ json: { indexUpserted: false, reason: 'index fetch failed or not configured' } }];\n}\n\n// Case A: each item is already one candle (auto-split array response).\nconst allLookLikeCandles = items.every((raw) => raw && (raw.date || raw.Date || raw.datetime));\nif (allLookLikeCandles) {\n  return items.map((raw) => ({ json: toIndexCandle(raw) }));\n}\n\n// Case B: single wrapped-array item.\nconst response = items[0];\nlet list = response;\nif (!Array.isArray(list)) list = (response && (response.data || response.results)) || [];\nif (!Array.isArray(list)) {\n  return [{ json: { indexUpserted: false, reason: 'unrecognized index response shape' } }];\n}\nreturn list.map((entry) => ({ json: toIndexCandle(entry) }));"
+        "jsCode": "function numOrNull(v) {\n  const n = Number(v);\n  return Number.isFinite(n) ? n : null;\n}\n// Load Active Stocks always runs once, unambiguously, before this branch —\n// safe to reference by name (unlike a trigger node that may not have fired).\nconst indexCode = $('Load Active Stocks').first().json.index_code;\nfunction toIndexCandle(entry) {\n  return {\n    indexCode,\n    date: entry.date || entry.Date || entry.datetime || null,\n    open: numOrNull(entry.open ?? entry.Open),\n    high: numOrNull(entry.high ?? entry.High),\n    low: numOrNull(entry.low ?? entry.Low),\n    close: numOrNull(entry.close ?? entry.Close),\n    volume: numOrNull(entry.volume ?? entry.Volume),\n    indexUpserted: true,\n  };\n}\n\nconst items = $input.all().map((i) => i.json);\nif (!items.length || (items.length === 1 && items[0] && items[0].error)) {\n  return [{ json: { indexUpserted: false, reason: 'index fetch failed or not configured' } }];\n}\n\n// Case A: each item is already one candle (auto-split array response).\nconst allLookLikeCandles = items.every((raw) => raw && (raw.date || raw.Date || raw.datetime));\nif (allLookLikeCandles) {\n  return items.map((raw) => ({ json: toIndexCandle(raw) }));\n}\n\n// Case B: single wrapped-array item.\nconst response = items[0];\nlet list = response;\nif (!Array.isArray(list)) list = (response && (response.data || response.results)) || [];\nif (!Array.isArray(list)) {\n  return [{ json: { indexUpserted: false, reason: 'unrecognized index response shape' } }];\n}\nreturn list.map((entry) => ({ json: toIndexCandle(entry) }));"
       },
       "onError": "continueRegularOutput",
       "position": [
         780,
         200
       ],
-      "id": "4f2cf7c2-cdb4-43e7-9afd-e0f744dacbbb"
+      "id": "265fcc80-8582-4d03-9d29-929767816598"
     },
     {
       "name": "Index Data Available?",
@@ -360,7 +360,7 @@
           },
           "conditions": [
             {
-              "id": "2ced26f0-447e-47ab-8f0c-9efb177f7c28",
+              "id": "ee3df1fe-d464-46d6-bb47-7598a10f8aeb",
               "leftValue": "={{ $json.indexUpserted }}",
               "rightValue": "",
               "operator": {
@@ -378,7 +378,7 @@
         1040,
         200
       ],
-      "id": "a45b0821-43f2-44b6-82e1-41bd6fba83eb"
+      "id": "aad800f6-3683-4f94-a4d4-ef82015cc640"
     },
     {
       "name": "Join Index Branches",
@@ -389,7 +389,7 @@
         1300,
         200
       ],
-      "id": "e760841b-68e3-4be5-ab1a-2f78b86fed63"
+      "id": "83f9a40b-bf2b-4659-81c0-cc36c4b66e32"
     },
     {
       "name": "Upsert Index Prices",
@@ -407,7 +407,7 @@
         1560,
         200
       ],
-      "id": "faac85ac-6c40-40ce-b60c-fd59dd964c84"
+      "id": "503fbee7-15e0-4417-b28e-2289f5d9ae99"
     },
     {
       "name": "Verify Data Completeness",
@@ -417,7 +417,7 @@
         "operation": "executeQuery",
         "query": "SELECT\n  (SELECT COUNT(*) FROM stocks WHERE exchange = $1 AND active = TRUE)::int AS active_stock_count,\n  (SELECT COUNT(*) FROM daily_prices dp JOIN stocks s ON s.id = dp.stock_id\n     WHERE s.exchange = $1 AND s.active = TRUE AND dp.trading_date = CURRENT_DATE)::int AS today_price_count;",
         "options": {
-          "queryReplacement": "={{ [$env.EGX_EXCHANGE_CODE || \"EGX\"] }}"
+          "queryReplacement": "={{ [$('Load Active Stocks').first().json.market] }}"
         }
       },
       "executeOnce": true,
@@ -425,7 +425,7 @@
         1820,
         200
       ],
-      "id": "6d13d2c2-fd66-4dcb-a4db-d85634a70f79"
+      "id": "c01607a3-d40f-491d-b136-7998a6f61661"
     },
     {
       "name": "Build Summary",
@@ -440,7 +440,7 @@
         2080,
         200
       ],
-      "id": "801fb80b-c008-4112-8aa1-b1f30fdc3aa4"
+      "id": "7644e43c-dcdd-4e7e-a061-499d42ead0e5"
     }
   ],
   "connections": {
@@ -492,7 +492,7 @@
       "main": [
         [
           {
-            "node": "Fetch EGX30 Index (OPTIONAL, CONFIGURE ENDPOINT)",
+            "node": "Fetch Market Index (OPTIONAL, CONFIGURE ENDPOINT)",
             "type": "main",
             "index": 0
           }
@@ -601,7 +601,7 @@
         ]
       ]
     },
-    "Fetch EGX30 Index (OPTIONAL, CONFIGURE ENDPOINT)": {
+    "Fetch Market Index (OPTIONAL, CONFIGURE ENDPOINT)": {
       "main": [
         [
           {
@@ -683,6 +683,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "7c769eb8-8e1a-4936-9a01-9689aff82cc4",
+  "id": "ec618e41-acda-4baa-869f-b6d59b4130dd",
   "tags": []
 }

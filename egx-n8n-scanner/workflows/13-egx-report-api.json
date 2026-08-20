@@ -11,18 +11,18 @@
         -400
       ],
       "parameters": {
-        "content": "## 13 - EGX Report API\n\nRead-only webhook endpoints over the scanner's Postgres views (section 25/26/36). Each route checks `Authorization: Bearer $REPORT_WEBHOOK_SECRET` \u2014 if the secret env var is empty, the route stays open (documented public-read choice, section 38). All queries are parameterized or built from a strict server-side whitelist \u2014 no raw user input is ever concatenated into SQL.\n\nRequires 11-egx-overall-ranking to have run at least once (reads from v_full_market / v_scanner_top / v_latest_scanner_run).\n\n**After import:** each Webhook node needs the workflow ACTIVATED (top-right toggle) for its production URL to respond \u2014 see docs/IMPORT-N8N.md.",
+        "content": "## 13 - EGX Report API\n\nRead-only webhook endpoints over the scanner's Postgres views (section 25/26/36). Each route checks `Authorization: Bearer $REPORT_WEBHOOK_SECRET` — if the secret env var is empty, the route stays open (documented public-read choice, section 38). All queries are parameterized or built from a strict server-side whitelist — no raw user input is ever concatenated into SQL.\n\nRequires 11-egx-overall-ranking to have run at least once (reads from v_full_market / v_scanner_top / v_latest_scanner_run).\n\n**After import:** each Webhook node needs the workflow ACTIVATED (top-right toggle) for its production URL to respond — see docs/IMPORT-N8N.md.",
         "height": 340,
         "width": 560,
         "color": 5
       },
-      "id": "2bedfa4a-99fe-4fa6-a21c-841c2d4f960a"
+      "id": "6845a67d-069f-491d-972f-edba1e050134"
     },
     {
       "name": "Webhook: full-market",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "542b0b5d-2000-4bb3-bc0d-44b0c278af1f",
+      "webhookId": "0c4d50cf-8df8-4723-96af-0c9fe21d43f4",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/stocks",
@@ -33,7 +33,7 @@
         0,
         0
       ],
-      "id": "2269e5f4-c64f-49b8-b987-9ddafa278416"
+      "id": "285e8eef-6646-4c3d-95b2-14890d392907"
     },
     {
       "name": "Check Auth: full-market",
@@ -48,7 +48,7 @@
         260,
         0
       ],
-      "id": "0efcd42e-ff91-4c49-9dfd-b89af6bb56e3"
+      "id": "5fdbd956-faa3-46b0-affd-f960286ff376"
     },
     {
       "name": "Authorized?: full-market",
@@ -63,7 +63,7 @@
           },
           "conditions": [
             {
-              "id": "b3078ef2-66c8-45d3-a0fe-bc5438effe69",
+              "id": "cf1768f3-67c1-41aa-ba22-826fd0b17024",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -81,7 +81,7 @@
         520,
         0
       ],
-      "id": "d52d7335-4f2d-4edb-bca3-e6300d514b48"
+      "id": "86b9f59a-6223-4f71-abf9-98ae286ab67f"
     },
     {
       "name": "Respond 401: full-market",
@@ -98,7 +98,7 @@
         780,
         0
       ],
-      "id": "09f1025a-4711-4cd2-beaf-6e48a4695eb2"
+      "id": "3d882746-266a-4f90-add6-9414fa603b9c"
     },
     {
       "name": "Build Query: full-market",
@@ -107,13 +107,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const sortMap = { volume: 'volume', tradedvalue: 'traded_value', rvol: 'rvol20', score: 'overall_score', change: 'change_pct' };\nconst requested = String(($json.query && $json.query.sort) || 'score').toLowerCase();\nconst orderByColumn = sortMap[requested] || 'overall_score';\nconst rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, orderByColumn, dateParam } }];"
+        "jsCode": "const sortMap = { volume: 'volume', tradedvalue: 'traded_value', rvol: 'rvol20', score: 'overall_score', change: 'change_pct' };\nconst requested = String(($json.query && $json.query.sort) || 'score').toLowerCase();\nconst orderByColumn = sortMap[requested] || 'overall_score';\nconst rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nconst marketParam = String(($json.query && $json.query.market) || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'EGX';\nreturn [{ json: { ...$json, orderByColumn, dateParam, marketParam } }];"
       },
       "position": [
         1040,
         0
       ],
-      "id": "165f4982-21aa-43ed-a30c-de64119c785a"
+      "id": "a60fc534-21b3-4e88-b1cb-92d5bd29b3e0"
     },
     {
       "name": "Query: full-market",
@@ -121,9 +121,9 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "=SELECT * FROM market_snapshot($1) ORDER BY {{ $json.orderByColumn }} DESC NULLS LAST LIMIT 1000;",
+        "query": "=SELECT * FROM market_snapshot($1, $2) ORDER BY {{ $json.orderByColumn }} DESC NULLS LAST LIMIT 1000;",
         "options": {
-          "queryReplacement": "={{ [$json.dateParam] }}"
+          "queryReplacement": "={{ [$json.dateParam, $json.marketParam] }}"
         }
       },
       "onError": "continueRegularOutput",
@@ -131,7 +131,7 @@
         1300,
         0
       ],
-      "id": "2749632d-a604-420b-b4a8-bc28f33f0268"
+      "id": "6739b08c-f903-4338-9198-6cbe45a7353a"
     },
     {
       "name": "Format: full-market",
@@ -146,7 +146,7 @@
         1560,
         0
       ],
-      "id": "c69d97d9-9109-49d0-83c3-89dd514c1117"
+      "id": "72b63e8b-da0c-449f-ae4c-48859b4bda25"
     },
     {
       "name": "Respond 200: full-market",
@@ -161,13 +161,13 @@
         1820,
         0
       ],
-      "id": "acee90ef-5962-46cb-a3ea-a92f6eff73aa"
+      "id": "af7410ef-1ff6-4c72-a8b0-b0be58e580ac"
     },
     {
       "name": "Webhook: volume",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "6057f186-ef26-48b2-a00b-18eabf7c2a58",
+      "webhookId": "a45b4661-62d8-47bd-8f9b-7031afbf1ecf",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/stocks/volume",
@@ -178,7 +178,7 @@
         2080,
         0
       ],
-      "id": "bf175233-2bd8-4c23-98d9-0cf1597d3751"
+      "id": "459523fb-7c6b-4102-9f47-36694eafc5cb"
     },
     {
       "name": "Check Auth: volume",
@@ -193,7 +193,7 @@
         2340,
         0
       ],
-      "id": "79c67a8e-ec4a-47a7-bfd6-d67e45a028f7"
+      "id": "dcc78204-a243-42e5-b9c5-c703eeae3ccf"
     },
     {
       "name": "Authorized?: volume",
@@ -208,7 +208,7 @@
           },
           "conditions": [
             {
-              "id": "e89f003b-f022-4805-8e0b-81de73d08e95",
+              "id": "dd090be0-5f4d-4237-bfe8-7ca98b0db4ff",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -226,7 +226,7 @@
         2600,
         0
       ],
-      "id": "4d6c04b5-2697-469a-a7c5-5619c160ddaa"
+      "id": "7e05f760-0dca-4139-8f39-f44a7288b53f"
     },
     {
       "name": "Respond 401: volume",
@@ -243,7 +243,7 @@
         0,
         200
       ],
-      "id": "f06c0d5c-3f49-4501-8329-e9b25d57c942"
+      "id": "e93a9a0f-c24d-4b15-a06e-3b74627eb09f"
     },
     {
       "name": "Build Query: volume",
@@ -252,13 +252,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, dateParam } }];"
+        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nconst marketParam = String(($json.query && $json.query.market) || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'EGX';\nreturn [{ json: { ...$json, dateParam, marketParam } }];"
       },
       "position": [
         260,
         200
       ],
-      "id": "38e5412b-4161-4499-9a9f-9f0d5f9bf197"
+      "id": "7cdc43bc-40a9-449a-9c5d-17f2c396d146"
     },
     {
       "name": "Query: volume",
@@ -266,9 +266,9 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT symbol, name, sector, close, volume, traded_value, avg_volume20, rvol20, rvol50, target1, target1_gain_pct, target1_estimated_days, historical_target1_hit_pct, historical_stop_hit_pct, historical_sample_size\nFROM market_snapshot($1) ORDER BY volume DESC NULLS LAST LIMIT 1000;",
+        "query": "SELECT symbol, name, sector, close, volume, traded_value, avg_volume20, rvol20, rvol50, target1, target1_gain_pct, target1_estimated_days, historical_target1_hit_pct, historical_stop_hit_pct, historical_sample_size\nFROM market_snapshot($1, $2) ORDER BY volume DESC NULLS LAST LIMIT 1000;",
         "options": {
-          "queryReplacement": "={{ [$json.dateParam] }}"
+          "queryReplacement": "={{ [$json.dateParam, $json.marketParam] }}"
         }
       },
       "onError": "continueRegularOutput",
@@ -276,7 +276,7 @@
         520,
         200
       ],
-      "id": "adb0fe04-b248-42e8-9026-efc4a0dbc740"
+      "id": "d78bd09d-f9f3-4561-bf9b-8e507ccbea06"
     },
     {
       "name": "Format: volume",
@@ -291,7 +291,7 @@
         780,
         200
       ],
-      "id": "9a18f80b-ba47-4926-a821-cbc5b5990459"
+      "id": "d9bd0c02-a2eb-4eac-9c33-e3d8236e4083"
     },
     {
       "name": "Respond 200: volume",
@@ -306,13 +306,13 @@
         1040,
         200
       ],
-      "id": "7f31fff4-6f69-4baa-9e1f-0318d07fedfe"
+      "id": "c294f493-53d3-41d2-959e-4841aeb42011"
     },
     {
       "name": "Webhook: relative-volume",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "7b938390-af57-4ef6-a4ff-64febb70a66a",
+      "webhookId": "f47c5a38-25a8-46ed-9057-8e52707ee7ae",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/stocks/relative-volume",
@@ -323,7 +323,7 @@
         1300,
         200
       ],
-      "id": "430dc0a6-ec3d-43ba-97a6-25f6e98f9e7b"
+      "id": "19da320a-f385-4ee0-a23d-930d1f9de932"
     },
     {
       "name": "Check Auth: relative-volume",
@@ -338,7 +338,7 @@
         1560,
         200
       ],
-      "id": "b536ab24-244c-403e-9378-762a3ec2d434"
+      "id": "bbe4a13a-7ec7-4ed2-8c17-1b0bc8c99b8b"
     },
     {
       "name": "Authorized?: relative-volume",
@@ -353,7 +353,7 @@
           },
           "conditions": [
             {
-              "id": "f9dc4f3d-11b0-428d-8845-1e0ff895fdaf",
+              "id": "8bc1e211-4775-4ea7-9221-c487ef8276c4",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -371,7 +371,7 @@
         1820,
         200
       ],
-      "id": "b429bb63-394e-45b2-81c3-414889a88b88"
+      "id": "aea11242-e522-4ef0-856f-505db4295818"
     },
     {
       "name": "Respond 401: relative-volume",
@@ -388,7 +388,7 @@
         2080,
         200
       ],
-      "id": "a24527ca-17e4-4548-acdf-ab30d8b7d6d8"
+      "id": "0b4ef181-58e2-4065-859d-e1196b5d74f2"
     },
     {
       "name": "Build Query: relative-volume",
@@ -397,13 +397,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, dateParam } }];"
+        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nconst marketParam = String(($json.query && $json.query.market) || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'EGX';\nreturn [{ json: { ...$json, dateParam, marketParam } }];"
       },
       "position": [
         2340,
         200
       ],
-      "id": "5bad89d8-0f77-4f1c-a057-23e52741c183"
+      "id": "a6884cd4-9761-4b5b-b8b2-b7bd769f2f3c"
     },
     {
       "name": "Query: relative-volume",
@@ -411,9 +411,9 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT symbol, name, sector, close, volume, avg_volume20, rvol20, rvol50, target1, target1_gain_pct, target1_estimated_days, historical_target1_hit_pct, historical_stop_hit_pct, historical_sample_size\nFROM market_snapshot($1) ORDER BY rvol20 DESC NULLS LAST LIMIT 1000;",
+        "query": "SELECT symbol, name, sector, close, volume, avg_volume20, rvol20, rvol50, target1, target1_gain_pct, target1_estimated_days, historical_target1_hit_pct, historical_stop_hit_pct, historical_sample_size\nFROM market_snapshot($1, $2) ORDER BY rvol20 DESC NULLS LAST LIMIT 1000;",
         "options": {
-          "queryReplacement": "={{ [$json.dateParam] }}"
+          "queryReplacement": "={{ [$json.dateParam, $json.marketParam] }}"
         }
       },
       "onError": "continueRegularOutput",
@@ -421,7 +421,7 @@
         2600,
         200
       ],
-      "id": "5e108f52-e558-4adb-b5c3-b0008f02c379"
+      "id": "0f83f8c6-856e-4375-a7dc-de289a76075e"
     },
     {
       "name": "Format: relative-volume",
@@ -436,7 +436,7 @@
         0,
         400
       ],
-      "id": "60936e4b-8d26-40cc-ad4b-cbf2562647cd"
+      "id": "76eef584-2cb1-4842-a0dd-c7b36c294cb6"
     },
     {
       "name": "Respond 200: relative-volume",
@@ -451,13 +451,13 @@
         260,
         400
       ],
-      "id": "41cbe281-ad30-4469-b214-9012c116ffe6"
+      "id": "e75d1404-12fd-4d80-819c-c28d90166510"
     },
     {
       "name": "Webhook: top",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "e4ffa9e0-4494-4a2e-8fd4-958232b8e0ee",
+      "webhookId": "afc75bc4-5660-474b-bb1b-bd29be396f7a",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/top",
@@ -468,7 +468,7 @@
         520,
         400
       ],
-      "id": "5554194c-bd73-4681-b06b-7c5069659ba4"
+      "id": "ed0ceab2-bf45-4ea0-a7c2-ffa6ad7418ba"
     },
     {
       "name": "Check Auth: top",
@@ -483,7 +483,7 @@
         780,
         400
       ],
-      "id": "ba25c97c-089e-473d-897a-aae0e22be574"
+      "id": "16478601-6fd1-46b0-9caa-59ce081d8301"
     },
     {
       "name": "Authorized?: top",
@@ -498,7 +498,7 @@
           },
           "conditions": [
             {
-              "id": "e488db51-0492-40c5-b198-1f72ae5a3bd9",
+              "id": "6d93a318-b1ef-49df-9e00-c1ffa5b71c9b",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -516,7 +516,7 @@
         1040,
         400
       ],
-      "id": "28cae3d8-e368-4dde-a259-6075e91c0aef"
+      "id": "fa22e965-baa2-4fa5-9419-1e5a51737a0d"
     },
     {
       "name": "Respond 401: top",
@@ -533,7 +533,7 @@
         1300,
         400
       ],
-      "id": "8c0508e5-3841-4d9e-8899-a743a4bb05b6"
+      "id": "2ec12016-08a7-464a-be3a-72d6b6d7f692"
     },
     {
       "name": "Build Query: top",
@@ -542,13 +542,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, dateParam } }];"
+        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nconst marketParam = String(($json.query && $json.query.market) || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'EGX';\nreturn [{ json: { ...$json, dateParam, marketParam } }];"
       },
       "position": [
         1560,
         400
       ],
-      "id": "6ce442ef-abd6-4490-bc5f-5802ce3b82d7"
+      "id": "427fd3a8-fbba-4c10-8123-ace929867b60"
     },
     {
       "name": "Query: top",
@@ -556,9 +556,9 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($2))\n  AND eligible = TRUE\nORDER BY overall_rank ASC\nLIMIT COALESCE(NULLIF($1, 0), 10);",
+        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($2, $3))\n  AND eligible = TRUE\nORDER BY overall_rank ASC\nLIMIT COALESCE(NULLIF($1, 0), 10);",
         "options": {
-          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10, $json.dateParam ] }}"
+          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10, $json.dateParam, $json.marketParam ] }}"
         }
       },
       "onError": "continueRegularOutput",
@@ -567,7 +567,7 @@
         1820,
         400
       ],
-      "id": "d019ebf7-f572-4aa6-b49a-3a331258a9f4"
+      "id": "64f272a8-ceb0-46bb-9cc4-56750406015d"
     },
     {
       "name": "Format: top",
@@ -576,13 +576,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "// alwaysOutputData means a genuinely-empty result (no scanner run for the\n// requested date) still arrives as one placeholder item with an empty\n// json object \u2014 filter it back out rather than treating it as a row.\nconst rows = $input.all().map((i) => i.json).filter((r) => r && Object.keys(r).length > 0);\nreturn [{ json: {\n  success: true,\n  tradingDate: rows[0] ? rows[0].trading_date : null,\n  results: rows,\n} }];"
+        "jsCode": "// alwaysOutputData means a genuinely-empty result (no scanner run for the\n// requested date) still arrives as one placeholder item with an empty\n// json object — filter it back out rather than treating it as a row.\nconst rows = $input.all().map((i) => i.json).filter((r) => r && Object.keys(r).length > 0);\nreturn [{ json: {\n  success: true,\n  tradingDate: rows[0] ? rows[0].trading_date : null,\n  results: rows,\n} }];"
       },
       "position": [
         2080,
         400
       ],
-      "id": "8d343555-52b7-4f41-87af-664afe90021b"
+      "id": "e9ecdffb-ebe9-4082-87bf-b75fe5854686"
     },
     {
       "name": "Respond 200: top",
@@ -597,1289 +597,13 @@
         2340,
         400
       ],
-      "id": "5800d37c-1246-4a7a-9f45-0c920c78d885"
-    },
-    {
-      "name": "Webhook: breakout",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "webhookId": "0caecc6e-14b8-48b1-adc1-66047f84de0d",
-      "parameters": {
-        "httpMethod": "GET",
-        "path": "egx/breakout",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "position": [
-        2600,
-        400
-      ],
-      "id": "41dd3e27-c98d-4306-98c8-1c85f4302515"
-    },
-    {
-      "name": "Check Auth: breakout",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
-      },
-      "position": [
-        0,
-        600
-      ],
-      "id": "277276a5-a8d5-4915-bd67-10f82323aca4"
-    },
-    {
-      "name": "Authorized?: breakout",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "21f324b2-0e6d-4704-a7d6-f57383854276",
-              "leftValue": "={{ $json.authorized }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "position": [
-        260,
-        600
-      ],
-      "id": "a54b4537-62b5-4b0b-86da-8ec252595c90"
-    },
-    {
-      "name": "Respond 401: breakout",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
-        "options": {
-          "responseCode": 401
-        }
-      },
-      "position": [
-        520,
-        600
-      ],
-      "id": "02c8514c-ace0-4170-9643-f0ecbbdbf848"
-    },
-    {
-      "name": "Build Query: breakout",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, dateParam } }];"
-      },
-      "position": [
-        780,
-        600
-      ],
-      "id": "2f49bcde-035d-4066-925e-a0109ac97498"
-    },
-    {
-      "name": "Query: breakout",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($2)) AND eligible = TRUE\nORDER BY breakout_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
-        "options": {
-          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10, $json.dateParam ] }}"
-        }
-      },
-      "onError": "continueRegularOutput",
-      "alwaysOutputData": true,
-      "position": [
-        1040,
-        600
-      ],
-      "id": "935ebd55-e55a-4406-8b3c-fb32e1cd0ae9"
-    },
-    {
-      "name": "Format: breakout",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const rows = $input.all().map((i) => i.json).filter((r) => r && Object.keys(r).length > 0);\nreturn [{ json: { success: true, setup: 'breakout', results: rows } }];"
-      },
-      "position": [
-        1300,
-        600
-      ],
-      "id": "eb32fe5c-29f2-4fe1-b4c9-9834a073377b"
-    },
-    {
-      "name": "Respond 200: breakout",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ $json }}",
-        "options": {}
-      },
-      "position": [
-        1560,
-        600
-      ],
-      "id": "b75470c2-9b28-4c53-9247-0b630bb5cbb0"
-    },
-    {
-      "name": "Webhook: momentum",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "webhookId": "4f84d903-2bcb-46bd-a89b-a434a3e04ef5",
-      "parameters": {
-        "httpMethod": "GET",
-        "path": "egx/momentum",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "position": [
-        1820,
-        600
-      ],
-      "id": "c44e4c52-f74a-481a-8218-8909dd108035"
-    },
-    {
-      "name": "Check Auth: momentum",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
-      },
-      "position": [
-        2080,
-        600
-      ],
-      "id": "68ad31c9-8986-48a5-8a31-328c4eddf3d9"
-    },
-    {
-      "name": "Authorized?: momentum",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "13fa708b-a478-4943-95a0-bad1c7a00209",
-              "leftValue": "={{ $json.authorized }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "position": [
-        2340,
-        600
-      ],
-      "id": "d726d849-406b-4fc3-b3de-e2c0a6563e24"
-    },
-    {
-      "name": "Respond 401: momentum",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
-        "options": {
-          "responseCode": 401
-        }
-      },
-      "position": [
-        2600,
-        600
-      ],
-      "id": "ec8ad1d5-e336-4d24-8452-957cf8dca2a3"
-    },
-    {
-      "name": "Build Query: momentum",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, dateParam } }];"
-      },
-      "position": [
-        0,
-        800
-      ],
-      "id": "1e3a521b-ab8c-43fe-a2f1-55fae8f77193"
-    },
-    {
-      "name": "Query: momentum",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($2)) AND eligible = TRUE\nORDER BY momentum_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
-        "options": {
-          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10, $json.dateParam ] }}"
-        }
-      },
-      "onError": "continueRegularOutput",
-      "alwaysOutputData": true,
-      "position": [
-        260,
-        800
-      ],
-      "id": "031f1c44-ac39-4021-ac46-10990570b927"
-    },
-    {
-      "name": "Format: momentum",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const rows = $input.all().map((i) => i.json).filter((r) => r && Object.keys(r).length > 0);\nreturn [{ json: { success: true, setup: 'momentum', results: rows } }];"
-      },
-      "position": [
-        520,
-        800
-      ],
-      "id": "243d937f-145e-41a6-b034-d8790ab7d219"
-    },
-    {
-      "name": "Respond 200: momentum",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ $json }}",
-        "options": {}
-      },
-      "position": [
-        780,
-        800
-      ],
-      "id": "5418ce0a-f733-4af7-9b9e-5bc117bf7366"
-    },
-    {
-      "name": "Webhook: pullback",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "webhookId": "5af96c00-c3f3-460d-aa7e-c2ff0bb6c8df",
-      "parameters": {
-        "httpMethod": "GET",
-        "path": "egx/pullback",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "position": [
-        1040,
-        800
-      ],
-      "id": "307e06b1-1ffe-4dd2-863c-ec74b10915cc"
-    },
-    {
-      "name": "Check Auth: pullback",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
-      },
-      "position": [
-        1300,
-        800
-      ],
-      "id": "4db8afaa-ed85-4f7e-ac8f-28904a6b4282"
-    },
-    {
-      "name": "Authorized?: pullback",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "3e1c1256-d4be-4c10-8f77-c0842d5ea632",
-              "leftValue": "={{ $json.authorized }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "position": [
-        1560,
-        800
-      ],
-      "id": "8e973049-4776-4a50-9b3e-19e78150beb3"
-    },
-    {
-      "name": "Respond 401: pullback",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
-        "options": {
-          "responseCode": 401
-        }
-      },
-      "position": [
-        1820,
-        800
-      ],
-      "id": "a6ea702f-9e5d-46c4-b487-f7239cecca21"
-    },
-    {
-      "name": "Build Query: pullback",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, dateParam } }];"
-      },
-      "position": [
-        2080,
-        800
-      ],
-      "id": "e848f24a-a12e-45e0-ac62-707337d79122"
-    },
-    {
-      "name": "Query: pullback",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($2)) AND eligible = TRUE\nORDER BY pullback_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
-        "options": {
-          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10, $json.dateParam ] }}"
-        }
-      },
-      "onError": "continueRegularOutput",
-      "alwaysOutputData": true,
-      "position": [
-        2340,
-        800
-      ],
-      "id": "c51f2af1-2546-499a-9ccc-119e78114e35"
-    },
-    {
-      "name": "Format: pullback",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const rows = $input.all().map((i) => i.json).filter((r) => r && Object.keys(r).length > 0);\nreturn [{ json: { success: true, setup: 'pullback', results: rows } }];"
-      },
-      "position": [
-        2600,
-        800
-      ],
-      "id": "803b7877-4ed1-434f-be0a-e2c89dc5743b"
-    },
-    {
-      "name": "Respond 200: pullback",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ $json }}",
-        "options": {}
-      },
-      "position": [
-        0,
-        1000
-      ],
-      "id": "6f6cbf15-383c-4837-94ec-b825d0ba5244"
-    },
-    {
-      "name": "Webhook: reversal",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "webhookId": "1d8de357-8577-4c78-8968-41562b2c12c8",
-      "parameters": {
-        "httpMethod": "GET",
-        "path": "egx/reversal",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "position": [
-        260,
-        1000
-      ],
-      "id": "105094bf-d486-4fb0-9d64-2abc0d12821c"
-    },
-    {
-      "name": "Check Auth: reversal",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
-      },
-      "position": [
-        520,
-        1000
-      ],
-      "id": "f9e423a8-f117-40ad-8d2c-62fcc0c82d08"
-    },
-    {
-      "name": "Authorized?: reversal",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "0f39228c-8d19-4c46-bd97-0448fd0e981b",
-              "leftValue": "={{ $json.authorized }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "position": [
-        780,
-        1000
-      ],
-      "id": "bb12fc64-1173-4a82-ae99-c076b697b686"
-    },
-    {
-      "name": "Respond 401: reversal",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
-        "options": {
-          "responseCode": 401
-        }
-      },
-      "position": [
-        1040,
-        1000
-      ],
-      "id": "45f988b6-acc7-4681-aa70-bca892e7c965"
-    },
-    {
-      "name": "Build Query: reversal",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, dateParam } }];"
-      },
-      "position": [
-        1300,
-        1000
-      ],
-      "id": "2bb8b2ed-9b58-429d-8ae3-6f9465898b9a"
-    },
-    {
-      "name": "Query: reversal",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($2)) AND eligible = TRUE\nORDER BY reversal_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
-        "options": {
-          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10, $json.dateParam ] }}"
-        }
-      },
-      "onError": "continueRegularOutput",
-      "alwaysOutputData": true,
-      "position": [
-        1560,
-        1000
-      ],
-      "id": "9fc9c37a-449e-4de8-bc51-ed391738c27e"
-    },
-    {
-      "name": "Format: reversal",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const rows = $input.all().map((i) => i.json).filter((r) => r && Object.keys(r).length > 0);\nreturn [{ json: { success: true, setup: 'reversal', results: rows } }];"
-      },
-      "position": [
-        1820,
-        1000
-      ],
-      "id": "d4d2bba0-f624-4ca7-8e1a-c27da1c67338"
-    },
-    {
-      "name": "Respond 200: reversal",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ $json }}",
-        "options": {}
-      },
-      "position": [
-        2080,
-        1000
-      ],
-      "id": "6240cf69-5089-4c55-8ac9-e794d7a64780"
-    },
-    {
-      "name": "Webhook: stock-detail",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "webhookId": "d106f522-a27b-402d-9f72-ab11f4bb5611",
-      "parameters": {
-        "httpMethod": "GET",
-        "path": "egx/stock",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "position": [
-        2340,
-        1000
-      ],
-      "id": "4a485b8a-dd44-4309-8576-069a8a9365c9"
-    },
-    {
-      "name": "Check Auth: stock-detail",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
-      },
-      "position": [
-        2600,
-        1000
-      ],
-      "id": "733c0c5c-1deb-4332-97ae-f51429caa3ec"
-    },
-    {
-      "name": "Authorized?: stock-detail",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "978f55f3-16ed-43ef-9872-c84e820696c2",
-              "leftValue": "={{ $json.authorized }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "position": [
-        0,
-        1200
-      ],
-      "id": "24feee1c-5c13-4e02-a533-2039be5532d3"
-    },
-    {
-      "name": "Respond 401: stock-detail",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
-        "options": {
-          "responseCode": 401
-        }
-      },
-      "position": [
-        260,
-        1200
-      ],
-      "id": "22d908b8-8139-47ea-b9e7-b794f4e28cdb"
-    },
-    {
-      "name": "Build Query: stock-detail",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const symbol = String(($json.query && $json.query.symbol) || '').toUpperCase().replace(/[^A-Z0-9.]/g, '');\nif (!symbol) throw new Error('symbol query parameter is required, e.g. ?symbol=COMI');\nconst rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, symbol, dateParam } }];"
-      },
-      "position": [
-        520,
-        1200
-      ],
-      "id": "8158c389-f177-4e87-9636-6d4d0e29f718"
-    },
-    {
-      "name": "Query: stock-detail",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT * FROM market_snapshot($2) WHERE symbol = $1;",
-        "options": {
-          "queryReplacement": "={{ [$json.symbol, $json.dateParam] }}"
-        }
-      },
-      "onError": "continueRegularOutput",
-      "position": [
-        780,
-        1200
-      ],
-      "id": "9c7b45aa-0515-459b-8ea8-61e2ec165e60"
-    },
-    {
-      "name": "Format: stock-detail",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const row = $input.first() ? $input.first().json : null;\nif (!row) return [{ json: { success: false, error: 'symbol not found' } }];\nreturn [{ json: {\n  success: true,\n  symbol: row.symbol, name: row.name, close: row.close, changePct: row.change_pct,\n  volume: row.volume, averageVolume20: row.avg_volume20, relativeVolume20: row.rvol20,\n  rsi14: row.rsi14,\n  macd: { line: row.macd, signal: row.macd_signal, histogram: row.macd_histogram, state: (row.macd_histogram > 0 ? 'BULLISH' : 'BEARISH') },\n  movingAverages: { ema9: row.ema9, ema20: row.ema20, ema50: row.ema50, ema200: row.ema200 },\n  support: [row.support1, row.support2, row.support3].filter((v) => v !== null),\n  resistance: [row.resistance1, row.resistance2, row.resistance3].filter((v) => v !== null),\n  scores: { overall: row.overall_score, breakout: row.breakout_score, momentum: row.momentum_score, pullback: row.pullback_score, reversal: row.reversal_score },\n  setup: row.setup_type,\n  eligible: row.eligible,\n  // gainPct is potential gain IF the target is reached, plain arithmetic on\n  // entry/target \u2014 NOT a forecast. estimatedDays is a rough ATR-based\n  // projection (this stock's own average daily range), NOT a historical\n  // statistic or a guarantee of when (or whether) the target is hit \u2014 see\n  // docs/SCORING.md for the exact method.\n  tradeStructure: {\n    entry: row.entry_price, invalidation: row.invalidation_price,\n    target1: row.target1, target2: row.target2, target3: row.target3,\n    riskReward: { t1: row.risk_reward_t1, t2: row.risk_reward_t2, t3: row.risk_reward_t3 },\n    gainPct: { t1: row.target1_gain_pct, t2: row.target2_gain_pct, t3: row.target3_gain_pct },\n    estimatedDays: { t1: row.target1_estimated_days, t2: row.target2_estimated_days, t3: row.target3_estimated_days },\n  },\n  // Measured historical outcome rate for this setup_type, walking forward\n  // up to target1_estimated_days trading sessions across every past\n  // eligible pick of the same setup \u2014 NOT a forecast for THIS stock, and\n  // not reliable when sampleSize is small (see docs/SCORING.md).\n  historicalProbability: {\n    setupType: row.setup_type,\n    target1HitPct: row.historical_target1_hit_pct,\n    stopHitPct: row.historical_stop_hit_pct,\n    sampleSize: row.historical_sample_size,\n  },\n  // A language model's own read of this setup \u2014 only computed for that\n  // day's Top 10 (rank/ai_reasoning null otherwise). A judgment call from\n  // limited technical data, not a statistic, not a guarantee.\n  aiAssessment: {\n    rank: row.ai_rank,\n    target1ProbabilityPct: row.ai_target1_probability_pct,\n    stopProbabilityPct: row.ai_stop_probability_pct,\n    rankScore: row.ai_rank_score,\n    reasoning: row.ai_reasoning,\n  },\n} }];"
-      },
-      "position": [
-        1040,
-        1200
-      ],
-      "id": "0a5acfdc-891c-4608-8cc7-14255ff45e5b"
-    },
-    {
-      "name": "Respond 200: stock-detail",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ $json }}",
-        "options": {}
-      },
-      "position": [
-        1300,
-        1200
-      ],
-      "id": "20e7fcf6-b83b-48e4-a036-860845988597"
-    },
-    {
-      "name": "Webhook: stock-technicals",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "webhookId": "c44f7ca1-e0a6-4724-9620-50f8ec575bad",
-      "parameters": {
-        "httpMethod": "GET",
-        "path": "egx/stock/technicals",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "position": [
-        1560,
-        1200
-      ],
-      "id": "2665207b-3992-48c5-ace0-ddd2cbac004c"
-    },
-    {
-      "name": "Check Auth: stock-technicals",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
-      },
-      "position": [
-        1820,
-        1200
-      ],
-      "id": "579cebbf-2330-4df6-9c9e-a3a8764867a7"
-    },
-    {
-      "name": "Authorized?: stock-technicals",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "725ff4fe-b420-4a0e-bef9-2dd0f15105c7",
-              "leftValue": "={{ $json.authorized }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "position": [
-        2080,
-        1200
-      ],
-      "id": "178d3f03-1a9b-4b7b-b8f2-f21c7659819b"
-    },
-    {
-      "name": "Respond 401: stock-technicals",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
-        "options": {
-          "responseCode": 401
-        }
-      },
-      "position": [
-        2340,
-        1200
-      ],
-      "id": "898514af-4529-4812-b8e8-41cfa8d254b3"
-    },
-    {
-      "name": "Build Query: stock-technicals",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const symbol = String(($json.query && $json.query.symbol) || '').toUpperCase().replace(/[^A-Z0-9.]/g, '');\nif (!symbol) throw new Error('symbol query parameter is required, e.g. ?symbol=COMI');\nreturn [{ json: { ...$json, symbol } }];"
-      },
-      "position": [
-        2600,
-        1200
-      ],
-      "id": "b34459c8-b536-48ae-87c8-9adad946c8b4"
-    },
-    {
-      "name": "Query: stock-technicals",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT row_to_json(t) AS technicals FROM (\n  SELECT s.symbol, ta.* FROM technical_analysis ta\n  JOIN stocks s ON s.id = ta.stock_id\n  WHERE s.symbol = $1\n  ORDER BY ta.trading_date DESC LIMIT 1\n) t;",
-        "options": {
-          "queryReplacement": "={{ [$json.symbol] }}"
-        }
-      },
-      "onError": "continueRegularOutput",
-      "position": [
-        0,
-        1400
-      ],
-      "id": "515ef6ef-8450-49e6-b3a5-7d681b3556fb"
-    },
-    {
-      "name": "Format: stock-technicals",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const row = $input.first() ? $input.first().json.technicals : null;\nif (!row) return [{ json: { success: false, error: 'no technical analysis found for symbol' } }];\nreturn [{ json: { success: true, technicals: row } }];"
-      },
-      "position": [
-        260,
-        1400
-      ],
-      "id": "c1570e70-bbdc-4d55-a8de-a68f2ef28d49"
-    },
-    {
-      "name": "Respond 200: stock-technicals",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ $json }}",
-        "options": {}
-      },
-      "position": [
-        520,
-        1400
-      ],
-      "id": "3cdcb868-d71d-474a-95d4-e4c716ce4b54"
-    },
-    {
-      "name": "Webhook: stock-support-resistance",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "webhookId": "b8d6095c-e45a-4a64-a0d3-be12b5a234c0",
-      "parameters": {
-        "httpMethod": "GET",
-        "path": "egx/stock/support-resistance",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "position": [
-        780,
-        1400
-      ],
-      "id": "31bf6efd-0da3-4992-8d12-5d32cc20f5ef"
-    },
-    {
-      "name": "Check Auth: stock-support-resistance",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
-      },
-      "position": [
-        1040,
-        1400
-      ],
-      "id": "35be5465-692e-48f9-bd75-916a5160f8e7"
-    },
-    {
-      "name": "Authorized?: stock-support-resistance",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "cecf1c9d-b36c-4f36-b17d-be472d877c71",
-              "leftValue": "={{ $json.authorized }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "position": [
-        1300,
-        1400
-      ],
-      "id": "53834fe1-3637-4ce9-b05c-18de5c0476cd"
-    },
-    {
-      "name": "Respond 401: stock-support-resistance",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
-        "options": {
-          "responseCode": 401
-        }
-      },
-      "position": [
-        1560,
-        1400
-      ],
-      "id": "f4a02902-2f3f-41e0-94ca-2d44a873fa6c"
-    },
-    {
-      "name": "Build Query: stock-support-resistance",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const symbol = String(($json.query && $json.query.symbol) || '').toUpperCase().replace(/[^A-Z0-9.]/g, '');\nif (!symbol) throw new Error('symbol query parameter is required, e.g. ?symbol=COMI');\nreturn [{ json: { ...$json, symbol } }];"
-      },
-      "position": [
-        1820,
-        1400
-      ],
-      "id": "77fc1d7a-3a7b-4a47-94f5-2722f9aa7d2e"
-    },
-    {
-      "name": "Query: stock-support-resistance",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT row_to_json(t) AS support_resistance FROM (\n  SELECT s.symbol, sr.* FROM support_resistance sr\n  JOIN stocks s ON s.id = sr.stock_id\n  WHERE s.symbol = $1\n  ORDER BY sr.trading_date DESC LIMIT 1\n) t;",
-        "options": {
-          "queryReplacement": "={{ [$json.symbol] }}"
-        }
-      },
-      "onError": "continueRegularOutput",
-      "position": [
-        2080,
-        1400
-      ],
-      "id": "6f7354f4-53e0-4ebd-bfb3-9a4ce4e247f3"
-    },
-    {
-      "name": "Format: stock-support-resistance",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const row = $input.first() ? $input.first().json.support_resistance : null;\nif (!row) return [{ json: { success: false, error: 'no support/resistance data found for symbol' } }];\nreturn [{ json: { success: true, supportResistance: row } }];"
-      },
-      "position": [
-        2340,
-        1400
-      ],
-      "id": "00c3954c-2ff2-4784-8811-d77c0648fdc5"
-    },
-    {
-      "name": "Respond 200: stock-support-resistance",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ $json }}",
-        "options": {}
-      },
-      "position": [
-        2600,
-        1400
-      ],
-      "id": "1a9478ec-bdde-4238-a6a8-730ed71689bb"
-    },
-    {
-      "name": "Webhook: market",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "webhookId": "46ed7ded-2289-4054-b8e4-a6c2ee720df3",
-      "parameters": {
-        "httpMethod": "GET",
-        "path": "egx/market",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "position": [
-        0,
-        1600
-      ],
-      "id": "dbf2302f-f7a1-4413-b8a2-9a95cad02ba7"
-    },
-    {
-      "name": "Check Auth: market",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
-      },
-      "position": [
-        260,
-        1600
-      ],
-      "id": "411476a4-b205-4219-87fb-ff4c713cde7c"
-    },
-    {
-      "name": "Authorized?: market",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "e91d6950-e475-4d0b-a3fa-141b70e3673e",
-              "leftValue": "={{ $json.authorized }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "position": [
-        520,
-        1600
-      ],
-      "id": "8c2a9f5f-afe8-468e-9bb8-87c50be74c40"
-    },
-    {
-      "name": "Respond 401: market",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
-        "options": {
-          "responseCode": 401
-        }
-      },
-      "position": [
-        780,
-        1600
-      ],
-      "id": "0f3e9f9c-284b-498b-9e61-2db5aa0e5bc7"
-    },
-    {
-      "name": "Query: market",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT trading_date::text AS trading_date, market_score::float8 AS market_score, market_regime,\n       stocks_scanned::float8 AS stocks_scanned, eligible_stocks::float8 AS eligible_stocks\nFROM v_latest_scanner_run;",
-        "options": {}
-      },
-      "onError": "continueRegularOutput",
-      "position": [
-        1040,
-        1600
-      ],
-      "id": "8ba410b7-0a10-4b85-902e-a947150ff3b6"
-    },
-    {
-      "name": "Format: market",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const row = $input.first() ? $input.first().json : null;\nreturn [{ json: {\n  success: true,\n  tradingDate: row ? row.trading_date : null,\n  market: row ? { regime: row.market_regime, score: row.market_score } : null,\n  stocksScanned: row ? row.stocks_scanned : 0,\n  eligibleStocks: row ? row.eligible_stocks : 0,\n} }];"
-      },
-      "position": [
-        1300,
-        1600
-      ],
-      "id": "f7004a27-4bfd-4e90-9df6-91317425bd8b"
-    },
-    {
-      "name": "Respond 200: market",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ $json }}",
-        "options": {}
-      },
-      "position": [
-        1560,
-        1600
-      ],
-      "id": "5b85fa53-071d-4fda-bd12-9ffcf418d723"
-    },
-    {
-      "name": "Webhook: dates",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "webhookId": "a4e74208-ff9a-4554-a417-6cfac98a3ac4",
-      "parameters": {
-        "httpMethod": "GET",
-        "path": "egx/dates",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "position": [
-        1820,
-        1600
-      ],
-      "id": "9fd233c6-43ca-4b09-b0c3-6bb81d0ca7ec"
-    },
-    {
-      "name": "Check Auth: dates",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
-      },
-      "position": [
-        2080,
-        1600
-      ],
-      "id": "91eb6d30-35c2-40ec-ba41-d36ff5316d9d"
-    },
-    {
-      "name": "Authorized?: dates",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "e11f146c-542d-4d2c-a798-a47b8e0fc6d9",
-              "leftValue": "={{ $json.authorized }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "position": [
-        2340,
-        1600
-      ],
-      "id": "739d216a-4f3c-4bb7-a30a-6ca7417c87d9"
-    },
-    {
-      "name": "Respond 401: dates",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
-        "options": {
-          "responseCode": 401
-        }
-      },
-      "position": [
-        2600,
-        1600
-      ],
-      "id": "7990e0af-c473-43cf-ad23-6bfff3df8432"
-    },
-    {
-      "name": "Query: dates",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT trading_date::text AS trading_date\nFROM scanner_runs\nWHERE run_type = 'LIVE' AND status = 'COMPLETED'\nORDER BY trading_date DESC\nLIMIT 90;",
-        "options": {}
-      },
-      "onError": "continueRegularOutput",
-      "alwaysOutputData": true,
-      "position": [
-        0,
-        1800
-      ],
-      "id": "93cd4d70-a6fc-487f-a7e0-83163c69127a"
-    },
-    {
-      "name": "Format: dates",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const rows = $input.all().map((i) => i.json).filter((r) => r && r.trading_date);\nreturn [{ json: { success: true, dates: rows.map((r) => r.trading_date) } }];"
-      },
-      "position": [
-        260,
-        1800
-      ],
-      "id": "7c5a8853-dbc1-494a-9bd7-3984b4c6e4ba"
-    },
-    {
-      "name": "Respond 200: dates",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ $json }}",
-        "options": {}
-      },
-      "position": [
-        520,
-        1800
-      ],
-      "id": "4f30ce53-8eb6-4c2a-8c23-934b79a5e57f"
+      "id": "c38c91f6-7410-47ae-ae81-b1ecbab51a08"
     },
     {
       "name": "Webhook: top-picks",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "webhookId": "d5a590b8-0380-4c3d-a08e-187cef307d62",
+      "webhookId": "c729efa3-ae08-4cd4-a9e9-4b5d29724ca0",
       "parameters": {
         "httpMethod": "GET",
         "path": "egx/top-picks",
@@ -1890,7 +614,7 @@
         2600,
         400
       ],
-      "id": "853496c9-c91b-4eac-af2f-49ed87bc75ba"
+      "id": "e7a1f77a-f1eb-4113-904c-cfdf0dbb6330"
     },
     {
       "name": "Check Auth: top-picks",
@@ -1905,7 +629,7 @@
         0,
         600
       ],
-      "id": "3e01e42e-c2af-4ae2-8b7a-f61d7fd5c3b0"
+      "id": "266165db-7c2d-419c-87a9-4cd9fcb01475"
     },
     {
       "name": "Authorized?: top-picks",
@@ -1920,7 +644,7 @@
           },
           "conditions": [
             {
-              "id": "ba6b2818-124b-4e7b-982c-7fa5fab4a5f9",
+              "id": "d6522f58-8f32-4db9-b971-77dd6b49102f",
               "leftValue": "={{ $json.authorized }}",
               "rightValue": "",
               "operator": {
@@ -1938,7 +662,7 @@
         260,
         600
       ],
-      "id": "2d26c6d5-6f45-4eda-b676-1ff0e36ccc32"
+      "id": "d0d092b8-a3a5-4f67-992c-82d7e4c54f36"
     },
     {
       "name": "Respond 401: top-picks",
@@ -1955,7 +679,7 @@
         520,
         600
       ],
-      "id": "0bd79dee-debe-4fe1-98b4-e2fad3f92b53"
+      "id": "dc5fe6f2-a785-466e-a5dd-536817eb943c"
     },
     {
       "name": "Build Query: top-picks",
@@ -1964,13 +688,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, dateParam } }];"
+        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nconst marketParam = String(($json.query && $json.query.market) || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'EGX';\nreturn [{ json: { ...$json, dateParam, marketParam } }];"
       },
       "position": [
         780,
         600
       ],
-      "id": "9dd45273-3527-4242-9f8a-77cbc210ed68"
+      "id": "396bc0e0-59c5-4c43-bda4-f8b283353f2b"
     },
     {
       "name": "Query: top-picks",
@@ -1978,9 +702,9 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($1))\n  AND eligible = TRUE AND target1_gain_pct >= 5\nORDER BY overall_rank ASC\nLIMIT 3;",
+        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($1, $2))\n  AND eligible = TRUE AND target1_gain_pct >= 5\nORDER BY overall_rank ASC\nLIMIT 3;",
         "options": {
-          "queryReplacement": "={{ [$json.dateParam] }}"
+          "queryReplacement": "={{ [$json.dateParam, $json.marketParam] }}"
         }
       },
       "onError": "continueRegularOutput",
@@ -1989,7 +713,7 @@
         1040,
         600
       ],
-      "id": "3cde2eff-177b-44b5-97ae-65436f592cdb"
+      "id": "d03ee777-e400-44a2-a8d0-b4f5e544bef3"
     },
     {
       "name": "Format: top-picks",
@@ -2004,7 +728,7 @@
         1300,
         600
       ],
-      "id": "00d2fe08-3411-49b5-b8b7-a5c68abdf471"
+      "id": "e0aaf927-1552-454a-beba-aa381691d021"
     },
     {
       "name": "Respond 200: top-picks",
@@ -2019,7 +743,1317 @@
         1560,
         600
       ],
-      "id": "a6bd4549-184a-4740-aa60-dd1b2af391a0"
+      "id": "29dfd8a2-c616-4afa-a3e0-88b876b88cb2"
+    },
+    {
+      "name": "Webhook: breakout",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "9d787546-3efc-4c26-a89a-88375f7f6692",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/breakout",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        1820,
+        600
+      ],
+      "id": "8a360b2a-62e0-4b9e-80c2-77baa0091356"
+    },
+    {
+      "name": "Check Auth: breakout",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        2080,
+        600
+      ],
+      "id": "bd29c053-72a9-42d6-947b-533c1ecd04b1"
+    },
+    {
+      "name": "Authorized?: breakout",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "27c1fe9f-e84c-4fc7-86bd-75796b0f849a",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        2340,
+        600
+      ],
+      "id": "1fb53919-4706-4b32-b381-9d9e4df5dbfd"
+    },
+    {
+      "name": "Respond 401: breakout",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        2600,
+        600
+      ],
+      "id": "9e7e5119-72cc-4556-9419-77e36e3903c1"
+    },
+    {
+      "name": "Build Query: breakout",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nconst marketParam = String(($json.query && $json.query.market) || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'EGX';\nreturn [{ json: { ...$json, dateParam, marketParam } }];"
+      },
+      "position": [
+        0,
+        800
+      ],
+      "id": "d147616d-e36c-4f73-b4b2-b0fd90cf9e33"
+    },
+    {
+      "name": "Query: breakout",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($2, $3)) AND eligible = TRUE\nORDER BY breakout_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
+        "options": {
+          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10, $json.dateParam, $json.marketParam ] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "position": [
+        260,
+        800
+      ],
+      "id": "593557d3-cb16-4886-b047-5599aa3d506b"
+    },
+    {
+      "name": "Format: breakout",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rows = $input.all().map((i) => i.json).filter((r) => r && Object.keys(r).length > 0);\nreturn [{ json: { success: true, setup: 'breakout', results: rows } }];"
+      },
+      "position": [
+        520,
+        800
+      ],
+      "id": "10b9d39e-3e4b-4f69-aacc-5bfe0b414f15"
+    },
+    {
+      "name": "Respond 200: breakout",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        780,
+        800
+      ],
+      "id": "06b5c82d-ecdf-4f9b-8708-9e6a77d731f0"
+    },
+    {
+      "name": "Webhook: momentum",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "23ba821e-e5f8-4cb1-b55e-083c6a74862e",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/momentum",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        1040,
+        800
+      ],
+      "id": "4673ff39-d257-40f6-a4f4-799c227d3c86"
+    },
+    {
+      "name": "Check Auth: momentum",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        1300,
+        800
+      ],
+      "id": "7d2e29a4-45f0-423c-858f-b7d7af38a887"
+    },
+    {
+      "name": "Authorized?: momentum",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "48c01d0f-4d47-4e8c-afdc-6ba231f45c0e",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1560,
+        800
+      ],
+      "id": "07d63181-b895-4b5b-b1d5-fd314206c7e7"
+    },
+    {
+      "name": "Respond 401: momentum",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        1820,
+        800
+      ],
+      "id": "2a075415-92f3-4c7c-a518-45c23ac62440"
+    },
+    {
+      "name": "Build Query: momentum",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nconst marketParam = String(($json.query && $json.query.market) || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'EGX';\nreturn [{ json: { ...$json, dateParam, marketParam } }];"
+      },
+      "position": [
+        2080,
+        800
+      ],
+      "id": "8daa007e-c147-4e04-a6ee-2676ea705b17"
+    },
+    {
+      "name": "Query: momentum",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($2, $3)) AND eligible = TRUE\nORDER BY momentum_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
+        "options": {
+          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10, $json.dateParam, $json.marketParam ] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "position": [
+        2340,
+        800
+      ],
+      "id": "84387fac-2367-4e3c-8545-568e49dae5fa"
+    },
+    {
+      "name": "Format: momentum",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rows = $input.all().map((i) => i.json).filter((r) => r && Object.keys(r).length > 0);\nreturn [{ json: { success: true, setup: 'momentum', results: rows } }];"
+      },
+      "position": [
+        2600,
+        800
+      ],
+      "id": "ce6d24dd-4f00-41f0-b1fa-aaaba7e88a3c"
+    },
+    {
+      "name": "Respond 200: momentum",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        0,
+        1000
+      ],
+      "id": "defad1a5-48f2-4d8f-8e76-c37679e0ad17"
+    },
+    {
+      "name": "Webhook: pullback",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "4a8c2992-31e8-49dc-8d40-9b4a030bfffe",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/pullback",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        260,
+        1000
+      ],
+      "id": "2b47d8f7-ea7f-4209-ad82-d73fcedfb9c6"
+    },
+    {
+      "name": "Check Auth: pullback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        520,
+        1000
+      ],
+      "id": "adffd182-13cc-4ae6-b347-529cce92417e"
+    },
+    {
+      "name": "Authorized?: pullback",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "5f52ad97-c59f-493b-bd42-2e722d040cb6",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        780,
+        1000
+      ],
+      "id": "af02b4bb-d6e3-42fe-850e-660192227ebc"
+    },
+    {
+      "name": "Respond 401: pullback",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        1040,
+        1000
+      ],
+      "id": "2912f459-826a-4de4-a45d-7c476704d1c8"
+    },
+    {
+      "name": "Build Query: pullback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nconst marketParam = String(($json.query && $json.query.market) || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'EGX';\nreturn [{ json: { ...$json, dateParam, marketParam } }];"
+      },
+      "position": [
+        1300,
+        1000
+      ],
+      "id": "8a68a5f2-cef3-4e41-9878-e3459af8669b"
+    },
+    {
+      "name": "Query: pullback",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($2, $3)) AND eligible = TRUE\nORDER BY pullback_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
+        "options": {
+          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10, $json.dateParam, $json.marketParam ] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "position": [
+        1560,
+        1000
+      ],
+      "id": "ae8375c3-050a-4d4a-9eb8-e076440d3ac7"
+    },
+    {
+      "name": "Format: pullback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rows = $input.all().map((i) => i.json).filter((r) => r && Object.keys(r).length > 0);\nreturn [{ json: { success: true, setup: 'pullback', results: rows } }];"
+      },
+      "position": [
+        1820,
+        1000
+      ],
+      "id": "b184ee75-bc0d-4818-87f0-a08a2c09ebc8"
+    },
+    {
+      "name": "Respond 200: pullback",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        2080,
+        1000
+      ],
+      "id": "044daecb-3ab2-4c89-93c3-ff031dafda55"
+    },
+    {
+      "name": "Webhook: reversal",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "d331ecfd-9e23-45b6-8632-25e6aa313dc9",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/reversal",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        2340,
+        1000
+      ],
+      "id": "8fea94f1-e12b-4326-8796-e8596ab97036"
+    },
+    {
+      "name": "Check Auth: reversal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        2600,
+        1000
+      ],
+      "id": "6444d496-f178-44c8-98f0-cbf5a1e119c1"
+    },
+    {
+      "name": "Authorized?: reversal",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "bd5e9241-6ec3-428e-9b1e-201aa2216741",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        0,
+        1200
+      ],
+      "id": "7f421bee-0376-4cba-88ff-aadeba3c37b4"
+    },
+    {
+      "name": "Respond 401: reversal",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        260,
+        1200
+      ],
+      "id": "b78171dc-e85b-40da-a935-8ee80444d66f"
+    },
+    {
+      "name": "Build Query: reversal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nconst marketParam = String(($json.query && $json.query.market) || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'EGX';\nreturn [{ json: { ...$json, dateParam, marketParam } }];"
+      },
+      "position": [
+        520,
+        1200
+      ],
+      "id": "b238b01b-ea29-41ee-be33-4056a3b0c6bf"
+    },
+    {
+      "name": "Query: reversal",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($2, $3)) AND eligible = TRUE\nORDER BY reversal_score DESC NULLS LAST\nLIMIT COALESCE(NULLIF($1, 0), 10);",
+        "options": {
+          "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10, $json.dateParam, $json.marketParam ] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "position": [
+        780,
+        1200
+      ],
+      "id": "a26883c9-00b6-4d93-9c94-307786840032"
+    },
+    {
+      "name": "Format: reversal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rows = $input.all().map((i) => i.json).filter((r) => r && Object.keys(r).length > 0);\nreturn [{ json: { success: true, setup: 'reversal', results: rows } }];"
+      },
+      "position": [
+        1040,
+        1200
+      ],
+      "id": "1f69482b-396a-432a-8208-d71db6a79dbc"
+    },
+    {
+      "name": "Respond 200: reversal",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        1300,
+        1200
+      ],
+      "id": "b97ff055-2027-47e1-9fdd-7573111513be"
+    },
+    {
+      "name": "Webhook: stock-detail",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "4e80895a-1dcf-4004-b957-5d1d0f8a8c54",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/stock",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        1560,
+        1200
+      ],
+      "id": "950ac7f6-ddd4-4a9d-96d0-4eff3a224640"
+    },
+    {
+      "name": "Check Auth: stock-detail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        1820,
+        1200
+      ],
+      "id": "029e1f57-25a8-4bc6-be6f-c855b4631174"
+    },
+    {
+      "name": "Authorized?: stock-detail",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "581c9062-b4b4-4bcf-862a-c131a877e525",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        2080,
+        1200
+      ],
+      "id": "2e1357c6-fb54-47de-80e3-b5807883807d"
+    },
+    {
+      "name": "Respond 401: stock-detail",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        2340,
+        1200
+      ],
+      "id": "75d00c87-a341-43ac-86b4-384908ea2912"
+    },
+    {
+      "name": "Build Query: stock-detail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const symbol = String(($json.query && $json.query.symbol) || '').toUpperCase().replace(/[^A-Z0-9.]/g, '');\nif (!symbol) throw new Error('symbol query parameter is required, e.g. ?symbol=COMI');\nconst rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nconst marketParam = String(($json.query && $json.query.market) || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'EGX';\nreturn [{ json: { ...$json, symbol, dateParam, marketParam } }];"
+      },
+      "position": [
+        2600,
+        1200
+      ],
+      "id": "8956d420-643c-4d93-92cd-df1236a9771b"
+    },
+    {
+      "name": "Query: stock-detail",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM market_snapshot($2, $3) WHERE symbol = $1;",
+        "options": {
+          "queryReplacement": "={{ [$json.symbol, $json.dateParam, $json.marketParam] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        0,
+        1400
+      ],
+      "id": "adf4c8bf-70b7-4d1b-a633-a66cffcc209f"
+    },
+    {
+      "name": "Format: stock-detail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const row = $input.first() ? $input.first().json : null;\nif (!row) return [{ json: { success: false, error: 'symbol not found' } }];\nreturn [{ json: {\n  success: true,\n  symbol: row.symbol, name: row.name, close: row.close, changePct: row.change_pct,\n  volume: row.volume, averageVolume20: row.avg_volume20, relativeVolume20: row.rvol20,\n  rsi14: row.rsi14,\n  macd: { line: row.macd, signal: row.macd_signal, histogram: row.macd_histogram, state: (row.macd_histogram > 0 ? 'BULLISH' : 'BEARISH') },\n  movingAverages: { ema9: row.ema9, ema20: row.ema20, ema50: row.ema50, ema200: row.ema200 },\n  support: [row.support1, row.support2, row.support3].filter((v) => v !== null),\n  resistance: [row.resistance1, row.resistance2, row.resistance3].filter((v) => v !== null),\n  scores: { overall: row.overall_score, breakout: row.breakout_score, momentum: row.momentum_score, pullback: row.pullback_score, reversal: row.reversal_score },\n  setup: row.setup_type,\n  eligible: row.eligible,\n  // gainPct is potential gain IF the target is reached, plain arithmetic on\n  // entry/target — NOT a forecast. estimatedDays is a rough ATR-based\n  // projection (this stock's own average daily range), NOT a historical\n  // statistic or a guarantee of when (or whether) the target is hit — see\n  // docs/SCORING.md for the exact method.\n  tradeStructure: {\n    entry: row.entry_price, invalidation: row.invalidation_price,\n    target1: row.target1, target2: row.target2, target3: row.target3,\n    riskReward: { t1: row.risk_reward_t1, t2: row.risk_reward_t2, t3: row.risk_reward_t3 },\n    gainPct: { t1: row.target1_gain_pct, t2: row.target2_gain_pct, t3: row.target3_gain_pct },\n    estimatedDays: { t1: row.target1_estimated_days, t2: row.target2_estimated_days, t3: row.target3_estimated_days },\n  },\n  // Measured historical outcome rate for this setup_type, walking forward\n  // up to target1_estimated_days trading sessions across every past\n  // eligible pick of the same setup — NOT a forecast for THIS stock, and\n  // not reliable when sampleSize is small (see docs/SCORING.md).\n  historicalProbability: {\n    setupType: row.setup_type,\n    target1HitPct: row.historical_target1_hit_pct,\n    stopHitPct: row.historical_stop_hit_pct,\n    sampleSize: row.historical_sample_size,\n  },\n  // A language model's own read of this setup — only computed for that\n  // day's Top 10 (rank/ai_reasoning null otherwise). A judgment call from\n  // limited technical data, not a statistic, not a guarantee.\n  aiAssessment: {\n    rank: row.ai_rank,\n    target1ProbabilityPct: row.ai_target1_probability_pct,\n    stopProbabilityPct: row.ai_stop_probability_pct,\n    rankScore: row.ai_rank_score,\n    reasoning: row.ai_reasoning,\n  },\n} }];"
+      },
+      "position": [
+        260,
+        1400
+      ],
+      "id": "4ccd23c0-0924-409d-b5ce-58c941d439c1"
+    },
+    {
+      "name": "Respond 200: stock-detail",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        520,
+        1400
+      ],
+      "id": "296e4a5c-7b40-4656-8946-14078d7ffad0"
+    },
+    {
+      "name": "Webhook: stock-technicals",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "e42a0525-ab7a-4dd1-8404-0115fd25ee69",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/stock/technicals",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        780,
+        1400
+      ],
+      "id": "d3ddfb9c-b931-4d26-a165-764a1f000b6f"
+    },
+    {
+      "name": "Check Auth: stock-technicals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        1040,
+        1400
+      ],
+      "id": "9a5dd9f0-e53c-4157-96df-87a2a1944422"
+    },
+    {
+      "name": "Authorized?: stock-technicals",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "715a760f-daeb-443b-a7ce-8242c49a2162",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1300,
+        1400
+      ],
+      "id": "6ef1473d-9f55-4cb7-96a9-506395d33b49"
+    },
+    {
+      "name": "Respond 401: stock-technicals",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        1560,
+        1400
+      ],
+      "id": "8ef44dec-c2b3-41fb-b5f3-11947dc07aaf"
+    },
+    {
+      "name": "Build Query: stock-technicals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const symbol = String(($json.query && $json.query.symbol) || '').toUpperCase().replace(/[^A-Z0-9.]/g, '');\nif (!symbol) throw new Error('symbol query parameter is required, e.g. ?symbol=COMI');\nconst marketParam = String(($json.query && $json.query.market) || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'EGX';\nreturn [{ json: { ...$json, symbol, marketParam } }];"
+      },
+      "position": [
+        1820,
+        1400
+      ],
+      "id": "fbf54924-2e26-4017-b80b-f3d4eeb3d48e"
+    },
+    {
+      "name": "Query: stock-technicals",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT row_to_json(t) AS technicals FROM (\n  SELECT s.symbol, ta.* FROM technical_analysis ta\n  JOIN stocks s ON s.id = ta.stock_id\n  WHERE s.symbol = $1 AND s.exchange = $2\n  ORDER BY ta.trading_date DESC LIMIT 1\n) t;",
+        "options": {
+          "queryReplacement": "={{ [$json.symbol, $json.marketParam] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        2080,
+        1400
+      ],
+      "id": "a4b244f2-57b8-4e08-b972-451623f805e9"
+    },
+    {
+      "name": "Format: stock-technicals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const row = $input.first() ? $input.first().json.technicals : null;\nif (!row) return [{ json: { success: false, error: 'no technical analysis found for symbol' } }];\nreturn [{ json: { success: true, technicals: row } }];"
+      },
+      "position": [
+        2340,
+        1400
+      ],
+      "id": "1d2de9a6-170c-445a-976b-9ef3cabccf62"
+    },
+    {
+      "name": "Respond 200: stock-technicals",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        2600,
+        1400
+      ],
+      "id": "3082749e-903f-4a2a-bd40-329606185812"
+    },
+    {
+      "name": "Webhook: stock-support-resistance",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "4f025af1-fbed-4f49-a4f5-6da87ec25800",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/stock/support-resistance",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        0,
+        1600
+      ],
+      "id": "911f5aeb-4258-45cc-959e-bd03696461aa"
+    },
+    {
+      "name": "Check Auth: stock-support-resistance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        260,
+        1600
+      ],
+      "id": "a6a2a6df-b5ea-4684-8b64-1252d5208127"
+    },
+    {
+      "name": "Authorized?: stock-support-resistance",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "859281d4-da3e-48d2-b9ee-e09e3e8cbbb8",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        520,
+        1600
+      ],
+      "id": "f7369bb5-7b77-44d9-bcc0-89a21dee00dd"
+    },
+    {
+      "name": "Respond 401: stock-support-resistance",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        780,
+        1600
+      ],
+      "id": "9a2485d3-a1ec-461b-b6c1-1f9f1d42fb30"
+    },
+    {
+      "name": "Build Query: stock-support-resistance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const symbol = String(($json.query && $json.query.symbol) || '').toUpperCase().replace(/[^A-Z0-9.]/g, '');\nif (!symbol) throw new Error('symbol query parameter is required, e.g. ?symbol=COMI');\nconst marketParam = String(($json.query && $json.query.market) || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'EGX';\nreturn [{ json: { ...$json, symbol, marketParam } }];"
+      },
+      "position": [
+        1040,
+        1600
+      ],
+      "id": "18fcbd01-5122-4cdc-9047-88eda97653f3"
+    },
+    {
+      "name": "Query: stock-support-resistance",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT row_to_json(t) AS support_resistance FROM (\n  SELECT s.symbol, sr.* FROM support_resistance sr\n  JOIN stocks s ON s.id = sr.stock_id\n  WHERE s.symbol = $1 AND s.exchange = $2\n  ORDER BY sr.trading_date DESC LIMIT 1\n) t;",
+        "options": {
+          "queryReplacement": "={{ [$json.symbol, $json.marketParam] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        1300,
+        1600
+      ],
+      "id": "c48a15f3-f95b-4f09-914c-3b71ab89fccc"
+    },
+    {
+      "name": "Format: stock-support-resistance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const row = $input.first() ? $input.first().json.support_resistance : null;\nif (!row) return [{ json: { success: false, error: 'no support/resistance data found for symbol' } }];\nreturn [{ json: { success: true, supportResistance: row } }];"
+      },
+      "position": [
+        1560,
+        1600
+      ],
+      "id": "73fa4bf9-ace1-4b80-9f06-028902035bf9"
+    },
+    {
+      "name": "Respond 200: stock-support-resistance",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        1820,
+        1600
+      ],
+      "id": "c24e2fbc-72f0-4b96-8fd1-00c774542a8b"
+    },
+    {
+      "name": "Webhook: market",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "4c229a23-eb7f-45c1-8029-f68773df9337",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/market",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        2080,
+        1600
+      ],
+      "id": "57b67b44-1a2a-40f5-bef6-ef63e2ef3f8b"
+    },
+    {
+      "name": "Check Auth: market",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        2340,
+        1600
+      ],
+      "id": "3d0d4a00-3a02-47cb-91be-ec27ae853a7f"
+    },
+    {
+      "name": "Authorized?: market",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "4d2910d2-5cbc-4bf2-82dc-14f55a125dff",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        2600,
+        1600
+      ],
+      "id": "ac362f0a-c619-4dd2-bc39-3d7d651d155a"
+    },
+    {
+      "name": "Respond 401: market",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        0,
+        1800
+      ],
+      "id": "68332e69-1401-46f8-8cee-1342e6eed2d1"
+    },
+    {
+      "name": "Build Query: market",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const marketParam = String(($json.query && $json.query.market) || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'EGX';\nreturn [{ json: { ...$json, marketParam } }];"
+      },
+      "position": [
+        260,
+        1800
+      ],
+      "id": "cbbb87a7-6909-4383-9484-386da7eb77de"
+    },
+    {
+      "name": "Query: market",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT trading_date::text AS trading_date, market_score::float8 AS market_score, market_regime,\n       stocks_scanned::float8 AS stocks_scanned, eligible_stocks::float8 AS eligible_stocks\nFROM scanner_run_as_of(NULL, $1);",
+        "options": {
+          "queryReplacement": "={{ [$json.marketParam] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        520,
+        1800
+      ],
+      "id": "312faf87-1f52-43ea-8e0b-c0576729fa09"
+    },
+    {
+      "name": "Format: market",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const row = $input.first() ? $input.first().json : null;\nreturn [{ json: {\n  success: true,\n  tradingDate: row ? row.trading_date : null,\n  market: row ? { regime: row.market_regime, score: row.market_score } : null,\n  stocksScanned: row ? row.stocks_scanned : 0,\n  eligibleStocks: row ? row.eligible_stocks : 0,\n} }];"
+      },
+      "position": [
+        780,
+        1800
+      ],
+      "id": "2089ee1b-85f7-45ab-8be8-b9771949cbea"
+    },
+    {
+      "name": "Respond 200: market",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        1040,
+        1800
+      ],
+      "id": "1a508b0b-f609-4663-890e-22ccbcf8fa5d"
+    },
+    {
+      "name": "Webhook: dates",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "e883c708-49f8-4ae8-9694-0bae4a6c5311",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/dates",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "position": [
+        1300,
+        1800
+      ],
+      "id": "7ffbfda9-d09e-40ad-83ef-fc9df19613ca"
+    },
+    {
+      "name": "Check Auth: dates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "position": [
+        1560,
+        1800
+      ],
+      "id": "3303293e-d5c5-4587-bf45-7c26b6e40a2e"
+    },
+    {
+      "name": "Authorized?: dates",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "05e3927d-f144-4524-94d4-d33e3609d57d",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "position": [
+        1820,
+        1800
+      ],
+      "id": "c58efd63-e8d7-4d85-8a8f-986f8fca1248"
+    },
+    {
+      "name": "Respond 401: dates",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "position": [
+        2080,
+        1800
+      ],
+      "id": "663df4ec-a349-4a24-a6ec-b9a0006e18c2"
+    },
+    {
+      "name": "Build Query: dates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const marketParam = String(($json.query && $json.query.market) || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'EGX';\nreturn [{ json: { ...$json, marketParam } }];"
+      },
+      "position": [
+        2340,
+        1800
+      ],
+      "id": "9fe4bd03-0e4b-49b9-996a-13d489918042"
+    },
+    {
+      "name": "Query: dates",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT trading_date::text AS trading_date\nFROM scanner_runs\nWHERE run_type = 'LIVE' AND status = 'COMPLETED' AND market = $1\nORDER BY trading_date DESC\nLIMIT 90;",
+        "options": {
+          "queryReplacement": "={{ [$json.marketParam] }}"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "position": [
+        2600,
+        1800
+      ],
+      "id": "4c08bdbe-d23b-4346-97fd-ae0aaab9c06e"
+    },
+    {
+      "name": "Format: dates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rows = $input.all().map((i) => i.json).filter((r) => r && r.trading_date);\nreturn [{ json: { success: true, dates: rows.map((r) => r.trading_date) } }];"
+      },
+      "position": [
+        0,
+        2000
+      ],
+      "id": "afde4c18-523a-457d-bdbc-fcc1db3f3a58"
+    },
+    {
+      "name": "Respond 200: dates",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "position": [
+        260,
+        2000
+      ],
+      "id": "2ac5d60b-03a9-4e06-ac63-b86e4addc91c"
     }
   ],
   "connections": {
@@ -2309,6 +2343,79 @@
         [
           {
             "node": "Authorized?: top",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized?: top-picks": {
+      "main": [
+        [
+          {
+            "node": "Build Query: top-picks",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401: top-picks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query: top-picks": {
+      "main": [
+        [
+          {
+            "node": "Query: top-picks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query: top-picks": {
+      "main": [
+        [
+          {
+            "node": "Format: top-picks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: top-picks": {
+      "main": [
+        [
+          {
+            "node": "Respond 200: top-picks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: top-picks": {
+      "main": [
+        [
+          {
+            "node": "Check Auth: top-picks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Auth: top-picks": {
+      "main": [
+        [
+          {
+            "node": "Authorized?: top-picks",
             "type": "main",
             "index": 0
           }
@@ -2830,7 +2937,7 @@
       "main": [
         [
           {
-            "node": "Query: market",
+            "node": "Build Query: market",
             "type": "main",
             "index": 0
           }
@@ -2838,6 +2945,17 @@
         [
           {
             "node": "Respond 401: market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query: market": {
+      "main": [
+        [
+          {
+            "node": "Query: market",
             "type": "main",
             "index": 0
           }
@@ -2892,7 +3010,7 @@
       "main": [
         [
           {
-            "node": "Query: dates",
+            "node": "Build Query: dates",
             "type": "main",
             "index": 0
           }
@@ -2900,6 +3018,17 @@
         [
           {
             "node": "Respond 401: dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query: dates": {
+      "main": [
+        [
+          {
+            "node": "Query: dates",
             "type": "main",
             "index": 0
           }
@@ -2949,79 +3078,6 @@
           }
         ]
       ]
-    },
-    "Authorized?: top-picks": {
-      "main": [
-        [
-          {
-            "node": "Build Query: top-picks",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Respond 401: top-picks",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Query: top-picks": {
-      "main": [
-        [
-          {
-            "node": "Query: top-picks",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Query: top-picks": {
-      "main": [
-        [
-          {
-            "node": "Format: top-picks",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Format: top-picks": {
-      "main": [
-        [
-          {
-            "node": "Respond 200: top-picks",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Webhook: top-picks": {
-      "main": [
-        [
-          {
-            "node": "Check Auth: top-picks",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Check Auth: top-picks": {
-      "main": [
-        [
-          {
-            "node": "Authorized?: top-picks",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
     }
   },
   "pinData": {},
@@ -3032,6 +3088,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "e5c234b3-be9d-45b9-89de-fd95dd6a3162",
+  "id": "a4844692-b7a9-4133-af42-0ac2021e3def",
   "tags": []
 }

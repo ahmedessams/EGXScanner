@@ -16,7 +16,7 @@
         "width": 480,
         "color": 5
       },
-      "id": "54ec1c7a-2834-4bf5-bab2-4ff5ad691574"
+      "id": "68c0a7a3-f9e9-45c6-b42e-50c71042f348"
     },
     {
       "name": "Manual Trigger",
@@ -27,7 +27,7 @@
         0,
         0
       ],
-      "id": "697c5fd6-152c-4060-a65e-c7ae2d75decc"
+      "id": "afcf450f-37e6-4d62-9d36-8bb8e5f7ca89"
     },
     {
       "name": "When Executed by Another Workflow",
@@ -40,7 +40,7 @@
         260,
         0
       ],
-      "id": "0a458187-4221-4c45-9085-c7924123bd40"
+      "id": "5ba85bce-af7e-458f-8f0a-fe33321f7d21"
     },
     {
       "name": "Attach As-Of Date",
@@ -49,13 +49,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "// Reading the trigger lookup on a trigger node that never fired THROWS in\n// this n8n version (confirmed via live E2E testing: running this workflow\n// via Manual Trigger alone, with Execute Workflow Trigger never executing,\n// crashed here) — wrap in try/catch so both \"never executed\" and \"executed\n// with zero items\" degrade to the same safe default.\nlet trigger = {};\ntry {\n  const triggerItems = $('When Executed by Another Workflow').all();\n  trigger = triggerItems.length ? triggerItems[0].json : {};\n} catch (e) { trigger = {}; }\nconst asOfDate = trigger.asOfDate || new Date().toISOString().slice(0, 10);\nconst runType = trigger.runType || 'LIVE';\nreturn [{ json: { asOfDate, runType } }];"
+        "jsCode": "// Reading the trigger lookup on a trigger node that never fired THROWS in\n// this n8n version (confirmed via live E2E testing: running this workflow\n// via Manual Trigger alone, with Execute Workflow Trigger never executing,\n// crashed here) — wrap in try/catch so both \"never executed\" and \"executed\n// with zero items\" degrade to the same safe default.\nlet trigger = {};\ntry {\n  const triggerItems = $('When Executed by Another Workflow').all();\n  trigger = triggerItems.length ? triggerItems[0].json : {};\n} catch (e) { trigger = {}; }\nconst asOfDate = trigger.asOfDate || new Date().toISOString().slice(0, 10);\nconst runType = trigger.runType || 'LIVE';\n// Multi-market addition: defaults to EGX so every existing caller that\n// doesn't pass market (an old Execute Workflow node, a bare Manual\n// Trigger run) keeps behaving exactly as before. market doubles as both\n// our own stocks.exchange/scanner_runs.market value AND the EODHD\n// exchange-code suffix (see 01/02/03) — true for EGX and US alike, so no\n// separate markets-table lookup is needed in the daily per-stock chain;\n// only 11's liquidity-threshold lookup needs real per-market config.\nconst market = trigger.market || 'EGX';\nreturn [{ json: { asOfDate, runType, market } }];"
       },
       "position": [
         520,
         0
       ],
-      "id": "e0a10fd2-3f81-4c0c-90a1-8d32e50907cc"
+      "id": "cc78181e-a37b-444a-b0be-b59725a600d8"
     },
     {
       "name": "Get or Create Scanner Run",
@@ -63,9 +63,9 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO scanner_runs (trading_date, run_type, status, started_at)\nVALUES ($1, $2, 'RUNNING', now())\nON CONFLICT (trading_date, run_type) DO UPDATE SET trading_date = EXCLUDED.trading_date\nRETURNING id, trading_date;",
+        "query": "INSERT INTO scanner_runs (trading_date, run_type, market, status, started_at)\nVALUES ($1, $2, $3, 'RUNNING', now())\nON CONFLICT (trading_date, run_type, market) DO UPDATE SET trading_date = EXCLUDED.trading_date\nRETURNING id, trading_date;",
         "options": {
-          "queryReplacement": "={{ [$json.asOfDate, $json.runType] }}"
+          "queryReplacement": "={{ [$json.asOfDate, $json.runType, $json.market] }}"
         }
       },
       "executeOnce": true,
@@ -73,7 +73,7 @@
         780,
         0
       ],
-      "id": "554ba2b7-35a5-4397-8df0-33e900fe1947"
+      "id": "7a3402fb-221c-4276-a926-f84db2a200e7"
     },
     {
       "name": "Load Active Stocks",
@@ -83,7 +83,7 @@
         "operation": "executeQuery",
         "query": "SELECT id, symbol FROM stocks WHERE exchange = $1 AND active = TRUE ORDER BY symbol;",
         "options": {
-          "queryReplacement": "={{ [$env.EGX_EXCHANGE_CODE || \"EGX\"] }}"
+          "queryReplacement": "={{ [$('Attach As-Of Date').first().json.market] }}"
         }
       },
       "executeOnce": true,
@@ -91,7 +91,7 @@
         1040,
         0
       ],
-      "id": "c95b6282-b841-43f4-901b-2fa32174a8f2"
+      "id": "b6964b33-7dab-42f0-acc0-04dd74fa3de1"
     },
     {
       "name": "Attach Scanner Context",
@@ -106,7 +106,7 @@
         1300,
         0
       ],
-      "id": "40825cac-36aa-4cb2-907a-ee0cdba04eca"
+      "id": "937d8940-19bb-4d62-a361-2bdcf34b682f"
     },
     {
       "name": "Load Snapshot",
@@ -124,7 +124,7 @@
         1560,
         0
       ],
-      "id": "df9396bd-025f-4acf-b2f4-8d14088f4ee8"
+      "id": "725e5cc3-2f02-4967-9c18-75db0e8cf6a7"
     },
     {
       "name": "Calculate Breakout Score",
@@ -139,7 +139,7 @@
         1820,
         0
       ],
-      "id": "b3142581-6d56-4660-b6b1-5fa100a6e3f8"
+      "id": "3a09897e-a8f3-4574-abe1-555341a48868"
     },
     {
       "name": "Upsert Scanner Result",
@@ -157,7 +157,7 @@
         2080,
         0
       ],
-      "id": "872023aa-425f-4a6a-ad77-f4450c3f846a"
+      "id": "70b4d541-b434-400b-8c00-852508dc288e"
     },
     {
       "name": "Count Scored Stocks",
@@ -175,7 +175,7 @@
         2340,
         0
       ],
-      "id": "a3918f06-5d74-435c-aaea-e5b99a72e8e7"
+      "id": "6720630c-21b2-4928-b092-89d52af997a2"
     },
     {
       "name": "Build Summary",
@@ -190,7 +190,7 @@
         2600,
         0
       ],
-      "id": "3097fbe8-41a5-454b-afce-b2b0fe0c003c"
+      "id": "0283b759-1bfa-4549-b9bf-23d408884bf3"
     }
   ],
   "connections": {
@@ -313,6 +313,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "26abb560-effe-44bb-94be-6c937bb3d9e9",
+  "id": "5df05f05-5608-4b8b-b260-63f0df2e6105",
   "tags": []
 }

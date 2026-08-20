@@ -16,7 +16,7 @@
         "width": 480,
         "color": 5
       },
-      "id": "c3005460-0fa0-4e15-948d-be7b51d35f7a"
+      "id": "e83c874b-b203-4937-aa97-9476f91ee0a4"
     },
     {
       "name": "Manual Trigger",
@@ -27,7 +27,7 @@
         0,
         0
       ],
-      "id": "42b12149-0138-49ab-b9f6-30f6a258c4c1"
+      "id": "1b7328b6-30c5-4183-9008-151edd82c110"
     },
     {
       "name": "When Executed by Another Workflow",
@@ -40,7 +40,7 @@
         260,
         0
       ],
-      "id": "08b865b1-2263-4f5c-b04f-1d754e4ed2e9"
+      "id": "b6a7f164-0193-44cd-8822-fc50827239e3"
     },
     {
       "name": "Load Active Stocks",
@@ -50,7 +50,7 @@
         "operation": "executeQuery",
         "query": "SELECT id, symbol FROM stocks WHERE exchange = $1 AND active = TRUE ORDER BY symbol;",
         "options": {
-          "queryReplacement": "={{ [$env.EGX_EXCHANGE_CODE || \"EGX\"] }}"
+          "queryReplacement": "={{ [$json.market || \"EGX\"] }}"
         }
       },
       "executeOnce": true,
@@ -58,7 +58,7 @@
         520,
         0
       ],
-      "id": "15936a28-daa9-4ed6-8479-76390e645721"
+      "id": "534846c2-075a-4b02-9515-a952cdf294c9"
     },
     {
       "name": "Attach As-Of Date",
@@ -73,7 +73,7 @@
         780,
         0
       ],
-      "id": "49be1b10-fabe-4422-acb0-c3124f555101"
+      "id": "d2b0c0ed-df89-4f47-8c28-a2778436c78c"
     },
     {
       "name": "Load Price History (as JSON array)",
@@ -91,7 +91,7 @@
         1040,
         0
       ],
-      "id": "f9936600-9124-411c-8492-04734ee6272e"
+      "id": "25df8942-eeb3-4535-9248-206e2b01d9ca"
     },
     {
       "name": "Calculate Indicators",
@@ -106,7 +106,7 @@
         1300,
         0
       ],
-      "id": "a7ab2cb0-68b2-4612-ac0f-cbd35f4cb23f"
+      "id": "7449db3f-9af8-44bc-9d43-d82abb657b18"
     },
     {
       "name": "Upsert Technical Analysis",
@@ -124,7 +124,7 @@
         1560,
         0
       ],
-      "id": "a7464cb8-a24b-436b-be0d-c40da84c1f47"
+      "id": "ef2cd672-0cd9-44d9-ac5b-d7471d5b49bc"
     },
     {
       "name": "Count Technical Analysis Rows",
@@ -140,7 +140,7 @@
         1820,
         0
       ],
-      "id": "880a0986-b901-4a16-9b89-87d332a66e89"
+      "id": "1b4a21bc-7896-44c4-9ea8-1e9a635817ae"
     },
     {
       "name": "Build Summary",
@@ -155,7 +155,7 @@
         2080,
         0
       ],
-      "id": "551ac472-fc9c-44d6-b0e0-59646a92c75b"
+      "id": "02ab0688-d129-4f2f-9882-9585c8f108d1"
     }
   ],
   "connections": {
@@ -256,6 +256,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "7eefb723-23ad-4624-8bfc-fb865b418a71",
+  "id": "b4608059-29fb-4330-bb97-18e221fdcdf7",
   "tags": []
 }

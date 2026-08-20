@@ -11,12 +11,12 @@
         -460
       ],
       "parameters": {
-        "content": "## 17 - EGX AI Assessment\n\nUser-requested addition beyond the original spec: a language model's own read on that day's Top 10 (overall_rank <= 10, eligible only \u2014 never the full 241-stock universe, to keep this cheap: ~10 API calls/day). For each pick, asks Claude (via the Anthropic Messages API, forced tool-use for structured output) for (1) its own probability estimate that Target 1 is reached within target1_estimated_days, and (2) a 0-100 conviction score used to derive ai_rank \u2014 a SECOND ranking of the same Top 10, shown alongside overall_rank, never replacing it.\n\nDeliberately distinct from BOTH other probability signals already in this project: target1_estimated_days (a rough ATR-based arithmetic projection) and historical_target1_hit_pct (a measured historical rate from 16-egx-target-window-evaluation). This one is a model's judgment call from limited technical data \u2014 not a statistic, not a guarantee \u2014 labeled 'AI Assessment' everywhere it's surfaced (see docs/SCORING.md).\n\nRequires ANTHROPIC_API_KEY (env var, real secret \u2014 never committed). If unset or invalid, every row simply gets no AI columns (NULL) rather than the workflow failing \u2014 see 'Has Assessment?' below.\n\nCalled by 12 after 11 (fan-out, not blocking the report step). Can also run standalone via Manual Trigger for the latest date.",
+        "content": "## 17 - EGX AI Assessment\n\nUser-requested addition beyond the original spec: a language model's own read on that day's Top 10 (overall_rank <= 10, eligible only — never the full 241-stock universe, to keep this cheap: ~10 API calls/day). For each pick, asks Claude (via the Anthropic Messages API, forced tool-use for structured output) for (1) its own probability estimate that Target 1 is reached within target1_estimated_days, and (2) a 0-100 conviction score used to derive ai_rank — a SECOND ranking of the same Top 10, shown alongside overall_rank, never replacing it.\n\nDeliberately distinct from BOTH other probability signals already in this project: target1_estimated_days (a rough ATR-based arithmetic projection) and historical_target1_hit_pct (a measured historical rate from 16-egx-target-window-evaluation). This one is a model's judgment call from limited technical data — not a statistic, not a guarantee — labeled 'AI Assessment' everywhere it's surfaced (see docs/SCORING.md).\n\nRequires ANTHROPIC_API_KEY (env var, real secret — never committed). If unset or invalid, every row simply gets no AI columns (NULL) rather than the workflow failing — see 'Has Assessment?' below.\n\nCalled by 12 after 11 (fan-out, not blocking the report step). Can also run standalone via Manual Trigger for the latest date.",
         "height": 460,
         "width": 580,
         "color": 5
       },
-      "id": "ce3191dd-8b31-4246-900e-30b65e4732ba"
+      "id": "5b01c725-c914-41b6-8c05-256f55654f31"
     },
     {
       "name": "Manual Trigger",
@@ -27,7 +27,7 @@
         0,
         0
       ],
-      "id": "119162b1-190e-4733-989c-1a12f9ff43a9"
+      "id": "bc70ed1e-61cf-4988-99ef-714262f92591"
     },
     {
       "name": "When Executed by Another Workflow",
@@ -40,7 +40,7 @@
         260,
         0
       ],
-      "id": "3835c444-d0f4-4ba2-bef5-abe842531d82"
+      "id": "e13f143c-9e9f-407b-a6a7-7efb6745fd48"
     },
     {
       "name": "Attach As-Of Date",
@@ -49,13 +49,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "// Reading the trigger lookup on a trigger node that never fired THROWS in\n// this n8n version (confirmed via live E2E testing: running this workflow\n// via Manual Trigger alone, with Execute Workflow Trigger never executing,\n// crashed here) \u2014 wrap in try/catch so both \"never executed\" and \"executed\n// with zero items\" degrade to the same safe default.\nlet trigger = {};\ntry {\n  const triggerItems = $('When Executed by Another Workflow').all();\n  trigger = triggerItems.length ? triggerItems[0].json : {};\n} catch (e) { trigger = {}; }\nconst asOfDate = trigger.asOfDate || new Date().toISOString().slice(0, 10);\nconst runType = trigger.runType || 'LIVE';\nreturn [{ json: { asOfDate, runType } }];"
+        "jsCode": "// Reading the trigger lookup on a trigger node that never fired THROWS in\n// this n8n version (confirmed via live E2E testing: running this workflow\n// via Manual Trigger alone, with Execute Workflow Trigger never executing,\n// crashed here) — wrap in try/catch so both \"never executed\" and \"executed\n// with zero items\" degrade to the same safe default.\nlet trigger = {};\ntry {\n  const triggerItems = $('When Executed by Another Workflow').all();\n  trigger = triggerItems.length ? triggerItems[0].json : {};\n} catch (e) { trigger = {}; }\nconst asOfDate = trigger.asOfDate || new Date().toISOString().slice(0, 10);\nconst runType = trigger.runType || 'LIVE';\n// Multi-market addition: defaults to EGX so every existing caller that\n// doesn't pass market (an old Execute Workflow node, a bare Manual\n// Trigger run) keeps behaving exactly as before. market doubles as both\n// our own stocks.exchange/scanner_runs.market value AND the EODHD\n// exchange-code suffix (see 01/02/03) — true for EGX and US alike, so no\n// separate markets-table lookup is needed in the daily per-stock chain;\n// only 11's liquidity-threshold lookup needs real per-market config.\nconst market = trigger.market || 'EGX';\nreturn [{ json: { asOfDate, runType, market } }];"
       },
       "position": [
         520,
         0
       ],
-      "id": "87677118-2372-404a-b6f1-d830828d866b"
+      "id": "357d3242-817e-40cd-b988-c1e045b044bf"
     },
     {
       "name": "Load Top 10 Scanner Results",
@@ -63,9 +63,9 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT r.id AS scanner_result_id, s.symbol, s.name, r.setup_type, r.overall_rank,\n       r.overall_score::float8 AS overall_score,\n       r.breakout_score::float8 AS breakout_score, r.momentum_score::float8 AS momentum_score,\n       r.pullback_score::float8 AS pullback_score, r.reversal_score::float8 AS reversal_score,\n       ta.rsi14::float8 AS rsi14, ta.macd_histogram::float8 AS macd_histogram,\n       ta.short_term_trend, ta.medium_term_trend, ta.long_term_trend,\n       r.entry_price::float8 AS entry_price, r.target1::float8 AS target1,\n       r.invalidation_price::float8 AS invalidation_price,\n       r.target1_gain_pct::float8 AS target1_gain_pct,\n       r.target1_estimated_days, r.risk_reward_t1::float8 AS risk_reward_t1,\n       ps.target1_hit_pct::float8 AS historical_target1_hit_pct,\n       ps.stop_hit_pct::float8 AS historical_stop_hit_pct,\n       ps.sample_size AS historical_sample_size\nFROM scanner_results r\nJOIN stocks s ON s.id = r.stock_id\nJOIN scanner_runs run ON run.id = r.scanner_run_id\nLEFT JOIN technical_analysis ta ON ta.stock_id = r.stock_id AND ta.trading_date = run.trading_date\nLEFT JOIN probability_stats ps ON ps.setup_type = r.setup_type\nWHERE r.scanner_run_id = (SELECT id FROM scanner_run_as_of($1))\n  AND r.overall_rank <= 10 AND r.eligible = TRUE\nORDER BY r.overall_rank ASC;",
+        "query": "SELECT r.id AS scanner_result_id, s.symbol, s.name, r.setup_type, r.overall_rank,\n       r.overall_score::float8 AS overall_score,\n       r.breakout_score::float8 AS breakout_score, r.momentum_score::float8 AS momentum_score,\n       r.pullback_score::float8 AS pullback_score, r.reversal_score::float8 AS reversal_score,\n       ta.rsi14::float8 AS rsi14, ta.macd_histogram::float8 AS macd_histogram,\n       ta.short_term_trend, ta.medium_term_trend, ta.long_term_trend,\n       r.entry_price::float8 AS entry_price, r.target1::float8 AS target1,\n       r.invalidation_price::float8 AS invalidation_price,\n       r.target1_gain_pct::float8 AS target1_gain_pct,\n       r.target1_estimated_days, r.risk_reward_t1::float8 AS risk_reward_t1,\n       ps.target1_hit_pct::float8 AS historical_target1_hit_pct,\n       ps.stop_hit_pct::float8 AS historical_stop_hit_pct,\n       ps.sample_size AS historical_sample_size\nFROM scanner_results r\nJOIN stocks s ON s.id = r.stock_id\nJOIN scanner_runs run ON run.id = r.scanner_run_id\nLEFT JOIN technical_analysis ta ON ta.stock_id = r.stock_id AND ta.trading_date = run.trading_date\nLEFT JOIN probability_stats ps ON ps.setup_type = r.setup_type AND ps.market = run.market\nWHERE r.scanner_run_id = (SELECT id FROM scanner_run_as_of($1, $2))\n  AND r.overall_rank <= 10 AND r.eligible = TRUE\nORDER BY r.overall_rank ASC;",
         "options": {
-          "queryReplacement": "={{ [$json.asOfDate] }}"
+          "queryReplacement": "={{ [$json.asOfDate, $json.market] }}"
         }
       },
       "executeOnce": true,
@@ -73,7 +73,7 @@
         780,
         0
       ],
-      "id": "a4155a6f-8566-4d62-9225-107b6c4f0c4f"
+      "id": "ac6a2085-dd4f-4ac5-85f1-72d6994c22a3"
     },
     {
       "name": "Build Prompt",
@@ -82,13 +82,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "function isNumber(v) { return typeof v === 'number' && Number.isFinite(v); }\nfunction fmt(v, d) { return isNumber(v) ? v.toFixed(d) : 'unknown'; }\n\n// Runs once for the WHOLE batch \u2014 one item per Top 10 pick arrives here\n// from \"Load Top 10 Scanner Results\". Must loop $input.all() explicitly\n// (same bug pattern found and fixed across every multi-item Code node in\n// this project \u2014 confirmed via live E2E testing).\n\nconst items = $input.all();\nconst out = [];\n\nfor (const item of items) {\n  const r = item.json;\n\n  const sampleSize = isNumber(r.historical_sample_size) ? r.historical_sample_size : 0;\n  const hasBaseRate = isNumber(r.historical_target1_hit_pct) && sampleSize > 0;\n  const lowConfidenceBaseRate = hasBaseRate && sampleSize < 20;\n  const baseRateLine = hasBaseRate\n    ? 'Historical base rate for this scanner setup_type (\"' + r.setup_type + '\"), measured from ' + sampleSize +\n      ' of this project\\'s own past picks that reached their evaluation window: ' + fmt(r.historical_target1_hit_pct, 1) +\n      '% eventually hit Target 1, ' + fmt(r.historical_stop_hit_pct, 1) + '% hit the stop/invalidation instead.' +\n      (lowConfidenceBaseRate\n        ? ' Sample size is small (n=' + sampleSize + ') \u2014 treat this as a weak prior, not a strong anchor.'\n        : ' Use this as your starting anchor, then adjust up or down for this specific setup\\'s features.')\n    : 'No historical base rate is available yet for this setup_type \u2014 rely primarily on the technical factors below.';\n\n  const prompt = [\n    'You are a senior quantitative analyst practicing calibrated forecasting (the discipline used in',\n    'professional forecasting tournaments: anchor on base rates, avoid round-number defaults like 50%,',\n    'use the full 0-100 range when evidence warrants it, and do not simply restate the algorithmic score',\n    'as your probability \u2014 reaching a specific price target within a specific number of days is a harder,',\n    'less certain event than a generic composite score).',\n    '',\n    'Market context: this is the Egyptian Exchange (EGX) \u2014 a smaller, less liquid emerging market with',\n    'higher volatility and gap risk than large-cap developed markets. Factor in wider realistic price swings.',\n    '',\n    'Stock: ' + r.symbol + ' (' + (r.name || 'unknown') + ')',\n    'Scanner setup type: ' + r.setup_type + ' (overall rank ' + r.overall_rank + ' of the day\\'s Top 10)',\n    'Overall algorithmic score: ' + fmt(r.overall_score, 1) + '/100 (a composite rank score, NOT a probability)',\n    'Sub-scores \u2014 Breakout: ' + fmt(r.breakout_score, 1) + ', Momentum: ' + fmt(r.momentum_score, 1) +\n      ', Pullback: ' + fmt(r.pullback_score, 1) + ', Reversal: ' + fmt(r.reversal_score, 1),\n    'RSI14: ' + fmt(r.rsi14, 1) + ' (>70 overbought / <30 oversold), MACD histogram: ' + fmt(r.macd_histogram, 4),\n    'Trend \u2014 short-term: ' + (r.short_term_trend || 'unknown') + ', medium-term: ' + (r.medium_term_trend || 'unknown') +\n      ', long-term: ' + (r.long_term_trend || 'unknown'),\n    'Entry: ' + fmt(r.entry_price, 2) + ', Target 1: ' + fmt(r.target1, 2) +\n      ' (potential gain ' + fmt(r.target1_gain_pct, 2) + '%), Invalidation/stop: ' + fmt(r.invalidation_price, 2) +\n      ', Risk:Reward to Target 1: ' + fmt(r.risk_reward_t1, 2),\n    'Estimated days to Target 1 (rough ATR-based projection from this stock\\'s own volatility, not a guarantee): ' +\n      (r.target1_estimated_days != null ? r.target1_estimated_days : 'unknown'),\n    '',\n    baseRateLine,\n    '',\n    'Reasoning approach \u2014 work through this before answering:',\n    '1. Start from the historical base rates above (if available) as your two anchors \u2014 one for reaching',\n    '   Target 1, one for hitting the stop/invalidation instead.',\n    '2. List the specific factors in THIS setup that argue for a Target-1 probability HIGHER than its anchor',\n    '   (e.g. strong multi-timeframe trend alignment, healthy RSI with room to run, strong R:R, short',\n    '   estimated-days window relative to typical moves) \u2014 the same factors typically argue for a LOWER',\n    '   stop-probability than its anchor, but do not assume they are perfectly complementary (price can also',\n    '   do neither within the window).',\n    '3. List the specific factors that argue for a Target-1 probability LOWER than its anchor (and usually a',\n    '   HIGHER stop-probability) \u2014 e.g. RSI already overbought/oversold, weak or negative R:R, long',\n    '   estimated-days window, trend timeframes disagreeing with each other, thin sub-scores relative to the',\n    '   overall score, a stop that is proportionally tight relative to normal volatility.',\n    '4. Net those factors against each anchor separately to reach your two final numbers \u2014 do not default to',\n    '   50, to the overall algorithmic score, or to \"100 minus the other number\" just because it is convenient.',\n    '',\n    'Provide: (1) your calibrated probability (0-100) that price reaches Target 1 within the estimated-days',\n    'window, (2) your calibrated probability (0-100) that the stop/invalidation price is hit before Target 1',\n    'within that same window, (3) a 0-100 conviction/rank score for this setup\\'s overall quality relative to',\n    'the other Top 10 candidates today, (4) a brief 1-2 sentence rationale citing the specific factors that',\n    'moved both probabilities away from their base rates. Be honest about uncertainty \u2014 these are probability',\n    'estimates from limited technical data, not guarantees.',\n  ].join('\\n');\n\n  const requestBody = {\n    model: 'claude-sonnet-5',\n    max_tokens: 600,\n    tools: [{\n      name: 'provide_assessment',\n      description: 'Provide a structured probability and rank assessment for this stock setup.',\n      input_schema: {\n        type: 'object',\n        properties: {\n          target1_probability_pct: {\n            type: 'number',\n            description: 'Calibrated probability (0-100) of reaching Target 1 within the estimated-days window, anchored on the historical target1_hit_pct base rate then adjusted for setup-specific factors.',\n          },\n          stop_probability_pct: {\n            type: 'number',\n            description: 'Calibrated probability (0-100) that the stop/invalidation price is hit before Target 1 within the estimated-days window, anchored on the historical stop_hit_pct base rate then adjusted for setup-specific factors. Not required to sum to 100 with target1_probability_pct \u2014 price may do neither within the window.',\n          },\n          rank_score: {\n            type: 'number',\n            description: '0-100 conviction score for this setup, used to rank it against the other Top 10 candidates.',\n          },\n          reasoning: { type: 'string', description: '1-2 sentence rationale citing the specific factors that moved both probabilities away from their base rates.' },\n        },\n        required: ['target1_probability_pct', 'stop_probability_pct', 'rank_score', 'reasoning'],\n      },\n    }],\n    tool_choice: { type: 'tool', name: 'provide_assessment' },\n    messages: [{ role: 'user', content: prompt }],\n  };\n\n  out.push({ json: {\n    scannerResultId: r.scanner_result_id,\n    symbol: r.symbol,\n    requestBodyJson: JSON.stringify(requestBody),\n  } });\n}\n\nreturn out;"
+        "jsCode": "function isNumber(v) { return typeof v === 'number' && Number.isFinite(v); }\nfunction fmt(v, d) { return isNumber(v) ? v.toFixed(d) : 'unknown'; }\n\n// Runs once for the WHOLE batch — one item per Top 10 pick arrives here\n// from \"Load Top 10 Scanner Results\". Must loop $input.all() explicitly\n// (same bug pattern found and fixed across every multi-item Code node in\n// this project — confirmed via live E2E testing).\n\nconst items = $input.all();\nconst out = [];\n\nfor (const item of items) {\n  const r = item.json;\n\n  const sampleSize = isNumber(r.historical_sample_size) ? r.historical_sample_size : 0;\n  const hasBaseRate = isNumber(r.historical_target1_hit_pct) && sampleSize > 0;\n  const lowConfidenceBaseRate = hasBaseRate && sampleSize < 20;\n  const baseRateLine = hasBaseRate\n    ? 'Historical base rate for this scanner setup_type (\"' + r.setup_type + '\"), measured from ' + sampleSize +\n      ' of this project\\'s own past picks that reached their evaluation window: ' + fmt(r.historical_target1_hit_pct, 1) +\n      '% eventually hit Target 1, ' + fmt(r.historical_stop_hit_pct, 1) + '% hit the stop/invalidation instead.' +\n      (lowConfidenceBaseRate\n        ? ' Sample size is small (n=' + sampleSize + ') — treat this as a weak prior, not a strong anchor.'\n        : ' Use this as your starting anchor, then adjust up or down for this specific setup\\'s features.')\n    : 'No historical base rate is available yet for this setup_type — rely primarily on the technical factors below.';\n\n  const prompt = [\n    'You are a senior quantitative analyst practicing calibrated forecasting (the discipline used in',\n    'professional forecasting tournaments: anchor on base rates, avoid round-number defaults like 50%,',\n    'use the full 0-100 range when evidence warrants it, and do not simply restate the algorithmic score',\n    'as your probability — reaching a specific price target within a specific number of days is a harder,',\n    'less certain event than a generic composite score).',\n    '',\n    'Market context: this is the Egyptian Exchange (EGX) — a smaller, less liquid emerging market with',\n    'higher volatility and gap risk than large-cap developed markets. Factor in wider realistic price swings.',\n    '',\n    'Stock: ' + r.symbol + ' (' + (r.name || 'unknown') + ')',\n    'Scanner setup type: ' + r.setup_type + ' (overall rank ' + r.overall_rank + ' of the day\\'s Top 10)',\n    'Overall algorithmic score: ' + fmt(r.overall_score, 1) + '/100 (a composite rank score, NOT a probability)',\n    'Sub-scores — Breakout: ' + fmt(r.breakout_score, 1) + ', Momentum: ' + fmt(r.momentum_score, 1) +\n      ', Pullback: ' + fmt(r.pullback_score, 1) + ', Reversal: ' + fmt(r.reversal_score, 1),\n    'RSI14: ' + fmt(r.rsi14, 1) + ' (>70 overbought / <30 oversold), MACD histogram: ' + fmt(r.macd_histogram, 4),\n    'Trend — short-term: ' + (r.short_term_trend || 'unknown') + ', medium-term: ' + (r.medium_term_trend || 'unknown') +\n      ', long-term: ' + (r.long_term_trend || 'unknown'),\n    'Entry: ' + fmt(r.entry_price, 2) + ', Target 1: ' + fmt(r.target1, 2) +\n      ' (potential gain ' + fmt(r.target1_gain_pct, 2) + '%), Invalidation/stop: ' + fmt(r.invalidation_price, 2) +\n      ', Risk:Reward to Target 1: ' + fmt(r.risk_reward_t1, 2),\n    'Estimated days to Target 1 (rough ATR-based projection from this stock\\'s own volatility, not a guarantee): ' +\n      (r.target1_estimated_days != null ? r.target1_estimated_days : 'unknown'),\n    '',\n    baseRateLine,\n    '',\n    'Reasoning approach — work through this before answering:',\n    '1. Start from the historical base rates above (if available) as your two anchors — one for reaching',\n    '   Target 1, one for hitting the stop/invalidation instead.',\n    '2. List the specific factors in THIS setup that argue for a Target-1 probability HIGHER than its anchor',\n    '   (e.g. strong multi-timeframe trend alignment, healthy RSI with room to run, strong R:R, short',\n    '   estimated-days window relative to typical moves) — the same factors typically argue for a LOWER',\n    '   stop-probability than its anchor, but do not assume they are perfectly complementary (price can also',\n    '   do neither within the window).',\n    '3. List the specific factors that argue for a Target-1 probability LOWER than its anchor (and usually a',\n    '   HIGHER stop-probability) — e.g. RSI already overbought/oversold, weak or negative R:R, long',\n    '   estimated-days window, trend timeframes disagreeing with each other, thin sub-scores relative to the',\n    '   overall score, a stop that is proportionally tight relative to normal volatility.',\n    '4. Net those factors against each anchor separately to reach your two final numbers — do not default to',\n    '   50, to the overall algorithmic score, or to \"100 minus the other number\" just because it is convenient.',\n    '',\n    'Provide: (1) your calibrated probability (0-100) that price reaches Target 1 within the estimated-days',\n    'window, (2) your calibrated probability (0-100) that the stop/invalidation price is hit before Target 1',\n    'within that same window, (3) a 0-100 conviction/rank score for this setup\\'s overall quality relative to',\n    'the other Top 10 candidates today, (4) a brief 1-2 sentence rationale citing the specific factors that',\n    'moved both probabilities away from their base rates. Be honest about uncertainty — these are probability',\n    'estimates from limited technical data, not guarantees.',\n  ].join('\\n');\n\n  const requestBody = {\n    model: 'claude-sonnet-5',\n    max_tokens: 600,\n    tools: [{\n      name: 'provide_assessment',\n      description: 'Provide a structured probability and rank assessment for this stock setup.',\n      input_schema: {\n        type: 'object',\n        properties: {\n          target1_probability_pct: {\n            type: 'number',\n            description: 'Calibrated probability (0-100) of reaching Target 1 within the estimated-days window, anchored on the historical target1_hit_pct base rate then adjusted for setup-specific factors.',\n          },\n          stop_probability_pct: {\n            type: 'number',\n            description: 'Calibrated probability (0-100) that the stop/invalidation price is hit before Target 1 within the estimated-days window, anchored on the historical stop_hit_pct base rate then adjusted for setup-specific factors. Not required to sum to 100 with target1_probability_pct — price may do neither within the window.',\n          },\n          rank_score: {\n            type: 'number',\n            description: '0-100 conviction score for this setup, used to rank it against the other Top 10 candidates.',\n          },\n          reasoning: { type: 'string', description: '1-2 sentence rationale citing the specific factors that moved both probabilities away from their base rates.' },\n        },\n        required: ['target1_probability_pct', 'stop_probability_pct', 'rank_score', 'reasoning'],\n      },\n    }],\n    tool_choice: { type: 'tool', name: 'provide_assessment' },\n    messages: [{ role: 'user', content: prompt }],\n  };\n\n  out.push({ json: {\n    scannerResultId: r.scanner_result_id,\n    symbol: r.symbol,\n    requestBodyJson: JSON.stringify(requestBody),\n  } });\n}\n\nreturn out;"
       },
       "position": [
         1040,
         0
       ],
-      "id": "a9967cd4-0420-4195-985a-3a05ad1c87fc"
+      "id": "4880a65a-3c7e-496c-8c32-379f7b6c2285"
     },
     {
       "name": "Call Anthropic API",
@@ -131,7 +131,7 @@
         1300,
         0
       ],
-      "id": "a47bece2-0688-4fd5-b2f9-3abc826c3b6c"
+      "id": "b4794564-fbfe-47b5-ac0d-437254bf26be"
     },
     {
       "name": "Parse AI Response",
@@ -140,13 +140,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "function isNumber(v) { return typeof v === 'number' && Number.isFinite(v); }\nfunction clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }\n\n// Runs once for the WHOLE batch. itemMatching(i) pairs each response back\n// to the request that produced it (same pairing pattern used everywhere in\n// this project \u2014 confirmed via live E2E testing to be the only reliable\n// way to line up parallel per-item chains).\n\nconst items = $input.all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  let original;\n  try { original = $('Build Prompt').itemMatching(i).json; } catch (e) { continue; }\n  const row = items[i].json;\n\n  // ANTHROPIC_API_KEY unset/invalid, rate limited, or any other API error\n  // all land here the same way: no tool_use block found -> skip this row\n  // rather than writing garbage. Never throws the workflow.\n  const content = Array.isArray(row.content) ? row.content : [];\n  const toolUse = content.find((c) => c && c.type === 'tool_use' && c.name === 'provide_assessment');\n  const input = toolUse ? toolUse.input : null;\n\n  if (!input || !isNumber(input.target1_probability_pct) || !isNumber(input.stop_probability_pct) || !isNumber(input.rank_score)) {\n    out.push({ json: { scannerResultId: original.scannerResultId, _skip: true } });\n    continue;\n  }\n\n  out.push({ json: {\n    scannerResultId: original.scannerResultId,\n    targetProbabilityPct: clamp(input.target1_probability_pct, 0, 100),\n    stopProbabilityPct: clamp(input.stop_probability_pct, 0, 100),\n    rankScore: clamp(input.rank_score, 0, 100),\n    reasoning: typeof input.reasoning === 'string' ? input.reasoning.slice(0, 2000) : null,\n    _skip: false,\n  } });\n}\n\nreturn out;"
+        "jsCode": "function isNumber(v) { return typeof v === 'number' && Number.isFinite(v); }\nfunction clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }\n\n// Runs once for the WHOLE batch. itemMatching(i) pairs each response back\n// to the request that produced it (same pairing pattern used everywhere in\n// this project — confirmed via live E2E testing to be the only reliable\n// way to line up parallel per-item chains).\n\nconst items = $input.all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  let original;\n  try { original = $('Build Prompt').itemMatching(i).json; } catch (e) { continue; }\n  const row = items[i].json;\n\n  // ANTHROPIC_API_KEY unset/invalid, rate limited, or any other API error\n  // all land here the same way: no tool_use block found -> skip this row\n  // rather than writing garbage. Never throws the workflow.\n  const content = Array.isArray(row.content) ? row.content : [];\n  const toolUse = content.find((c) => c && c.type === 'tool_use' && c.name === 'provide_assessment');\n  const input = toolUse ? toolUse.input : null;\n\n  if (!input || !isNumber(input.target1_probability_pct) || !isNumber(input.stop_probability_pct) || !isNumber(input.rank_score)) {\n    out.push({ json: { scannerResultId: original.scannerResultId, _skip: true } });\n    continue;\n  }\n\n  out.push({ json: {\n    scannerResultId: original.scannerResultId,\n    targetProbabilityPct: clamp(input.target1_probability_pct, 0, 100),\n    stopProbabilityPct: clamp(input.stop_probability_pct, 0, 100),\n    rankScore: clamp(input.rank_score, 0, 100),\n    reasoning: typeof input.reasoning === 'string' ? input.reasoning.slice(0, 2000) : null,\n    _skip: false,\n  } });\n}\n\nreturn out;"
       },
       "position": [
         1560,
         0
       ],
-      "id": "df4b302f-8193-4635-aa95-2aa4f2610ff2"
+      "id": "6727b832-5848-41b0-9edd-5c50f319a318"
     },
     {
       "name": "Has Assessment?",
@@ -161,7 +161,7 @@
           },
           "conditions": [
             {
-              "id": "ce2706c9-2cdc-46c2-9251-eca2db3c1c8e",
+              "id": "37df99d5-1e53-46a6-8b80-de8b1255d629",
               "leftValue": "={{ $json._skip }}",
               "rightValue": "",
               "operator": {
@@ -179,7 +179,7 @@
         1820,
         0
       ],
-      "id": "f37a7b01-4db4-4201-a9cc-50ac6711034d"
+      "id": "3b3d3a75-2efa-4d59-8f12-d145272bc0e1"
     },
     {
       "name": "Compute AI Rank",
@@ -188,13 +188,13 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "// Runs once for the WHOLE batch \u2014 sorts whichever picks got a successful\n// assessment by rank_score and assigns 1..N. A pick that failed/was\n// skipped simply never reaches here (filtered by \"Has Assessment?\"), so\n// ai_rank is only ever assigned among picks that actually got assessed.\nconst items = $input.all().map((i) => i.json);\nconst sorted = [...items].sort((a, b) => b.rankScore - a.rankScore);\nconst rankMap = new Map(sorted.map((it, idx) => [it.scannerResultId, idx + 1]));\nreturn items.map((it) => ({ json: { ...it, aiRank: rankMap.get(it.scannerResultId) } }));"
+        "jsCode": "// Runs once for the WHOLE batch — sorts whichever picks got a successful\n// assessment by rank_score and assigns 1..N. A pick that failed/was\n// skipped simply never reaches here (filtered by \"Has Assessment?\"), so\n// ai_rank is only ever assigned among picks that actually got assessed.\nconst items = $input.all().map((i) => i.json);\nconst sorted = [...items].sort((a, b) => b.rankScore - a.rankScore);\nconst rankMap = new Map(sorted.map((it, idx) => [it.scannerResultId, idx + 1]));\nreturn items.map((it) => ({ json: { ...it, aiRank: rankMap.get(it.scannerResultId) } }));"
       },
       "position": [
         2080,
         0
       ],
-      "id": "6a68abcc-1880-4c40-b7b3-d7d09f71cd29"
+      "id": "a7d5620c-cad1-4174-84f3-c97bd81c6027"
     },
     {
       "name": "Update AI Assessment",
@@ -212,7 +212,7 @@
         2340,
         0
       ],
-      "id": "7993b979-2804-4fb7-b65f-2a231a541654"
+      "id": "5cccc46e-894d-43e5-a8c8-523faf16cb4c"
     },
     {
       "name": "Join Branches",
@@ -223,7 +223,7 @@
         2600,
         0
       ],
-      "id": "8a88b314-b420-4c31-81f1-bd8a1f1ef4c8"
+      "id": "de2af337-cacd-4885-b171-a97f77da56c8"
     },
     {
       "name": "Build Summary",
@@ -238,7 +238,7 @@
         0,
         200
       ],
-      "id": "35036bc7-95ad-4278-9e50-b1b25f69bf35"
+      "id": "576cddb9-92c0-44ca-afcc-ce820cd517e1"
     }
   ],
   "connections": {
@@ -379,6 +379,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "929bf0a2-88ee-4505-b46d-d05dadbf8084",
+  "id": "6834a2e2-f825-4ad1-8662-912f28aed9d3",
   "tags": []
 }

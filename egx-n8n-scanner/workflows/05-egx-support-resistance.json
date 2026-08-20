@@ -16,7 +16,7 @@
         "width": 480,
         "color": 5
       },
-      "id": "575450c5-f943-4262-9a7b-aa13bce75746"
+      "id": "7581e0a9-f6b8-4357-ae66-ffa25edb498d"
     },
     {
       "name": "Manual Trigger",
@@ -27,7 +27,7 @@
         0,
         0
       ],
-      "id": "c00dc6a7-fbbf-4a44-a4f9-5b5d902e1172"
+      "id": "4d217754-67a3-4440-92e1-973d5ef3285a"
     },
     {
       "name": "When Executed by Another Workflow",
@@ -40,7 +40,7 @@
         260,
         0
       ],
-      "id": "9c3cc335-082d-471c-95cc-e5c0e38c5003"
+      "id": "cc0afccc-c916-435b-98e5-0d9d32a784bf"
     },
     {
       "name": "Load Active Stocks",
@@ -50,7 +50,7 @@
         "operation": "executeQuery",
         "query": "SELECT id, symbol FROM stocks WHERE exchange = $1 AND active = TRUE ORDER BY symbol;",
         "options": {
-          "queryReplacement": "={{ [$env.EGX_EXCHANGE_CODE || \"EGX\"] }}"
+          "queryReplacement": "={{ [$json.market || \"EGX\"] }}"
         }
       },
       "executeOnce": true,
@@ -58,7 +58,7 @@
         520,
         0
       ],
-      "id": "752c1329-c876-4305-b7b3-db4133c9a517"
+      "id": "b26072ed-5717-42dd-982f-33cf1138d9e4"
     },
     {
       "name": "Attach As-Of Date",
@@ -73,7 +73,7 @@
         780,
         0
       ],
-      "id": "75132fc3-8f4a-4aff-a210-0de54011bab7"
+      "id": "89602ff7-ee74-4528-abde-8e2fe8f8b335"
     },
     {
       "name": "Load Price History (as JSON array)",
@@ -91,7 +91,7 @@
         1040,
         0
       ],
-      "id": "4e11d810-6f62-4930-9851-908648a038aa"
+      "id": "3c039ba3-b586-48e9-9fee-303719d8e6cc"
     },
     {
       "name": "Calculate Support/Resistance",
@@ -106,7 +106,7 @@
         1300,
         0
       ],
-      "id": "5b51e4be-40d1-443b-af7e-23f9efcd1015"
+      "id": "52844be9-b4a0-40a3-abff-0b80a2c4ed6c"
     },
     {
       "name": "Upsert Support/Resistance",
@@ -124,7 +124,7 @@
         1560,
         0
       ],
-      "id": "63bc02fb-74ff-4a5d-9d50-c47dd9e196e9"
+      "id": "28e2e602-fd7b-443b-b1e8-e5398b95ef92"
     },
     {
       "name": "Count Support/Resistance Rows",
@@ -140,7 +140,7 @@
         1820,
         0
       ],
-      "id": "595ac6a2-0be5-4227-901d-a72e40b1231f"
+      "id": "2a9e97aa-3d71-4ee8-a772-56fecc3844c3"
     },
     {
       "name": "Build Summary",
@@ -155,7 +155,7 @@
         2080,
         0
       ],
-      "id": "c88a79f3-beb4-4f50-bb31-888677393cb8"
+      "id": "e5c65d2f-4dc5-4c46-a3f7-2b37611b63d2"
     }
   ],
   "connections": {
@@ -256,6 +256,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "id": "2f7f9353-5f28-4a90-9848-b16a1cf08c50",
+  "id": "0fe07a3b-8aa4-4684-bab8-bc332c14332a",
   "tags": []
 }

@@ -22,6 +22,35 @@ ON CONFLICT (profile_name, factor) DO UPDATE
     SET weight = EXCLUDED.weight, active = EXCLUDED.active, updated_at = now();
 
 -- ---------------------------------------------------------------------
+-- Multi-market configuration (user-requested addition beyond the original
+-- single-market/EGX spec). EGX's values match the existing MIN_AVG_*/
+-- EGX_EXCHANGE_CODE env vars exactly — this seed doesn't change EGX's
+-- live behavior, just moves what was a flat env var into a per-market row
+-- so a second market can have its own, genuinely different, thresholds.
+--
+-- US is a starting point, not a measured/tuned value: liquid enough to
+-- filter out illiquid names without restricting to only mega-caps, in the
+-- same spirit as EGX's thresholds — tune via a future Settings UI once
+-- real scan data exists to judge against. eodhd_exchange_code 'US' is
+-- EODHD's combined NYSE+Nasdaq feed (see docs/DATA_PROVIDER.md); index_code
+-- 'GSPC' (S&P 500) is a placeholder representative broad-market index —
+-- confirm the exact ticker your provider expects, same CONFIGURE-ENDPOINT
+-- spirit as the HTTP Request node URLs elsewhere in this project.
+-- ---------------------------------------------------------------------
+INSERT INTO markets (code, name, currency, timezone, eodhd_exchange_code, index_code, min_avg_traded_value, min_avg_volume, min_active_days_20, active) VALUES
+    ('EGX', 'Egyptian Exchange',  'EGP', 'Africa/Cairo',    'EGX', 'EGX30', 500000,   50000,  15, TRUE),
+    ('US',  'US Market (Nasdaq/NYSE)', 'USD', 'America/New_York', 'US',  'GSPC',  1000000, 300000, 15, FALSE)
+ON CONFLICT (code) DO UPDATE
+    SET name = EXCLUDED.name, currency = EXCLUDED.currency, timezone = EXCLUDED.timezone,
+        eodhd_exchange_code = EXCLUDED.eodhd_exchange_code, index_code = EXCLUDED.index_code,
+        min_avg_traded_value = EXCLUDED.min_avg_traded_value, min_avg_volume = EXCLUDED.min_avg_volume,
+        min_active_days_20 = EXCLUDED.min_active_days_20;
+-- US seeded with active = FALSE deliberately: Phase 1 proves the pipeline
+-- works for US via manual/Execute Workflow triggers only. `active` here
+-- means "has an automatic daily Schedule Trigger in 12" (see markets.active
+-- comment in 001-schema.sql) — Phase 3 flips this once that trigger exists.
+
+-- ---------------------------------------------------------------------
 -- Non-secret runtime settings. Secrets (API keys, DB credentials, webhook
 -- bearer tokens) live ONLY in .env / n8n credentials, never here.
 -- ---------------------------------------------------------------------
