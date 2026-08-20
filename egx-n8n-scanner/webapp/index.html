@@ -69,6 +69,12 @@
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     margin-left: auto;
   }
+  .market-switcher { display: flex; align-items: center; gap: 4px; }
+  .market-switcher button {
+    padding: 5px 12px; border-radius: 999px; font-weight: 700; font-size: 12px;
+    background: var(--bg-inset); color: var(--text-muted); border: 1px solid var(--border);
+  }
+  .market-switcher button.active { background: var(--accent); color: white; border-color: transparent; }
   .pill {
     padding: 4px 10px; border-radius: 999px; font-weight: 600; font-size: 12px;
     display: inline-flex; align-items: center; gap: 6px;
@@ -200,12 +206,30 @@
 
   /* Settings modal */
   .modal-center { position: fixed; inset: 0; background: rgba(10,12,16,0.4); z-index: 50; display: flex; align-items: center; justify-content: center; }
-  .modal { width: min(420px, 92vw); background: var(--bg-elevated); border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow); padding: 20px; }
+  .modal { width: min(420px, 92vw); max-height: 88vh; overflow-y: auto; background: var(--bg-elevated); border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow); padding: 20px; }
   .modal h3 { margin-top: 0; }
+  .modal h4 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-muted); margin: 20px 0 10px; }
   .field { margin-bottom: 12px; }
   .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; }
   .field input { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-inset); color: var(--text); font: inherit; }
+  .field-row { display: flex; gap: 10px; }
+  .field-row .field { flex: 1; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .markets-list { list-style: none; padding: 0; margin: 0 0 12px; }
+  .markets-list li {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+  }
+  .markets-list .m-name { color: var(--text-muted); }
+  .markets-list .m-badge {
+    font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 5px;
+    background: var(--bg-inset); color: var(--text-faint);
+  }
+  .markets-list .m-badge.active { background: var(--green-weak); color: var(--green); }
+  .field-note { font-size: 11px; color: var(--text-faint); margin: -6px 0 12px; }
+  .form-msg { font-size: 12px; margin-top: 8px; }
+  .form-msg.error { color: var(--red); }
+  .form-msg.ok { color: var(--green); }
 
   footer {
     max-width: 1320px; margin: 24px auto 40px; padding: 0 20px;
@@ -258,6 +282,7 @@
 
 <div class="app-header">
   <div class="app-title"><span class="dot"></span> EGX Scanner</div>
+  <div class="market-switcher" id="marketSwitcher"></div>
   <div class="market-strip" id="marketStrip"></div>
   <button id="refreshBtn" title="Refresh data">Refresh</button>
   <button id="settingsBtn" title="API settings">Settings</button>
@@ -326,6 +351,8 @@ const state = {
   sort: 'score',
   rows: [],
   market: null,
+  marketCode: localStorage.getItem('egx_market_code') || 'EGX',
+  availableMarkets: [],
   loading: false,
   filterMaxDays: 'any',
   filterMinGain: 'any',
@@ -374,16 +401,22 @@ function dateQS(s, sep) {
   return (s.filterDate && s.filterDate !== 'latest') ? `${sep}date=${s.filterDate}` : '';
 }
 
+// Every endpoint accepts an optional market=CODE (defaults to EGX server-side
+// if omitted), same pattern as dateQS above.
+function marketQS(s, sep) {
+  return `${sep}market=${encodeURIComponent(s.marketCode || 'EGX')}`;
+}
+
 const TABS = [
-  { id: 'top-picks', label: 'Top 3 Trade Ideas', endpoint: (s) => `/top-picks${dateQS(s, '?')}` },
-  { id: 'top', label: 'Overall Top 10', endpoint: (s) => `/top?limit=10${dateQS(s, '&')}` },
-  { id: 'breakout', label: 'Breakout', endpoint: (s) => `/breakout?limit=10${dateQS(s, '&')}` },
-  { id: 'momentum', label: 'Momentum', endpoint: (s) => `/momentum?limit=10${dateQS(s, '&')}` },
-  { id: 'pullback', label: 'Pullback', endpoint: (s) => `/pullback?limit=10${dateQS(s, '&')}` },
-  { id: 'reversal', label: 'Reversal', endpoint: (s) => `/reversal?limit=10${dateQS(s, '&')}` },
-  { id: 'volume', label: 'Top Volume', endpoint: (s) => `/stocks/volume${dateQS(s, '?')}` },
-  { id: 'rvol', label: 'Top Relative Volume', endpoint: (s) => `/stocks/relative-volume${dateQS(s, '?')}` },
-  { id: 'full', label: 'Full Market', endpoint: (s) => `/stocks?sort=${s.sort}${dateQS(s, '&')}` },
+  { id: 'top-picks', label: 'Top 3 Trade Ideas', endpoint: (s) => `/top-picks${marketQS(s, '?')}${dateQS(s, '&')}` },
+  { id: 'top', label: 'Overall Top 10', endpoint: (s) => `/top?limit=10${marketQS(s, '&')}${dateQS(s, '&')}` },
+  { id: 'breakout', label: 'Breakout', endpoint: (s) => `/breakout?limit=10${marketQS(s, '&')}${dateQS(s, '&')}` },
+  { id: 'momentum', label: 'Momentum', endpoint: (s) => `/momentum?limit=10${marketQS(s, '&')}${dateQS(s, '&')}` },
+  { id: 'pullback', label: 'Pullback', endpoint: (s) => `/pullback?limit=10${marketQS(s, '&')}${dateQS(s, '&')}` },
+  { id: 'reversal', label: 'Reversal', endpoint: (s) => `/reversal?limit=10${marketQS(s, '&')}${dateQS(s, '&')}` },
+  { id: 'volume', label: 'Top Volume', endpoint: (s) => `/stocks/volume${marketQS(s, '?')}${dateQS(s, '&')}` },
+  { id: 'rvol', label: 'Top Relative Volume', endpoint: (s) => `/stocks/relative-volume${marketQS(s, '?')}${dateQS(s, '&')}` },
+  { id: 'full', label: 'Full Market', endpoint: (s) => `/stocks?sort=${s.sort}${marketQS(s, '&')}${dateQS(s, '&')}` },
 ];
 
 const RANKED_COLUMNS = [
@@ -596,6 +629,22 @@ async function apiGet(path) {
   return body;
 }
 
+async function apiPost(path, payload) {
+  const res = await fetch(state.baseUrl + path, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || body.success === false) {
+    const msg = body.error || `HTTP ${res.status}`;
+    const err = new Error(msg);
+    err.details = body.details;
+    throw err;
+  }
+  return body;
+}
+
 function showBanner(msg, isError) {
   const host = document.getElementById('bannerHost');
   if (!msg) { host.innerHTML = ''; return; }
@@ -684,7 +733,7 @@ async function initDateFilter() {
   const dateSel = document.getElementById('dateFilterSelect');
   dateSel.innerHTML = '<option value="latest">Latest</option>';
   try {
-    const data = await apiGet('/dates');
+    const data = await apiGet('/dates' + marketQS(state, '?'));
     state.availableDates = data.dates || [];
     dateSel.innerHTML = '<option value="latest">Latest</option>'
       + state.availableDates.map((d) => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
@@ -818,9 +867,40 @@ function renderTable() {
   });
 }
 
+async function loadMarkets() {
+  try {
+    const data = await apiGet('/markets');
+    state.availableMarkets = data.markets || [];
+  } catch (e) {
+    // Non-fatal: fall back to the two markets known to exist so the
+    // switcher still works even if /markets can't be reached.
+    state.availableMarkets = [{ code: 'EGX', name: 'Egyptian Exchange' }, { code: 'US', name: 'US Market (Nasdaq/NYSE)' }];
+  }
+  renderMarketSwitcher();
+}
+
+function renderMarketSwitcher() {
+  const el = document.getElementById('marketSwitcher');
+  const markets = state.availableMarkets.length ? state.availableMarkets : [{ code: state.marketCode, name: state.marketCode }];
+  el.innerHTML = markets.map((m) => `<button type="button" data-code="${esc(m.code)}" class="${m.code === state.marketCode ? 'active' : ''}" title="${esc(m.name || m.code)}">${esc(m.code)}</button>`).join('');
+  el.querySelectorAll('button').forEach((btn) => {
+    btn.addEventListener('click', () => switchMarket(btn.dataset.code));
+  });
+}
+
+function switchMarket(code) {
+  if (code === state.marketCode) return;
+  state.marketCode = code;
+  localStorage.setItem('egx_market_code', code);
+  state.filterDate = 'latest';
+  renderMarketSwitcher();
+  initDateFilter();
+  refreshAll();
+}
+
 async function loadMarket() {
   try {
-    state.market = await apiGet('/market');
+    state.market = await apiGet('/market' + marketQS(state, '?'));
     renderMarketStrip();
     renderStatRow();
   } catch (e) {
@@ -861,7 +941,7 @@ async function refreshAll() {
 async function openDetail(symbol) {
   let data;
   try {
-    data = await apiGet('/stock?symbol=' + encodeURIComponent(symbol) + dateQS(state, '&'));
+    data = await apiGet('/stock?symbol=' + encodeURIComponent(symbol) + marketQS(state, '&') + dateQS(state, '&'));
   } catch (e) {
     showBanner('Failed to load ' + symbol + ': ' + e.message, true);
     return;
@@ -970,6 +1050,16 @@ async function openDetail(symbol) {
   overlay.querySelector('#closeDrawer').addEventListener('click', () => overlay.remove());
 }
 
+function marketsListHtml() {
+  if (!state.availableMarkets.length) return '<div class="field-note">No markets loaded yet.</div>';
+  return '<ul class="markets-list">' + state.availableMarkets.map((m) => `
+    <li>
+      <span><strong>${esc(m.code)}</strong> <span class="m-name">${esc(m.name || '')}</span></span>
+      <span class="m-badge ${m.active ? 'active' : ''}">${m.active ? 'daily schedule' : 'manual only'}</span>
+    </li>
+  `).join('') + '</ul>';
+}
+
 function openSettings() {
   const overlay = document.createElement('div');
   overlay.className = 'modal-center';
@@ -988,6 +1078,33 @@ function openSettings() {
         <button id="cancelSettings">Cancel</button>
         <button class="primary" id="saveSettings">Save &amp; Refresh</button>
       </div>
+
+      <h4>Markets</h4>
+      <div id="marketsListHost">${marketsListHtml()}</div>
+
+      <h4>Add a market</h4>
+      <div class="field-note">
+        New markets run via manual/Execute-Workflow trigger right away. Enabling an
+        automatic daily schedule for them is a separate, one-time n8n step.
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Code</label><input id="mCode" placeholder="e.g. LSE" maxlength="16"></div>
+        <div class="field"><label>Currency</label><input id="mCurrency" placeholder="e.g. GBP" maxlength="8"></div>
+      </div>
+      <div class="field"><label>Name</label><input id="mName" placeholder="e.g. London Stock Exchange"></div>
+      <div class="field-row">
+        <div class="field"><label>Timezone (IANA)</label><input id="mTimezone" placeholder="e.g. Europe/London"></div>
+        <div class="field"><label>Provider exchange code</label><input id="mEodhdCode" placeholder="e.g. LSE"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Min avg traded value</label><input id="mMinValue" type="number" placeholder="e.g. 1000000"></div>
+        <div class="field"><label>Min avg volume</label><input id="mMinVolume" type="number" placeholder="e.g. 300000"></div>
+      </div>
+      <div class="field"><label>Index code (optional)</label><input id="mIndexCode" placeholder="e.g. FTSE"></div>
+      <div id="addMarketMsg"></div>
+      <div class="modal-actions">
+        <button class="primary" id="addMarketBtn">Add Market</button>
+      </div>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -1000,6 +1117,29 @@ function openSettings() {
     overlay.remove();
     refreshAll();
   });
+  overlay.querySelector('#addMarketBtn').addEventListener('click', async () => {
+    const msgEl = overlay.querySelector('#addMarketMsg');
+    msgEl.innerHTML = '';
+    const payload = {
+      code: overlay.querySelector('#mCode').value.trim(),
+      name: overlay.querySelector('#mName').value.trim(),
+      currency: overlay.querySelector('#mCurrency').value.trim(),
+      timezone: overlay.querySelector('#mTimezone').value.trim(),
+      eodhdExchangeCode: overlay.querySelector('#mEodhdCode').value.trim(),
+      indexCode: overlay.querySelector('#mIndexCode').value.trim(),
+      minAvgTradedValue: overlay.querySelector('#mMinValue').value,
+      minAvgVolume: overlay.querySelector('#mMinVolume').value,
+    };
+    try {
+      const result = await apiPost('/markets', payload);
+      msgEl.innerHTML = `<div class="form-msg ok">${esc(result.message || 'Market added.')}</div>`;
+      await loadMarkets();
+      overlay.querySelector('#marketsListHost').innerHTML = marketsListHtml();
+    } catch (e) {
+      const details = Array.isArray(e.details) ? '<br>' + e.details.map(esc).join('<br>') : '';
+      msgEl.innerHTML = `<div class="form-msg error">${esc(e.message)}${details}</div>`;
+    }
+  });
 }
 
 document.getElementById('refreshBtn').addEventListener('click', refreshAll);
@@ -1007,6 +1147,7 @@ document.getElementById('settingsBtn').addEventListener('click', openSettings);
 document.getElementById('exportBtn').addEventListener('click', exportCsv);
 initColumnsPicker();
 initDateFilter();
+loadMarkets();
 
 renderTabs();
 refreshAll();
