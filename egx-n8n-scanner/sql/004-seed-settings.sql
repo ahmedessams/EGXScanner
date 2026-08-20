@@ -39,16 +39,19 @@ ON CONFLICT (profile_name, factor) DO UPDATE
 -- ---------------------------------------------------------------------
 INSERT INTO markets (code, name, currency, timezone, eodhd_exchange_code, index_code, min_avg_traded_value, min_avg_volume, min_active_days_20, active) VALUES
     ('EGX', 'Egyptian Exchange',  'EGP', 'Africa/Cairo',    'EGX', 'EGX30', 500000,   50000,  15, TRUE),
-    ('US',  'US Market (Nasdaq/NYSE)', 'USD', 'America/New_York', 'US',  'GSPC',  1000000, 300000, 15, FALSE)
+    ('US',  'US Market (Nasdaq/NYSE)', 'USD', 'America/New_York', 'US',  'GSPC',  1000000, 300000, 15, TRUE)
 ON CONFLICT (code) DO UPDATE
     SET name = EXCLUDED.name, currency = EXCLUDED.currency, timezone = EXCLUDED.timezone,
         eodhd_exchange_code = EXCLUDED.eodhd_exchange_code, index_code = EXCLUDED.index_code,
         min_avg_traded_value = EXCLUDED.min_avg_traded_value, min_avg_volume = EXCLUDED.min_avg_volume,
         min_active_days_20 = EXCLUDED.min_active_days_20;
--- US seeded with active = FALSE deliberately: Phase 1 proves the pipeline
--- works for US via manual/Execute Workflow triggers only. `active` here
--- means "has an automatic daily Schedule Trigger in 12" (see markets.active
--- comment in 001-schema.sql) — Phase 3 flips this once that trigger exists.
+-- US is now active = TRUE: Phase 3 added its automatic daily Schedule
+-- Trigger to workflow 12 (retry-import window in 03, main scan ~03:00
+-- Africa/Cairo the day after each US session). `active` here means "has
+-- an automatic daily Schedule Trigger in 12" (see markets.active comment
+-- in 001-schema.sql). This INSERT's ON CONFLICT clause deliberately
+-- excludes `active` from its SET list, so re-running this seed never
+-- reverts a market's live active flag back to this default.
 
 -- ---------------------------------------------------------------------
 -- Non-secret runtime settings. Secrets (API keys, DB credentials, webhook
