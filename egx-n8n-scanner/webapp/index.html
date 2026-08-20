@@ -491,6 +491,9 @@ const RANGE_FORECAST_COLUMNS = [
   { key: 'next_high_estimate', label: 'Next Est. High', num: true, title: 'Next-session High estimate: close + 1x ATR14 — a simple volatility-based projection, not a guarantee.', render: (r) => fmt(r.next_high_estimate) },
   { key: 'next_low_estimate', label: 'Next Est. Low', num: true, title: 'Next-session Low estimate: close - 1x ATR14 — a simple volatility-based projection, not a guarantee.', render: (r) => fmt(r.next_low_estimate) },
   { key: 'accuracy_pct', label: 'Accuracy Est. %', num: true, title: 'Backtested: % of this stock\'s own past sessions where the actual next-session high/low both fell inside the band this same formula would have predicted the day before. Hover the value for sample size.', render: (r) => probCell(r.accuracy_pct, r.sample_size, true) },
+  { key: 'actual_high', label: 'Actual High', num: true, title: 'The actual High of the NEXT session after the forecast date. "—" means that session hasn\'t happened (or its data hasn\'t arrived) yet.', render: (r) => fmt(r.actual_high) },
+  { key: 'actual_low', label: 'Actual Low', num: true, title: 'The actual Low of the NEXT session after the forecast date. "—" means that session hasn\'t happened (or its data hasn\'t arrived) yet.', render: (r) => fmt(r.actual_low) },
+  { key: 'in_range', label: 'Result', title: 'Did the next session\'s actual high AND low both stay inside the estimated band? Compares the forecast made on the shown date against the following session. Pending until that session\'s data exists.', render: (r) => inRangeCell(r.in_range, r.actual_date) },
 ];
 
 const VOLUME_COLUMNS = [
@@ -621,6 +624,13 @@ function aiProbCell(v, reasoning) {
   const n = Number(v);
   const title = reasoning ? `AI reasoning: ${reasoning}` : 'AI Assessment';
   return `<span class="ai-badge" title="${esc(title)}">${n.toFixed(0)}%</span>`;
+}
+function inRangeCell(v, actualDate) {
+  if (v === null || v === undefined || v === '') return '<span style="color:var(--text-muted)">Pending</span>';
+  const dateNote = actualDate ? ` (actual session: ${actualDate})` : '';
+  return v
+    ? `<span class="change-pos" title="Both the actual high and low stayed inside the estimated band${dateNote}">In Range ✓</span>`
+    : `<span class="change-neg" title="The actual high or low moved outside the estimated band${dateNote}">Out of Range ✗</span>`;
 }
 function changeCell(v) {
   if (v === null || v === undefined || v === '') return '—';
