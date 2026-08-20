@@ -62,6 +62,21 @@
     100% { left: 100%; }
   }
 
+  /* Table-level loading bar: always occupies its 3px so the layout never
+     jumps; only the opacity toggles. Sits directly above the data table. */
+  .table-progress {
+    position: relative; height: 3px; overflow: hidden; border-radius: 2px;
+    opacity: 0; pointer-events: none; transition: opacity 0.15s;
+  }
+  .table-progress.active { opacity: 1; }
+  .table-progress .bar {
+    position: absolute; top: 0; left: 0; height: 100%; width: 40%;
+    background: var(--accent); border-radius: 2px;
+    animation: top-progress-slide 1.1s ease-in-out infinite;
+  }
+  .table-scroll.loading table { opacity: 0.45; }
+  .table-scroll table { transition: opacity 0.15s; }
+
   body {
     margin: 0;
     background: var(--bg);
@@ -334,6 +349,7 @@
     <span class="filter-note">Applies to every tab. Rows missing a valid target1/gain projection are hidden while a filter is active.</span>
   </div>
 
+  <div class="table-progress" id="tableProgress"><div class="bar"></div></div>
   <div class="card table-scroll">
     <table id="dataTable">
       <thead><tr id="tableHead"></tr></thead>
@@ -694,6 +710,11 @@ function setTopProgress(active) {
   document.getElementById('topProgress').classList.toggle('active', active);
 }
 
+function setTableProgress(active) {
+  document.getElementById('tableProgress').classList.toggle('active', active);
+  document.querySelector('.card.table-scroll').classList.toggle('loading', active);
+}
+
 function renderMarketStrip() {
   const el = document.getElementById('marketStrip');
   const m = state.market;
@@ -959,6 +980,7 @@ async function loadTab() {
   renderColumnsMenu();
   state.loading = true;
   setTopProgress(true);
+  setTableProgress(true);
   renderTable();
   showBanner('');
   try {
@@ -971,6 +993,7 @@ async function loadTab() {
   }
   state.loading = false;
   setTopProgress(false);
+  setTableProgress(false);
   renderTable();
   renderStatRow();
 }
