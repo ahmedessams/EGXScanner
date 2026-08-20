@@ -145,15 +145,19 @@ toggle; older n8n versions use the Active toggle directly.
 | `GET /webhook/egx/momentum` | Top N by momentum_score. `?date=YYYY-MM-DD` |
 | `GET /webhook/egx/pullback` | Top N by pullback_score. `?date=YYYY-MM-DD` |
 | `GET /webhook/egx/reversal` | Top N by reversal_score. `?date=YYYY-MM-DD` |
-| `GET /webhook/egx/stock?symbol=SYMBOL` | Full stock detail (section 26 shape) |
-| `GET /webhook/egx/stock/technicals?symbol=SYMBOL` | Latest `technical_analysis` row |
-| `GET /webhook/egx/stock/support-resistance?symbol=SYMBOL` | Latest `support_resistance` row |
+| `GET /webhook/egx/stock?symbol=SYMBOL` | Full stock detail (section 26 shape). `?date=YYYY-MM-DD` |
+| `GET /webhook/egx/stock/technicals?symbol=SYMBOL` | Latest `technical_analysis` row (not date-aware) |
+| `GET /webhook/egx/stock/support-resistance?symbol=SYMBOL` | Latest `support_resistance` row (not date-aware) |
 | `GET /webhook/egx/market` | Latest market regime/score |
 | `GET /webhook/egx/dates` | Distinct LIVE scan dates (newest first, max 90) — feeds the dashboard's date filter |
 
 **`?date=YYYY-MM-DD` (spec: user-requested "date filter in each tab")**:
-every route above except `/stock*` and `/market` accepts it. On-or-before
-semantics via `market_snapshot(p_date)` / `scanner_run_as_of(p_date)`
+every route above except `/stock/technicals`, `/stock/support-resistance`,
+and `/market` accepts it — including the stock detail drawer's `/stock`
+endpoint (`market_snapshot($2)`, not `v_full_market` directly; the drawer
+was otherwise always showing the latest date's data regardless of the
+tab's active date filter, confirmed live). On-or-before semantics via
+`market_snapshot(p_date)` / `scanner_run_as_of(p_date)`
 (`sql/003-views.sql`) — picking a non-trading day (weekend/holiday) falls
 back to the most recent prior trading day rather than erroring. Omitted or
 invalid (anything not matching `YYYY-MM-DD`, validated server-side, never

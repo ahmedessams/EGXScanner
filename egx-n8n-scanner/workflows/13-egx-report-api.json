@@ -1272,7 +1272,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const symbol = String(($json.query && $json.query.symbol) || '').toUpperCase().replace(/[^A-Z0-9.]/g, '');\nif (!symbol) throw new Error('symbol query parameter is required, e.g. ?symbol=COMI');\nreturn [{ json: { ...$json, symbol } }];"
+        "jsCode": "const symbol = String(($json.query && $json.query.symbol) || '').toUpperCase().replace(/[^A-Z0-9.]/g, '');\nif (!symbol) throw new Error('symbol query parameter is required, e.g. ?symbol=COMI');\nconst rawDate = String(($json.query && $json.query.date) || '');\nconst dateParam = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate) ? rawDate : null;\nreturn [{ json: { ...$json, symbol, dateParam } }];"
       },
       "position": [
         520,
@@ -1286,9 +1286,9 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM v_full_market WHERE symbol = $1;",
+        "query": "SELECT * FROM market_snapshot($2) WHERE symbol = $1;",
         "options": {
-          "queryReplacement": "={{ [$json.symbol] }}"
+          "queryReplacement": "={{ [$json.symbol, $json.dateParam] }}"
         }
       },
       "onError": "continueRegularOutput",

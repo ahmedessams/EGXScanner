@@ -861,7 +861,7 @@ async function refreshAll() {
 async function openDetail(symbol) {
   let data;
   try {
-    data = await apiGet('/stock?symbol=' + encodeURIComponent(symbol));
+    data = await apiGet('/stock?symbol=' + encodeURIComponent(symbol) + dateQS(state, '&'));
   } catch (e) {
     showBanner('Failed to load ' + symbol + ': ' + e.message, true);
     return;
