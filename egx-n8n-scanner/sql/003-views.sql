@@ -220,12 +220,36 @@ COMMENT ON VIEW v_full_market IS 'One row per active EGX stock with latest price
 DROP FUNCTION IF EXISTS market_snapshot(DATE);
 CREATE OR REPLACE FUNCTION market_snapshot(p_date DATE, p_market VARCHAR DEFAULT 'EGX')
 RETURNS SETOF v_full_market AS $$
+  -- anchor: prices are served as of the last FULLY ANALYZED date (the
+  -- completed run's trading_date), not the raw latest price date. Without
+  -- this, the nightly window between a market's price import and its
+  -- analysis run (US: ~23:00 -> 03:00 Cairo) showed fresh prices with NULL
+  -- rsi/support/resistance/rvol AND the previous run's scores beside them —
+  -- a misleading mixed-date row (found live 2026-08-21, "many data is
+  -- missing in USA stocks"). COALESCE keeps the old behavior (latest
+  -- prices, null analysis) for a market with no completed run yet.
+  --
+  -- lp is a per-stock LATERAL top-1 index scan on (stock_id, trading_date)
+  -- instead of the old prices_as_of() call. Two hard-won performance
+  -- constraints (both confirmed live): prices_as_of(run.trading_date) made
+  -- the function-join LATERAL on run, re-running the full-table DISTINCT ON
+  -- once per stock (~90s+ timeouts); prices_as_of(<scalar subquery>)
+  -- avoided that but blocked SQL-function inlining, materializing the whole
+  -- 360k-row DISTINCT ON as an opaque function scan (~23s). The lateral
+  -- top-1 form is ~100ms.
+  WITH anchor AS (
+    SELECT COALESCE((SELECT r.trading_date FROM scanner_run_as_of(p_date, p_market) r), p_date) AS d
+  )
   SELECT
       s.id::int AS stock_id, s.symbol, s.name, s.sector, s.active,
 
       lp.trading_date::text AS trading_date,
       lp.open::float8 AS open, lp.high::float8 AS high, lp.low::float8 AS low,
-      lp.close::float8 AS close, lp.change_pct::float8 AS change_pct,
+      lp.close::float8 AS close,
+      CASE
+          WHEN lp.previous_close IS NULL OR lp.previous_close = 0 THEN NULL
+          ELSE ROUND(((lp.close - lp.previous_close) / lp.previous_close) * 100, 4)
+      END::float8 AS change_pct,
       lp.volume::float8 AS volume, lp.traded_value::float8 AS traded_value,
 
       ta.volume_sma20::float8 AS avg_volume20,
@@ -273,7 +297,20 @@ RETURNS SETOF v_full_market AS $$
       res.ai_stop_probability_pct::float8 AS ai_stop_probability_pct
 
   FROM stocks s
-  LEFT JOIN prices_as_of(p_date) lp ON lp.stock_id = s.id
+  CROSS JOIN anchor a
+  LEFT JOIN LATERAL (
+      SELECT dp.trading_date, dp.open, dp.high, dp.low, dp.close,
+             dp.volume, dp.traded_value,
+             prev.close AS previous_close
+      FROM daily_prices dp
+      LEFT JOIN LATERAL (
+          SELECT p2.close FROM daily_prices p2
+          WHERE p2.stock_id = dp.stock_id AND p2.trading_date < dp.trading_date
+          ORDER BY p2.trading_date DESC LIMIT 1
+      ) prev ON TRUE
+      WHERE dp.stock_id = s.id AND (a.d IS NULL OR dp.trading_date <= a.d)
+      ORDER BY dp.trading_date DESC LIMIT 1
+  ) lp ON TRUE
   LEFT JOIN technical_analysis ta
       ON ta.stock_id = s.id AND ta.trading_date = lp.trading_date
   LEFT JOIN support_resistance srz
