@@ -386,6 +386,32 @@ CREATE TABLE IF NOT EXISTS prediction_evaluation (
 COMMENT ON TABLE prediction_evaluation IS 'Next-session outcome evaluation for a scanner_results row';
 
 -- ---------------------------------------------------------------------
+-- range_forecast: next-session High/Low projection + backtested accuracy
+-- (user-requested addition). next_high_estimate/next_low_estimate use a
+-- simple, transparent ATR-based band (close +/- 1x ATR14) for the NEXT
+-- trading session — not a guarantee. accuracy_pct is a real backtested
+-- containment rate: walking this stock's own history, on what % of past
+-- sessions did the ACTUAL next-session high/low both fall inside the
+-- band that this same formula would have predicted the day before? A
+-- deliberately honest per-stock measure (not tuned to look good) rather
+-- than a single project-wide constant — see 18-egx-range-forecast.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS range_forecast (
+    id                  BIGSERIAL PRIMARY KEY,
+    stock_id            BIGINT NOT NULL REFERENCES stocks(id) ON DELETE CASCADE,
+    trading_date        DATE NOT NULL,
+    close               NUMERIC(18,6),
+    next_high_estimate  NUMERIC(18,6),
+    next_low_estimate   NUMERIC(18,6),
+    accuracy_pct        NUMERIC(6,2),
+    sample_size         INTEGER,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_range_forecast_stock_date UNIQUE (stock_id, trading_date)
+);
+
+COMMENT ON TABLE range_forecast IS 'Next-session High/Low estimate (close +/- 1x ATR14) plus a backtested per-stock containment-rate accuracy, one row per stock per trading date';
+
+-- ---------------------------------------------------------------------
 -- scoring_weights: configurable weighting for overall_score composition
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS scoring_weights (

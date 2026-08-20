@@ -435,6 +435,7 @@ const TABS = [
   { id: 'volume', label: 'Top Volume', endpoint: (s) => `/stocks/volume${marketQS(s, '?')}${dateQS(s, '&')}` },
   { id: 'rvol', label: 'Top Relative Volume', endpoint: (s) => `/stocks/relative-volume${marketQS(s, '?')}${dateQS(s, '&')}` },
   { id: 'full', label: 'Full Market', endpoint: (s) => `/stocks?sort=${s.sort}${marketQS(s, '&')}${dateQS(s, '&')}` },
+  { id: 'range-forecast', label: 'Next Estimate', endpoint: (s) => `/range-forecast${marketQS(s, '?')}${dateQS(s, '&')}` },
 ];
 
 const RANKED_COLUMNS = [
@@ -480,6 +481,16 @@ const TOP_PICKS_COLUMNS = [
   { key: 'historical_target1_hit_pct', label: 'Hist. Profit Prob', num: true, title: 'Historical rate: % of past eligible picks with this setup type that reached Target 1 within their own estimated-days window. Not a forecast for this specific stock — hover for sample size.', render: (r) => probCell(r.historical_target1_hit_pct, r.historical_sample_size, true) },
   { key: 'ai_stop_probability_pct', label: 'AI Stop Prob', num: true, title: 'AI Assessment: a language model\'s own probability estimate that the stop/invalidation is hit before Target 1. A qualitative judgment call from limited technical data, not a guarantee. Hover for the model\'s stated reasoning.', render: (r) => aiProbCell(r.ai_stop_probability_pct, r.ai_reasoning) },
   { key: 'historical_stop_hit_pct', label: 'Hist. Stop Prob', num: true, title: 'Historical rate: % of past eligible picks with this setup type that hit the stop/invalidation level first, within that same window. Hover for sample size.', render: (r) => probCell(r.historical_stop_hit_pct, r.historical_sample_size, false) },
+];
+
+const RANGE_FORECAST_COLUMNS = [
+  DETAIL_BUTTON_COLUMN,
+  { key: 'symbol', label: 'Symbol', render: (r) => `<strong>${esc(r.symbol)}</strong>` },
+  { key: 'name', label: 'Name', render: (r) => `<span style="color:var(--text-muted)">${esc(r.name || '')}</span>` },
+  { key: 'close', label: 'Close', num: true, render: (r) => fmt(r.close) },
+  { key: 'next_high_estimate', label: 'Next Est. High', num: true, title: 'Next-session High estimate: close + 1x ATR14 — a simple volatility-based projection, not a guarantee.', render: (r) => fmt(r.next_high_estimate) },
+  { key: 'next_low_estimate', label: 'Next Est. Low', num: true, title: 'Next-session Low estimate: close - 1x ATR14 — a simple volatility-based projection, not a guarantee.', render: (r) => fmt(r.next_low_estimate) },
+  { key: 'accuracy_pct', label: 'Accuracy Est. %', num: true, title: 'Backtested: % of this stock\'s own past sessions where the actual next-session high/low both fell inside the band this same formula would have predicted the day before. Hover the value for sample size.', render: (r) => probCell(r.accuracy_pct, r.sample_size, true) },
 ];
 
 const VOLUME_COLUMNS = [
@@ -707,6 +718,7 @@ function columnsForTab() {
   if (state.tab === 'top-picks') return TOP_PICKS_COLUMNS;
   if (state.tab === 'volume' || state.tab === 'rvol') return VOLUME_COLUMNS;
   if (state.tab === 'full') return FULL_MARKET_COLUMNS;
+  if (state.tab === 'range-forecast') return RANGE_FORECAST_COLUMNS;
   return RANKED_COLUMNS;
 }
 
