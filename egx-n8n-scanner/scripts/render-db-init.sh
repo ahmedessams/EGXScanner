@@ -22,8 +22,8 @@ if [ "$ALREADY_INITIALIZED" != "t" ] && [ -f data/full_dump.sql.gz ]; then
   echo "Data dump restored."
 fi
 
-echo "Applying sql/001-004 (idempotent — picks up any new tables/views/seed data)..."
-for f in sql/001-schema.sql sql/002-indexes.sql sql/003-views.sql sql/004-seed-settings.sql; do
+echo "Applying sql/001-005 (idempotent — picks up any new tables/views/seed data)..."
+for f in sql/001-schema.sql sql/002-indexes.sql sql/003-views.sql sql/004-seed-settings.sql sql/005-seed-us-universe.sql; do
   echo "  applying $f"
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
 done
