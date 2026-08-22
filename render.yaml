@@ -61,12 +61,36 @@ services:
     disk:
       name: egx-n8n-data
       mountPath: /home/node/.n8n
-      sizeGB: 2
+      # 2GB filled up in production (2026-08-22): n8n keeps EVERY execution's
+      # full data in its SQLite DB on this disk by default, and one long
+      # backtest run (45 dates x 501 stocks x 8 sub-workflows) grew it until
+      # SQLite hit "disk I/O error" and n8n crash-looped on boot. 5GB plus
+      # the EXECUTIONS_DATA_* pruning env vars below is the fix — if you see
+      # SQLITE_IOERR in the boot logs again, check this disk's usage first.
+      sizeGB: 5
     envVars:
       - key: TZ
         value: Africa/Cairo
       - key: GENERIC_TIMEZONE
         value: Africa/Cairo
+
+      # --- execution-history hygiene (added after the 2026-08-22 disk-full
+      #     crash loop). Successful executions are not worth 100s of MB of
+      #     SQLite: don't save success payloads at all, keep errors 7 days,
+      #     and hard-cap total stored executions. The scanner's own results
+      #     live in Postgres — n8n execution logs are purely diagnostic.
+      - key: EXECUTIONS_DATA_SAVE_ON_SUCCESS
+        value: none
+      - key: EXECUTIONS_DATA_SAVE_ON_ERROR
+        value: all
+      - key: EXECUTIONS_DATA_SAVE_ON_PROGRESS
+        value: "false"
+      - key: EXECUTIONS_DATA_PRUNE
+        value: "true"
+      - key: EXECUTIONS_DATA_MAX_AGE
+        value: "168"
+      - key: EXECUTIONS_DATA_PRUNE_MAX_COUNT
+        value: "5000"
       - key: N8N_PROTOCOL
         value: https
       - key: N8N_HOST
