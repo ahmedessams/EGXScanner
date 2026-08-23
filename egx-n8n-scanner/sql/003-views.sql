@@ -372,7 +372,19 @@ SELECT
     res.ai_rank,
     res.ai_reasoning,
     -- Appended at the end for the same reason as v_full_market above.
-    res.ai_stop_probability_pct::float8 AS ai_stop_probability_pct
+    res.ai_stop_probability_pct::float8 AS ai_stop_probability_pct,
+    -- Forecast-vs-actual for the pick's own T1 window (user-requested):
+    -- the actual highest high / lowest low over the target1_estimated_days
+    -- sessions AFTER the scan date, plus how many of those sessions exist
+    -- yet, and the evaluated outcome from 16-egx-target-window-evaluation.
+    -- window_outcome is NULL until 16 evaluates the pick (weekly schedule,
+    -- and only once the full window has elapsed) — the webapp shows that
+    -- as Pending. Same append-only rule as the columns above.
+    win.actual_window_high,
+    win.actual_window_low,
+    win.window_sessions_elapsed,
+    twe.outcome AS window_outcome,
+    twe.resolved_day_number
 FROM scanner_results res
 JOIN scanner_runs run ON run.id = res.scanner_run_id
 JOIN stocks s ON s.id = res.stock_id
@@ -386,7 +398,20 @@ LEFT JOIN support_resistance srz
 -- joining on setup_type alone would multiply rows (one per market per
 -- setup_type) once more than one market has stats. run.market gives the
 -- correct per-row market context directly, no separate parameter needed.
-LEFT JOIN probability_stats ps ON ps.setup_type = res.setup_type AND ps.market = run.market;
+LEFT JOIN probability_stats ps ON ps.setup_type = res.setup_type AND ps.market = run.market
+LEFT JOIN target_window_evaluation twe ON twe.scanner_result_id = res.id
+LEFT JOIN LATERAL (
+    SELECT MAX(w.high)::float8 AS actual_window_high,
+           MIN(w.low)::float8 AS actual_window_low,
+           COUNT(*)::int AS window_sessions_elapsed
+    FROM (
+        SELECT dp.high, dp.low
+        FROM daily_prices dp
+        WHERE dp.stock_id = res.stock_id AND dp.trading_date > run.trading_date
+        ORDER BY dp.trading_date ASC
+        LIMIT GREATEST(COALESCE(res.target1_estimated_days, 0), 0)
+    ) w
+) win ON TRUE;
 
 COMMENT ON VIEW v_scanner_top IS 'Flattened scanner_results for the latest or any given run/market, used by ranking webhook endpoints — callers scope both via scanner_run_as_of(p_date, p_market)';
 

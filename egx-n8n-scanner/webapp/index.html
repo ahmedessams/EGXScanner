@@ -452,6 +452,8 @@ const TABS = [
   { id: 'rvol', label: 'Top Relative Volume', endpoint: (s) => `/stocks/relative-volume${marketQS(s, '?')}${dateQS(s, '&')}` },
   { id: 'full', label: 'Full Market', endpoint: (s) => `/stocks?sort=${s.sort}${marketQS(s, '&')}${dateQS(s, '&')}` },
   { id: 'range-forecast', label: 'Next Estimate', endpoint: (s) => `/range-forecast${marketQS(s, '?')}${dateQS(s, '&')}` },
+  // All-time aggregate — deliberately ignores the date filter server-side.
+  { id: 'outcomes', label: 'Track Record', endpoint: (s) => `/outcomes${marketQS(s, '?')}` },
 ];
 
 const RANKED_COLUMNS = [
@@ -476,6 +478,9 @@ const RANKED_COLUMNS = [
   { key: 'historical_stop_hit_pct', label: 'P(Stop) %', num: true, title: 'Historical rate: % of past eligible picks with this setup type that hit the stop/invalidation level first, within that same window. Hover the value for sample size.', render: (r) => probCell(r.historical_stop_hit_pct, r.historical_sample_size, false) },
   { key: 'ai_rank', label: 'AI Rank', num: true, title: 'AI Assessment: a language model\'s own re-ranking of that day\'s Top 10, from the same technical data — a second opinion shown alongside Overall Rank, not a replacement for it. Only computed for the Top 10, not the full market.', render: (r) => aiRankCell(r.ai_rank) },
   { key: 'ai_target1_probability_pct', label: 'AI Prob % T1', num: true, title: 'AI Assessment: a language model\'s own probability estimate for reaching Target 1 within its estimated-days window. A qualitative judgment call from limited technical data — NOT the measured P(T1) % above, and NOT a guarantee. Hover for the model\'s stated reasoning.', render: (r) => aiProbCell(r.ai_target1_probability_pct, r.ai_reasoning) },
+  { key: 'actual_window_high', label: 'Actual High (T1 win.)', num: true, title: 'The ACTUAL highest price reached during this pick\'s own Est. Days T1 window (the sessions after the scan date). "—" until at least one later session exists.', render: (r) => fmt(r.actual_window_high) },
+  { key: 'actual_window_low', label: 'Actual Low (T1 win.)', num: true, title: 'The ACTUAL lowest price reached during this pick\'s own Est. Days T1 window.', render: (r) => fmt(r.actual_window_low) },
+  { key: 'window_outcome', label: 'Outcome', title: 'Evaluated result of this recommendation: did price touch Target 1 or the stop first within the Est. Days T1 window? Evaluated by the weekly target-window evaluation; Pending until the window has fully elapsed and been evaluated.', render: (r) => windowOutcomeCell(r.window_outcome, r.resolved_day_number, r.window_sessions_elapsed, r.target1_estimated_days) },
 ];
 
 // Top 3 Trade Ideas: a curated subset of the eligible Top 10, filtered
@@ -510,6 +515,26 @@ const RANGE_FORECAST_COLUMNS = [
   { key: 'actual_high', label: 'Actual High', num: true, title: 'The actual High of the NEXT session after the forecast date. "—" means that session hasn\'t happened (or its data hasn\'t arrived) yet.', render: (r) => fmt(r.actual_high) },
   { key: 'actual_low', label: 'Actual Low', num: true, title: 'The actual Low of the NEXT session after the forecast date. "—" means that session hasn\'t happened (or its data hasn\'t arrived) yet.', render: (r) => fmt(r.actual_low) },
   { key: 'in_range', label: 'Result', title: 'Did the next session\'s actual high AND low both stay inside the estimated band? Compares the forecast made on the shown date against the following session. Pending until that session\'s data exists.', render: (r) => inRangeCell(r.in_range, r.actual_date) },
+];
+
+// Track Record: aggregate outcomes of every eligible Top-10 recommendation
+// with targets, from target_window_evaluation via GET /outcomes. Scope rows:
+// LIVE = real daily scans, BACKTEST = simulated historical scans, ALL =
+// combined total. Success/failure rates use EVALUATED picks as the
+// denominator — pending picks are shown, not silently mixed in.
+const OUTCOME_COLUMNS = [
+  { key: 'scope', label: 'Scope', title: 'LIVE = real daily scanner runs. BACKTEST = simulated historical runs (same code, replayed point-in-time). ALL = both combined.', render: (r) => `<strong>${esc(r.scope || '')}</strong>` },
+  { key: 'setup_type', label: 'Setup', render: (r) => r.setup_type === 'ALL' ? '<span style="color:var(--text-muted)">ALL</span>' : setupBadge(r.setup_type) },
+  { key: 'picks', label: 'Picks', num: true, title: 'Eligible Top-10 recommendations with a Target 1 and stop defined', render: (r) => fmtInt(r.picks) },
+  { key: 'evaluated', label: 'Evaluated', num: true, title: 'Picks whose window has elapsed and been evaluated — the denominator for the rate columns', render: (r) => fmtInt(r.evaluated) },
+  { key: 'target1_hit', label: 'Target Hit', num: true, render: (r) => fmtInt(r.target1_hit) },
+  { key: 'stop_hit', label: 'Stop Hit', num: true, render: (r) => fmtInt(r.stop_hit) },
+  { key: 'expired', label: 'Expired', num: true, title: 'Window fully elapsed without touching Target 1 or the stop', render: (r) => fmtInt(r.expired) },
+  { key: 'pending', label: 'Pending', num: true, title: 'Window not yet elapsed / not yet evaluated', render: (r) => fmtInt(r.pending) },
+  { key: 'success_rate_pct', label: 'Success %', num: true, title: '% of EVALUATED picks that reached Target 1 within their estimated window', render: (r) => pctRateCell(r.success_rate_pct, true) },
+  { key: 'failure_rate_pct', label: 'Failure %', num: true, title: '% of EVALUATED picks that hit the stop/invalidation first', render: (r) => pctRateCell(r.failure_rate_pct, false) },
+  { key: 'expired_rate_pct', label: 'Expired %', num: true, title: '% of EVALUATED picks that expired with neither level touched', render: (r) => (r.expired_rate_pct === null || r.expired_rate_pct === undefined) ? '—' : Number(r.expired_rate_pct).toFixed(1) + '%' },
+  { key: 'avg_days_to_target', label: 'Avg Days to Target', num: true, title: 'Average sessions until Target 1 was touched, among winning picks', render: (r) => fmt(r.avg_days_to_target, 1) },
 ];
 
 const VOLUME_COLUMNS = [
@@ -641,6 +666,25 @@ function aiProbCell(v, reasoning) {
   const title = reasoning ? `AI reasoning: ${reasoning}` : 'AI Assessment';
   return `<span class="ai-badge" title="${esc(title)}">${n.toFixed(0)}%</span>`;
 }
+function windowOutcomeCell(outcome, resolvedDay, sessionsElapsed, estDays) {
+  if (outcome === 'TARGET1_HIT') {
+    return `<span class="change-pos" title="Target 1 was reached on day ${resolvedDay ?? '?'} of the estimated window">Target Hit ✓${resolvedDay ? ` (d${resolvedDay})` : ''}</span>`;
+  }
+  if (outcome === 'STOP_HIT') {
+    return `<span class="change-neg" title="The stop/invalidation level was touched first${resolvedDay ? `, on day ${resolvedDay}` : ''}">Stop Hit ✗${resolvedDay ? ` (d${resolvedDay})` : ''}</span>`;
+  }
+  if (outcome === 'EXPIRED_NO_HIT') {
+    return '<span style="color:var(--text-muted)" title="The estimated window fully elapsed without touching Target 1 or the stop">Expired —</span>';
+  }
+  const progress = (Number.isFinite(Number(sessionsElapsed)) && Number.isFinite(Number(estDays)) && estDays)
+    ? ` (${sessionsElapsed}/${estDays}d)` : '';
+  return `<span style="color:var(--text-muted)" title="Not yet evaluated — the window hasn't fully elapsed or the weekly evaluation hasn't run">Pending${progress}</span>`;
+}
+function pctRateCell(v, positive) {
+  if (v === null || v === undefined || v === '') return '—';
+  const cls = positive ? 'change-pos' : 'change-neg';
+  return `<span class="${cls}">${Number(v).toFixed(1)}%</span>`;
+}
 function inRangeCell(v, actualDate) {
   if (v === null || v === undefined || v === '') return '<span style="color:var(--text-muted)">Pending</span>';
   const dateNote = actualDate ? ` (actual session: ${actualDate})` : '';
@@ -750,10 +794,14 @@ function columnsForTab() {
   if (state.tab === 'volume' || state.tab === 'rvol') return VOLUME_COLUMNS;
   if (state.tab === 'full') return FULL_MARKET_COLUMNS;
   if (state.tab === 'range-forecast') return RANGE_FORECAST_COLUMNS;
+  if (state.tab === 'outcomes') return OUTCOME_COLUMNS;
   return RANKED_COLUMNS;
 }
 
 function filteredRows() {
+  // Track Record rows are aggregates, not picks — the per-pick target
+  // filters don't apply and would blank the whole table.
+  if (state.tab === 'outcomes') return state.rows;
   const maxDays = state.filterMaxDays === 'any' ? null : Number(state.filterMaxDays);
   const minGain = state.filterMinGain === 'any' ? null : Number(state.filterMinGain);
   if (maxDays === null && minGain === null) return state.rows;
@@ -922,6 +970,8 @@ function renderTable() {
   }).join('');
 
   body.querySelectorAll('tr').forEach((tr) => {
+    // Aggregate rows (Track Record) have no symbol — nothing to open.
+    if (!tr.dataset.symbol || tr.dataset.symbol === 'undefined') return;
     tr.addEventListener('click', () => openDetail(tr.dataset.symbol));
   });
   body.querySelectorAll('.detail-btn').forEach((btn) => {
