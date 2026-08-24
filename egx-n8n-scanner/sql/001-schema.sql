@@ -23,6 +23,12 @@ CREATE TABLE IF NOT EXISTS stocks (
     last_seen       DATE,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    -- Manual blocklist for provider-alias/duplicate listings (e.g. EODHD
+    -- serves the same EGX security under both its legacy and current symbol
+    -- with identical OHLCV). Workflow 01's upsert sets active = NOT excluded
+    -- on refresh, so excluding a symbol sticks across nightly universe runs;
+    -- plain `active = FALSE` alone would be re-activated the next night.
+    excluded        BOOLEAN      NOT NULL DEFAULT FALSE,
     CONSTRAINT uq_stocks_exchange_symbol UNIQUE (exchange, symbol)
 );
 
