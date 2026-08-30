@@ -402,7 +402,27 @@ SELECT
 FROM scanner_results res
 JOIN scanner_runs run ON run.id = res.scanner_run_id
 JOIN stocks s ON s.id = res.stock_id
-LEFT JOIN v_latest_prices lp ON lp.stock_id = s.id
+-- Price columns are AS OF THE RUN DATE, not the latest session. This used to
+-- be v_latest_prices, which made Close / Chg % / Volume / Traded Value show
+-- the newest session next to scan-date scores and targets whenever a past
+-- date was viewed (found 2026-08-30: WKOL 2026-08-17 showed close 347.66 in
+-- the Top 10 while the true Aug-17 close, and the detail drawer, said
+-- 376.61). Same per-stock top-1 LATERAL shape as market_snapshot().
+LEFT JOIN LATERAL (
+    SELECT dp.trading_date, dp.close, dp.volume, dp.traded_value,
+           CASE
+               WHEN prev.close IS NULL OR prev.close = 0 THEN NULL
+               ELSE ROUND(((dp.close - prev.close) / prev.close) * 100, 4)
+           END AS change_pct
+    FROM daily_prices dp
+    LEFT JOIN LATERAL (
+        SELECT p2.close FROM daily_prices p2
+        WHERE p2.stock_id = dp.stock_id AND p2.trading_date < dp.trading_date
+        ORDER BY p2.trading_date DESC LIMIT 1
+    ) prev ON TRUE
+    WHERE dp.stock_id = s.id AND dp.trading_date <= run.trading_date
+    ORDER BY dp.trading_date DESC LIMIT 1
+) lp ON TRUE
 LEFT JOIN technical_analysis ta
     ON ta.stock_id = s.id AND ta.trading_date = run.trading_date
 LEFT JOIN support_resistance srz
