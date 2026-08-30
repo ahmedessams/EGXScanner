@@ -533,6 +533,7 @@ const RANGE_FORECAST_COLUMNS = [
   { key: 'next_low_estimate_pct', label: 'Est. Low %', num: true, title: 'Estimated next-session Low as a loss % versus this date\'s close.', render: (r) => changeCell(estPct(r.next_low_estimate, r.close)) },
   { key: 'accuracy_pct', label: 'Accuracy Est. %', num: true, title: 'Backtested: % of this stock\'s own past sessions where the actual next-session high/low both fell inside the band this same formula would have predicted the day before. Hover the value for sample size.', render: (r) => probCell(r.accuracy_pct, r.sample_size, true) },
   { key: 'actual_high', label: 'Actual High', num: true, title: 'The actual High of the NEXT session after the forecast date. "—" means that session hasn\'t happened (or its data hasn\'t arrived) yet.', render: (r) => fmt(r.actual_high) },
+  { key: 'high_reached', label: 'High Reached', title: 'Did the next session\'s actual high reach the estimated high? "Reached ✓" when actual high ≥ estimate; otherwise shows how much of the estimated upside was covered. Pending until that session\'s data exists.', render: (r) => highReachedCell(r) },
   { key: 'actual_low', label: 'Actual Low', num: true, title: 'The actual Low of the NEXT session after the forecast date. "—" means that session hasn\'t happened (or its data hasn\'t arrived) yet.', render: (r) => fmt(r.actual_low) },
   { key: 'in_range', label: 'Result', title: 'Did the next session\'s actual high AND low both stay inside the estimated band? Compares the forecast made on the shown date against the following session. Pending until that session\'s data exists.', render: (r) => inRangeCell(r.in_range, r.actual_date) },
 ];
@@ -711,6 +712,23 @@ function inRangeCell(v, actualDate) {
   return v
     ? `<span class="change-pos" title="Both the actual high and low stayed inside the estimated band${dateNote}">In Range ✓</span>`
     : `<span class="change-neg" title="The actual high or low moved outside the estimated band${dateNote}">Out of Range ✗</span>`;
+}
+// Did the NEXT session's actual high reach the estimated high? Shows how much
+// of the estimated upside was actually covered so a near miss reads
+// differently from a session that never got close.
+function highReachedCell(r) {
+  const est = Number(r.next_high_estimate), act = Number(r.actual_high), close = Number(r.close);
+  if (r.actual_high === null || r.actual_high === undefined || r.actual_high === '' || !Number.isFinite(est)) {
+    return '<span style="color:var(--text-muted)">Pending</span>';
+  }
+  const dateNote = r.actual_date ? ` (actual session: ${r.actual_date})` : '';
+  const estUp = est - close, actUp = act - close;
+  const covered = Number.isFinite(estUp) && estUp > 0 ? Math.round((actUp / estUp) * 100) : null;
+  if (act >= est) {
+    return `<span class="change-pos" title="The actual high (${fmt(act)}) reached or exceeded the estimated high (${fmt(est)})${dateNote}">Reached ✓</span>`;
+  }
+  const pct = covered === null ? '' : ` (${covered}%)`;
+  return `<span class="change-neg" title="The actual high (${fmt(act)}) stayed below the estimated high (${fmt(est)})${covered === null ? '' : ' — reached ' + covered + '% of the estimated upside'}${dateNote}">Not reached${pct}</span>`;
 }
 function changeCell(v) {
   if (v === null || v === undefined || v === '') return '—';
@@ -1121,6 +1139,12 @@ async function loadTab() {
     const tabDef = TABS.find((t) => t.id === state.tab);
     const data = await apiGet(tabDef.endpoint(state));
     state.rows = data.results || [];
+    if (state.tab === 'range-forecast') {
+      for (const r of state.rows) {
+        const est = Number(r.next_high_estimate), act = Number(r.actual_high);
+        r.high_reached = (r.actual_high === null || r.actual_high === undefined || !Number.isFinite(est)) ? null : (act >= est ? 1 : 0);
+      }
+    }
   } catch (e) {
     state.rows = [];
     showBanner('Failed to load: ' + e.message, true);
