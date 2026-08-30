@@ -396,7 +396,10 @@ const state = {
   filterMinGain: 'any',
   filterDate: 'latest',
   availableDates: [],
-  hiddenColumns: JSON.parse(localStorage.getItem('egx_hidden_columns') || '{}'),
+  // Per-tab column visibility the USER customised (v2: keyed so the new
+  // hide-technical-columns defaults apply once). Tabs with no entry use
+  // defaultHiddenForTab().
+  hiddenColumns: JSON.parse(localStorage.getItem('egx_hidden_columns_v2') || '{}'),
   // Client-side column sort for the current tab: { key, dir: 'asc'|'desc' }.
   // Reset on tab switch; distinct from `sort`, the Full Market server-side
   // ordering that decides WHICH rows come back.
@@ -939,8 +942,30 @@ async function initDateFilter() {
   dateSel.addEventListener('change', () => { state.filterDate = dateSel.value; loadTab(); });
 }
 
+// Technical / indicator columns are hidden by default (user request): the
+// tables lead with price, targets and outcomes; RVOL, RSI, setup type and
+// support/resistance stay one click away in the Columns menu. Exceptions:
+// the Top Relative Volume tab keeps RVOL20 (it is what the tab ranks by) and
+// Track Record keeps Setup (it is the row grouping, not a technical column).
+const DEFAULT_HIDDEN_COLUMN_KEYS = ['rvol20', 'rvol50', 'rsi14', 'setup_type', 'support1', 'resistance1'];
+function defaultHiddenForTab() {
+  const keys = new Set(DEFAULT_HIDDEN_COLUMN_KEYS);
+  if (state.tab === 'rvol' || state.tab === 'volume') keys.delete('rvol20');
+  if (state.tab === 'outcomes') keys.delete('setup_type');
+  const available = new Set(columnsForTab().map((c) => c.key));
+  return new Set([...keys].filter((k) => available.has(k)));
+}
+
 function hiddenSetForTab() {
-  return new Set(state.hiddenColumns[state.tab] || []);
+  const custom = state.hiddenColumns[state.tab];
+  return Array.isArray(custom) ? new Set(custom) : defaultHiddenForTab();
+}
+
+function resetColumnsForTab() {
+  delete state.hiddenColumns[state.tab];
+  saveHiddenColumns();
+  renderColumnsMenu();
+  renderTable();
 }
 
 function visibleColumnsForTab() {
@@ -949,11 +974,13 @@ function visibleColumnsForTab() {
 }
 
 function saveHiddenColumns() {
-  localStorage.setItem('egx_hidden_columns', JSON.stringify(state.hiddenColumns));
+  localStorage.setItem('egx_hidden_columns_v2', JSON.stringify(state.hiddenColumns));
 }
 
 function toggleColumn(key, hide) {
-  const hidden = new Set(state.hiddenColumns[state.tab] || []);
+  // Start from the EFFECTIVE set (defaults or the user's list) so the first
+  // toggle on a tab keeps the other default-hidden columns hidden.
+  const hidden = hiddenSetForTab();
   if (hide) hidden.add(key); else hidden.delete(key);
   state.hiddenColumns[state.tab] = Array.from(hidden);
   saveHiddenColumns();
@@ -971,10 +998,11 @@ function renderColumnsMenu() {
       <input type="checkbox" data-key="${esc(c.key)}" ${checked ? 'checked' : ''} ${pinned ? 'disabled' : ''}>
       ${esc(c.label)}
     </label>`;
-  }).join('');
+  }).join('') + `<button class="filter-reset" type="button" id="columnsResetBtn" style="margin:6px 8px 4px" title="Show the default set of columns for this tab (technical columns hidden)">Reset to defaults</button>`;
   menu.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
     cb.addEventListener('change', () => toggleColumn(cb.dataset.key, !cb.checked));
   });
+  menu.querySelector('#columnsResetBtn').addEventListener('click', (e) => { e.stopPropagation(); resetColumnsForTab(); });
 }
 
 function initColumnsPicker() {
