@@ -1124,6 +1124,26 @@ async function refreshAll() {
   btn.textContent = 'Refresh';
 }
 
+// Which trading date the drawer's numbers belong to. The API reports the
+// date it actually resolved (tradingDate); when browsing history via the
+// Date filter, that is the selected date (or the last analyzed date before
+// it). Shown prominently so the panel is never confused with the table's
+// filter state or with "today".
+function detailDateLine(data) {
+  const resolved = data.tradingDate || null;
+  const requested = state.filterDate && state.filterDate !== 'latest' ? state.filterDate : null;
+  const latestDate = state.market && state.market.tradingDate ? state.market.tradingDate : null;
+  const shown = resolved || requested || latestDate;
+  if (!shown) return '';
+  const isHistory = requested && (!latestDate || requested < latestDate);
+  const note = isHistory
+    ? ' <span class="pill" style="margin-left:6px">historical — Date filter</span>'
+    : (resolved && latestDate && resolved !== latestDate
+      ? ` <span class="pill" style="margin-left:6px">latest analyzed: ${esc(latestDate)}</span>`
+      : ' <span class="pill" style="margin-left:6px">latest</span>');
+  return `<div class="sub" style="margin-top:-10px" title="All values in this panel (price, scores, targets, AI assessment) are as of this trading date.">Data as of <strong>${esc(shown)}</strong>${note}</div>`;
+}
+
 async function openDetail(symbol) {
   let data;
   try {
@@ -1139,6 +1159,7 @@ async function openDetail(symbol) {
       <button class="close-x" id="closeDrawer">✕</button>
       <h2>${esc(data.symbol)}</h2>
       <div class="sub">${esc(data.name || '')}</div>
+      ${detailDateLine(data)}
       ${setupBadge(data.setup)}
       <div class="kv-grid">
         <div class="kv"><div class="label">Close</div><div class="value">${fmt(data.close)}</div></div>
