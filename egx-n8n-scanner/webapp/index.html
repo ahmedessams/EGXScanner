@@ -481,6 +481,7 @@ const RANKED_COLUMNS = [
   { key: 'actual_window_high', label: 'Actual High (T1 win.)', num: true, title: 'The ACTUAL highest price reached during this pick\'s own Est. Days T1 window (the sessions after the scan date). "—" until at least one later session exists.', render: (r) => fmt(r.actual_window_high) },
   { key: 'actual_window_low', label: 'Actual Low (T1 win.)', num: true, title: 'The ACTUAL lowest price reached during this pick\'s own Est. Days T1 window.', render: (r) => fmt(r.actual_window_low) },
   { key: 'window_outcome', label: 'Outcome', title: 'Evaluated result of this recommendation: did price touch Target 1 or the stop first within the Est. Days T1 window? Evaluated by the weekly target-window evaluation; Pending until the window has fully elapsed and been evaluated.', render: (r) => windowOutcomeCell(r.window_outcome, r.resolved_day_number, r.window_sessions_elapsed, r.target1_estimated_days) },
+  { key: 'next_day_high_estimate', label: 'Next Day High Est.', num: true, title: 'Estimated HIGH for the NEXT session after the scan date: close + 1x ATR14, the same band the Next Estimate tab tracks. Not a target — a volatility-based ceiling to judge whether Target 1 is reachable in one session. Hover the Next Estimate tab for this stock\'s historical accuracy.', render: (r) => fmt(r.next_day_high_estimate) },
 ];
 
 // Top 3 Trade Ideas: a curated subset of the eligible Top 10, filtered

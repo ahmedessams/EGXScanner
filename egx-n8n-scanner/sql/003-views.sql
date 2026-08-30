@@ -384,7 +384,16 @@ SELECT
     win.actual_window_low,
     win.window_sessions_elapsed,
     twe.outcome AS window_outcome,
-    twe.resolved_day_number
+    twe.resolved_day_number,
+    -- Next-session range estimate for this pick (user-requested): the same
+    -- close +/- ATR14 band that 18-egx-range-forecast stores per stock per
+    -- trading date and the Next Estimate tab shows, joined on the scan date
+    -- so it is the estimate that was available WHEN the pick was made.
+    -- accuracy_pct is the stock's own expanding-window containment rate as
+    -- of that date. Same append-only rule as the columns above.
+    rf.next_high_estimate::float8 AS next_day_high_estimate,
+    rf.next_low_estimate::float8 AS next_day_low_estimate,
+    rf.accuracy_pct::float8 AS range_forecast_accuracy_pct
 FROM scanner_results res
 JOIN scanner_runs run ON run.id = res.scanner_run_id
 JOIN stocks s ON s.id = res.stock_id
@@ -400,6 +409,7 @@ LEFT JOIN support_resistance srz
 -- correct per-row market context directly, no separate parameter needed.
 LEFT JOIN probability_stats ps ON ps.setup_type = res.setup_type AND ps.market = run.market
 LEFT JOIN target_window_evaluation twe ON twe.scanner_result_id = res.id
+LEFT JOIN range_forecast rf ON rf.stock_id = res.stock_id AND rf.trading_date = run.trading_date
 LEFT JOIN LATERAL (
     SELECT MAX(w.high)::float8 AS actual_window_high,
            MIN(w.low)::float8 AS actual_window_low,
