@@ -62,7 +62,15 @@ CREATE TABLE IF NOT EXISTS markets (
     min_avg_volume        NUMERIC,
     min_active_days_20    INTEGER,
     active                BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Minimum meaningful Target-1 distance (% above entry). Workflow 11 skips
+    -- any resistance level closer than this when deriving targets, and the
+    -- outcome statistics (workflow 16 probability_stats, GET /outcomes)
+    -- ignore picks whose T1 is below it. Added 2026-08-30 after the scoring
+    -- calibration incident: a resistance 0.3% away counts as a "hit" ~80% of
+    -- the time, which let the ranking game the hit-rate metric with
+    -- worthless targets. Seeded per market in 004-seed-settings.sql.
+    min_target_gain_pct   NUMERIC(5,2) NOT NULL DEFAULT 2.00
 );
 
 COMMENT ON TABLE markets IS 'Multi-market configuration: one row per market the pipeline can scan (currency, timezone, EODHD exchange code, per-market liquidity thresholds). Seeded in 004-seed-settings.sql.';

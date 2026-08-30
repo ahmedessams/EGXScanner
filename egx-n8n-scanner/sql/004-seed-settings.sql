@@ -37,14 +37,15 @@ ON CONFLICT (profile_name, factor) DO UPDATE
 -- confirm the exact ticker your provider expects, same CONFIGURE-ENDPOINT
 -- spirit as the HTTP Request node URLs elsewhere in this project.
 -- ---------------------------------------------------------------------
-INSERT INTO markets (code, name, currency, timezone, eodhd_exchange_code, index_code, min_avg_traded_value, min_avg_volume, min_active_days_20, active) VALUES
-    ('EGX', 'Egyptian Exchange',  'EGP', 'Africa/Cairo',    'EGX', 'EGX30', 500000,   50000,  15, TRUE),
-    ('US',  'US Market (Nasdaq/NYSE)', 'USD', 'America/New_York', 'US',  'GSPC',  1000000, 300000, 15, TRUE)
+INSERT INTO markets (code, name, currency, timezone, eodhd_exchange_code, index_code, min_avg_traded_value, min_avg_volume, min_active_days_20, active, min_target_gain_pct) VALUES
+    ('EGX', 'Egyptian Exchange',  'EGP', 'Africa/Cairo',    'EGX', 'EGX30', 500000,   50000,  15, TRUE, 2.00),
+    ('US',  'US Market (Nasdaq/NYSE)', 'USD', 'America/New_York', 'US',  'GSPC',  1000000, 300000, 15, TRUE, 1.50)
 ON CONFLICT (code) DO UPDATE
     SET name = EXCLUDED.name, currency = EXCLUDED.currency, timezone = EXCLUDED.timezone,
         eodhd_exchange_code = EXCLUDED.eodhd_exchange_code, index_code = EXCLUDED.index_code,
         min_avg_traded_value = EXCLUDED.min_avg_traded_value, min_avg_volume = EXCLUDED.min_avg_volume,
-        min_active_days_20 = EXCLUDED.min_active_days_20;
+        min_active_days_20 = EXCLUDED.min_active_days_20,
+        min_target_gain_pct = EXCLUDED.min_target_gain_pct;
 -- US is now active = TRUE: Phase 3 added its automatic daily Schedule
 -- Trigger to workflow 12 (retry-import window in 03, main scan ~03:00
 -- Africa/Cairo the day after each US session). `active` here means "has
