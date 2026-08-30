@@ -393,7 +393,12 @@ SELECT
     -- of that date. Same append-only rule as the columns above.
     rf.next_high_estimate::float8 AS next_day_high_estimate,
     rf.next_low_estimate::float8 AS next_day_low_estimate,
-    rf.accuracy_pct::float8 AS range_forecast_accuracy_pct
+    rf.accuracy_pct::float8 AS range_forecast_accuracy_pct,
+    -- The same band as gain/loss % vs the scan-date close (rf.close, not
+    -- lp.close: the latter is the latest/anchored close, which differs from
+    -- the scan date when browsing history). Append-only, as above.
+    ((rf.next_high_estimate - rf.close) / NULLIF(rf.close, 0) * 100)::float8 AS next_day_high_estimate_pct,
+    ((rf.next_low_estimate - rf.close) / NULLIF(rf.close, 0) * 100)::float8 AS next_day_low_estimate_pct
 FROM scanner_results res
 JOIN scanner_runs run ON run.id = res.scanner_run_id
 JOIN stocks s ON s.id = res.stock_id

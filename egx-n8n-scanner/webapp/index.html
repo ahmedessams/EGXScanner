@@ -167,6 +167,10 @@
      1's position returned this <th>, hiding rank #1 entirely). */
   thead th:hover { color: var(--text); }
   thead th .arrow { opacity: 0.5; font-size: 10px; margin-left: 3px; }
+  thead th.sortable { cursor: pointer; user-select: none; }
+  thead th.sortable:hover { color: var(--text); }
+  thead th.sorted { color: var(--accent); }
+  thead th.sorted .arrow { opacity: 1; }
   tbody td { padding: 9px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
   tbody tr:last-child td { border-bottom: none; }
   tbody tr:hover { background: var(--bg-inset); cursor: pointer; }
@@ -393,6 +397,10 @@ const state = {
   filterDate: 'latest',
   availableDates: [],
   hiddenColumns: JSON.parse(localStorage.getItem('egx_hidden_columns') || '{}'),
+  // Client-side column sort for the current tab: { key, dir: 'asc'|'desc' }.
+  // Reset on tab switch; distinct from `sort`, the Full Market server-side
+  // ordering that decides WHICH rows come back.
+  clientSort: null,
 };
 
 const PINNED_COLUMN_KEYS = new Set(['_detail', 'symbol']);
@@ -482,6 +490,8 @@ const RANKED_COLUMNS = [
   { key: 'actual_window_low', label: 'Actual Low (T1 win.)', num: true, title: 'The ACTUAL lowest price reached during this pick\'s own Est. Days T1 window.', render: (r) => fmt(r.actual_window_low) },
   { key: 'window_outcome', label: 'Outcome', title: 'Evaluated result of this recommendation: did price touch Target 1 or the stop first within the Est. Days T1 window? Evaluated by the weekly target-window evaluation; Pending until the window has fully elapsed and been evaluated.', render: (r) => windowOutcomeCell(r.window_outcome, r.resolved_day_number, r.window_sessions_elapsed, r.target1_estimated_days) },
   { key: 'next_day_high_estimate', label: 'Next Day High Est.', num: true, title: 'Estimated HIGH for the NEXT session after the scan date: close + 1x ATR14, the same band the Next Estimate tab tracks. Not a target — a volatility-based ceiling to judge whether Target 1 is reachable in one session. Hover the Next Estimate tab for this stock\'s historical accuracy.', render: (r) => fmt(r.next_day_high_estimate) },
+  { key: 'next_day_high_estimate_pct', label: 'Next Day High Est. %', num: true, title: 'The estimated next-session HIGH as a gain % versus the scan-date close (the upside side of the close ± ATR14 band).', render: (r) => changeCell(r.next_day_high_estimate_pct) },
+  { key: 'next_day_low_estimate_pct', label: 'Next Day Low Est. %', num: true, title: 'The estimated next-session LOW as a loss % versus the scan-date close (the downside side of the close ± ATR14 band).', render: (r) => changeCell(r.next_day_low_estimate_pct) },
 ];
 
 // Top 3 Trade Ideas: a curated subset of the eligible Top 10, filtered
@@ -505,13 +515,22 @@ const TOP_PICKS_COLUMNS = [
   { key: 'historical_stop_hit_pct', label: 'Hist. Stop Prob', num: true, title: 'Historical rate: % of past eligible picks with this setup type that hit the stop/invalidation level first, within that same window. Hover for sample size.', render: (r) => probCell(r.historical_stop_hit_pct, r.historical_sample_size, false) },
 ];
 
+// Gain/loss % of an estimate versus a reference close (null-safe).
+function estPct(estimate, close) {
+  const e = Number(estimate), c = Number(close);
+  if (!Number.isFinite(e) || !Number.isFinite(c) || c === 0) return null;
+  return ((e - c) / c) * 100;
+}
+
 const RANGE_FORECAST_COLUMNS = [
   DETAIL_BUTTON_COLUMN,
   { key: 'symbol', label: 'Symbol', render: (r) => `<strong>${esc(r.symbol)}</strong>` },
   { key: 'name', label: 'Name', render: (r) => `<span style="color:var(--text-muted)">${esc(r.name || '')}</span>` },
   { key: 'close', label: 'Close', num: true, render: (r) => fmt(r.close) },
   { key: 'next_high_estimate', label: 'Next Est. High', num: true, title: 'Next-session High estimate: close + 1x ATR14 — a simple volatility-based projection, not a guarantee.', render: (r) => fmt(r.next_high_estimate) },
+  { key: 'next_high_estimate_pct', label: 'Est. High %', num: true, title: 'Estimated next-session High as a gain % versus this date\'s close.', render: (r) => changeCell(estPct(r.next_high_estimate, r.close)) },
   { key: 'next_low_estimate', label: 'Next Est. Low', num: true, title: 'Next-session Low estimate: close - 1x ATR14 — a simple volatility-based projection, not a guarantee.', render: (r) => fmt(r.next_low_estimate) },
+  { key: 'next_low_estimate_pct', label: 'Est. Low %', num: true, title: 'Estimated next-session Low as a loss % versus this date\'s close.', render: (r) => changeCell(estPct(r.next_low_estimate, r.close)) },
   { key: 'accuracy_pct', label: 'Accuracy Est. %', num: true, title: 'Backtested: % of this stock\'s own past sessions where the actual next-session high/low both fell inside the band this same formula would have predicted the day before. Hover the value for sample size.', render: (r) => probCell(r.accuracy_pct, r.sample_size, true) },
   { key: 'actual_high', label: 'Actual High', num: true, title: 'The actual High of the NEXT session after the forecast date. "—" means that session hasn\'t happened (or its data hasn\'t arrived) yet.', render: (r) => fmt(r.actual_high) },
   { key: 'actual_low', label: 'Actual Low', num: true, title: 'The actual Low of the NEXT session after the forecast date. "—" means that session hasn\'t happened (or its data hasn\'t arrived) yet.', render: (r) => fmt(r.actual_low) },
@@ -786,7 +805,7 @@ function renderTabs() {
   const el = document.getElementById('tabs');
   el.innerHTML = TABS.map((t) => `<button class="tab ${t.id === state.tab ? 'active' : ''}" data-tab="${t.id}">${esc(t.label)}</button>`).join('');
   el.querySelectorAll('.tab').forEach((btn) => {
-    btn.addEventListener('click', () => { state.tab = btn.dataset.tab; loadTab(); });
+    btn.addEventListener('click', () => { state.tab = btn.dataset.tab; state.clientSort = null; loadTab(); });
   });
 }
 
@@ -799,7 +818,34 @@ function columnsForTab() {
   return RANKED_COLUMNS;
 }
 
+// Sort value for a row/column: numbers compare numerically, everything else
+// as text; null/empty always sinks to the bottom regardless of direction.
+function sortValue(r, key) {
+  const v = r[key];
+  if (v === null || v === undefined || v === '') return null;
+  const n = typeof v === 'number' ? v : (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v)) ? Number(v) : null);
+  return n !== null ? n : String(v).toLowerCase();
+}
+
+function applyClientSort(rows) {
+  const cs = state.clientSort;
+  if (!cs || !cs.key) return rows;
+  const dir = cs.dir === 'asc' ? 1 : -1;
+  return rows.slice().sort((a, b) => {
+    const va = sortValue(a, cs.key), vb = sortValue(b, cs.key);
+    if (va === null && vb === null) return 0;
+    if (va === null) return 1;
+    if (vb === null) return -1;
+    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+    return String(va).localeCompare(String(vb)) * dir;
+  });
+}
+
 function filteredRows() {
+  return applyClientSort(unsortedFilteredRows());
+}
+
+function unsortedFilteredRows() {
   // Track Record rows are aggregates, not picks — the per-pick target
   // filters don't apply and would blank the whole table.
   if (state.tab === 'outcomes') return state.rows;
@@ -938,16 +984,36 @@ function renderTable() {
   const cols = visibleColumnsForTab();
   const head = document.getElementById('tableHead');
   head.innerHTML = cols.map((c) => {
-    const sortable = state.tab === 'full' && c.sortKey;
-    const arrow = sortable && state.sort === c.sortKey ? '<span class="arrow">▼</span>' : '';
-    return `<th ${sortable ? `data-sort="${c.sortKey}"` : ''} class="${c.num ? 'num' : ''}" ${c.title ? `title="${esc(c.title)}"` : ''}>${esc(c.label)}${arrow}</th>`;
+    const sortable = c.key && c.key !== '_detail';
+    const cs = state.clientSort;
+    const active = sortable && cs && cs.key === c.key;
+    const arrow = active ? `<span class="arrow">${cs.dir === 'asc' ? '▲' : '▼'}</span>` : '';
+    const serverSort = state.tab === 'full' && c.sortKey ? `data-sort="${c.sortKey}"` : '';
+    return `<th ${sortable ? `data-key="${esc(c.key)}"` : ''} ${serverSort} class="${c.num ? 'num' : ''}${sortable ? ' sortable' : ''}${active ? ' sorted' : ''}" title="${esc((c.title ? c.title + ' ' : '') + (sortable ? '(click to sort)' : ''))}">${esc(c.label)}${arrow}</th>`;
   }).join('');
 
-  if (state.tab === 'full') {
-    head.querySelectorAll('th[data-sort]').forEach((th) => {
-      th.addEventListener('click', () => { state.sort = th.dataset.sort; loadTab(); });
+  // Click any header to sort the loaded rows client-side (numbers sort
+  // numerically, first click = descending for numeric columns, ascending for
+  // text; click again to flip). On Full Market, columns the API can order by
+  // also re-fetch with that server-side ordering so the returned subset
+  // matches what the user asked for.
+  head.querySelectorAll('th[data-key]').forEach((th) => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.key;
+      const col = cols.find((c) => c.key === key);
+      const cur = state.clientSort;
+      let dir;
+      if (cur && cur.key === key) dir = cur.dir === 'asc' ? 'desc' : 'asc';
+      else dir = col && col.num ? 'desc' : 'asc';
+      state.clientSort = { key, dir };
+      if (state.tab === 'full' && th.dataset.sort && state.sort !== th.dataset.sort) {
+        state.sort = th.dataset.sort;
+        loadTab();
+        return;
+      }
+      renderTable();
     });
-  }
+  });
 
   const body = document.getElementById('tableBody');
   const empty = document.getElementById('emptyState');
