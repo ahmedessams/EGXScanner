@@ -15,7 +15,7 @@ const { isNumber, clamp, round } = require("./helpers");
  *   close, rsi14, prevRsi14,
  *   nearestSupportDistancePct,
  *   relativeVolume20,
- *   macdHistogram, prevMacdHistogram, macdImproving,
+ *   macdImproving,          // boolean: today's MACD histogram > yesterday's
  *   return1d, return3d,
  *   bullishCandle,          // boolean: hammer/bullish-engulfing style close-near-high on the reversal bar
  *   positiveDivergence,     // boolean: price lower low while RSI higher low (optional, only when robustly detectable)
@@ -26,7 +26,7 @@ function calculateReversalScore(input) {
     close, rsi14, prevRsi14,
     nearestSupportDistancePct,
     relativeVolume20,
-    macdHistogram, prevMacdHistogram, macdImproving,
+    macdImproving,
     return1d, return3d,
     bullishCandle,
     positiveDivergence,
@@ -79,7 +79,7 @@ function calculateReversalScore(input) {
   }
 
   // --- MACD improvement (up to 15 pts) --------------------------------------------
-  if (macdImproving || (isNumber(macdHistogram) && isNumber(prevMacdHistogram) && macdHistogram > prevMacdHistogram)) {
+  if (macdImproving) {
     score += 15;
     reasons.push({ factor: "macd", scoreContribution: 15, message: "MACD histogram improving (decreasing downside momentum)" });
   }

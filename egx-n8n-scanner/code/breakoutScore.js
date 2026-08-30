@@ -7,7 +7,7 @@
  * classification (BREAKOUT_CONFIRMED / BREAKOUT_WATCH / NO_BREAKOUT).
  */
 
-const { isNumber, clamp, round } = require("./helpers");
+const { isNumber, clamp, round, safeDivide } = require("./helpers");
 
 /**
  * input: {
@@ -38,7 +38,10 @@ function calculateBreakoutScore(input) {
   // --- Proximity to / breach of resistance (up to 25 pts) ------------------
   let distancePct = null;
   if (isNumber(resistance1)) {
-    distancePct = ((resistance1 - close) / close) * 100;
+    const distanceRatio = safeDivide(resistance1 - close, close);
+    distancePct = distanceRatio !== null ? distanceRatio * 100 : null;
+  }
+  if (distancePct !== null) {
     if (distancePct <= 0) {
       score += 25;
       reasons.push({ factor: "resistance", scoreContribution: 25, message: `Price has broken above resistance (${round(resistance1, 4)})` });
@@ -55,6 +58,9 @@ function calculateBreakoutScore(input) {
       score += 25;
       reasons.push({ factor: "relative_volume", value: relativeVolume20, scoreContribution: 25, message: `Relative volume is ${round(relativeVolume20, 2)}x the previous 20-session average` });
     } else if (relativeVolume20 >= breakoutMinRvol) {
+      // Reaching this branch requires breakoutMinRvol <= relativeVolume20 < breakoutStrongRvol,
+      // which is only possible when breakoutStrongRvol > breakoutMinRvol — so the
+      // denominator below is always positive whenever this line executes.
       const contribution = round(15 + 10 * ((relativeVolume20 - breakoutMinRvol) / (breakoutStrongRvol - breakoutMinRvol)), 2);
       score += contribution;
       reasons.push({ factor: "relative_volume", value: relativeVolume20, scoreContribution: contribution, message: `Relative volume is ${round(relativeVolume20, 2)}x, above the ${breakoutMinRvol}x breakout threshold` });
@@ -121,7 +127,7 @@ function calculateBreakoutScore(input) {
     classification = "BREAKOUT_WATCH";
   }
 
-  if (classification === "NO_BREAKOUT" && !resistance1) {
+  if (classification === "NO_BREAKOUT" && !isNumber(resistance1)) {
     warnings.push("No resistance level available yet — classification defaults to NO_BREAKOUT");
   }
 

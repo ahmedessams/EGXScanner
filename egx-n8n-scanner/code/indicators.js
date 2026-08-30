@@ -93,10 +93,9 @@ function macd(closes, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
   const macdLine = closes.map((_, i) =>
     isNumber(fastEma[i]) && isNumber(slowEma[i]) ? fastEma[i] - slowEma[i] : null
   );
-  // signal line is an EMA of the MACD line itself; ema() skips nulls safely
-  // because it only advances prevEma on numeric inputs.
-  const signalInput = macdLine.map((v) => (v === null ? NaN : v)).map((v) => (Number.isNaN(v) ? null : v));
-  const signalLine = emaSkippingNulls(signalInput, signalPeriod);
+  // signal line is an EMA of the MACD line itself; emaSkippingNulls() only
+  // advances its internal EMA on numeric inputs, so the leading nulls are safe.
+  const signalLine = emaSkippingNulls(macdLine, signalPeriod);
   const histogram = closes.map((_, i) =>
     isNumber(macdLine[i]) && isNumber(signalLine[i]) ? macdLine[i] - signalLine[i] : null
   );

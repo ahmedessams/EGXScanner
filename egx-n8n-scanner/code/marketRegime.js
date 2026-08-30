@@ -52,8 +52,10 @@ function calculateMarketRegime(rows, index = null) {
   const declining = valid.filter((r) => r.changePct < 0).length;
   const unchanged = total - advancing - declining;
 
-  const aboveEma20 = rows.filter((r) => isNumber(r.close) && isNumber(r.ema20) && r.close > r.ema20).length;
-  const aboveEma50 = rows.filter((r) => isNumber(r.close) && isNumber(r.ema50) && r.close > r.ema50).length;
+  const withEma20 = rows.filter((r) => isNumber(r.close) && isNumber(r.ema20));
+  const aboveEma20 = withEma20.filter((r) => r.close > r.ema20).length;
+  const withEma50 = rows.filter((r) => isNumber(r.close) && isNumber(r.ema50));
+  const aboveEma50 = withEma50.filter((r) => r.close > r.ema50).length;
   const withEma200 = rows.filter((r) => isNumber(r.close) && isNumber(r.ema200));
   const aboveEma200 = withEma200.filter((r) => r.close > r.ema200).length;
 
@@ -64,14 +66,14 @@ function calculateMarketRegime(rows, index = null) {
   const averageDailyReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
   const medianDailyReturn = median(returns);
 
-  const pctAboveEma20 = (aboveEma20 / total) * 100;
-  const pctAboveEma50 = (aboveEma50 / total) * 100;
+  const pctAboveEma20 = withEma20.length ? (aboveEma20 / withEma20.length) * 100 : null;
+  const pctAboveEma50 = withEma50.length ? (aboveEma50 / withEma50.length) * 100 : null;
   const pctAboveEma200 = withEma200.length ? (aboveEma200 / withEma200.length) * 100 : null;
 
   const breadthScore =
     clamp(advancing / total, 0, 1) * 30 +
-    clamp(pctAboveEma20 / 100, 0, 1) * 20 +
-    clamp(pctAboveEma50 / 100, 0, 1) * 20 +
+    (pctAboveEma20 !== null ? clamp(pctAboveEma20 / 100, 0, 1) * 20 : 10) +
+    (pctAboveEma50 !== null ? clamp(pctAboveEma50 / 100, 0, 1) * 20 : 10) +
     (pctAboveEma200 !== null ? clamp(pctAboveEma200 / 100, 0, 1) * 15 : 7.5) +
     clamp(countRvolAbove1_5 / total / 0.3, 0, 1) * 15; // 30%+ of names hot = full marks
 

@@ -87,17 +87,25 @@ higher-highs/higher-lows (10pt) — MINUS an overextension penalty (up to
 name doesn't get rewarded further just for being extended.
 
 **Pullback** (`pullbackScore.js`): medium-term trend intact — EMA20>EMA50
-and EMA50 rising (30pt) — proximity to EMA20/support (30pt), RSI cooled into
+and EMA50 rising (30pt) — proximity to EMA20/support (up to 35pt: 15pt
+EMA20 proximity + 15pt support proximity + a separate +5pt bonus when the
+nearby support level itself has a strength score ≥ 50), RSI cooled into
 40-55 (20pt), declining sell-side volume on down days (15pt). A negative
 daily return is logged as context, never a penalty.
 
-**Reversal** (`reversalScore.js`): oversold RSI (25pt), support proximity
-(20pt), volume spike (20pt, read as possible capitulation rather than
-confirmation), bullish candle structure (10pt), MACD improving (15pt),
-positive RSI divergence (10pt) — **left `false`/unused in v1**, because
-robust divergence detection needs more history-aware peak/trough matching
-than is worth the false-positive risk here; treat it as a documented gap,
-not a hidden claim.
+**Reversal** (`reversalScore.js`): oversold RSI (up to 30pt: 25pt for the
+RSI band itself + a separate +5pt bonus when RSI is turning up off a low
+base), support proximity (20pt), volume spike (20pt, read as possible
+capitulation rather than confirmation), bullish candle structure (10pt),
+MACD improving (15pt), positive RSI divergence (10pt) — **left
+`false`/unused in v1**, because robust divergence detection needs more
+history-aware peak/trough matching than is worth the false-positive risk
+here; treat it as a documented gap, not a hidden claim. These section maxes
+sum to 105, not 100, so the final `clamp(0,100)` can compress two distinct
+strong reversal setups (e.g. one hitting every bonus vs. one just short) to
+the same ceiling — a known, not-yet-rebalanced gap flagged here rather than
+silently hidden behind the clamp; correcting it changes score distribution
+and belongs in a deliberate, backtested tuning pass, not a doc fix.
 
 ## Overall score (`code/overallScore.js`)
 
