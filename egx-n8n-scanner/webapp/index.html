@@ -332,16 +332,16 @@
   <div class="tabs" id="tabs"></div>
 
   <div class="filter-bar">
-    <div class="filter-group">
+    <div class="filter-group" id="filterDateGroup">
       <label for="dateFilterSelect">Date</label>
       <select id="dateFilterSelect"></select>
     </div>
-    <div class="filter-group">
+    <div class="filter-group" id="filterDaysGroup">
       <label for="filterDaysSelect">Est. Days T1 ≤</label>
       <select id="filterDaysSelect"></select>
     </div>
-    <div class="filter-group">
-      <label for="filterGainSelect">Gain % T1 ≥</label>
+    <div class="filter-group" id="filterGainGroup">
+      <label for="filterGainSelect" id="filterGainLabel">Gain % T1 ≥</label>
       <select id="filterGainSelect"></select>
     </div>
     <button class="filter-reset" id="filterResetBtn">Reset filters</button>
@@ -845,12 +845,22 @@ function filteredRows() {
   return applyClientSort(unsortedFilteredRows());
 }
 
+// Which filters make sense on the current tab, and what they act on.
+//   days: the "Est. Days T1 <=" filter (only tabs whose rows carry targets)
+//   gain: 'target1' -> Gain % T1, 'estimate' -> next-session Est. High % (Next
+//         Estimate rows have no targets; the meaningful "upside" there is the
+//         estimated high vs close), null -> hidden
+//   date: whether the Date filter applies (Track Record is all-time)
+function filterConfigForTab() {
+  if (state.tab === 'outcomes') return { days: false, gain: null, date: false };
+  if (state.tab === 'range-forecast') return { days: false, gain: 'estimate', gainLabel: 'Est. High % ≥', date: true };
+  return { days: true, gain: 'target1', gainLabel: 'Gain % T1 ≥', date: true };
+}
+
 function unsortedFilteredRows() {
-  // Track Record rows are aggregates, not picks — the per-pick target
-  // filters don't apply and would blank the whole table.
-  if (state.tab === 'outcomes') return state.rows;
-  const maxDays = state.filterMaxDays === 'any' ? null : Number(state.filterMaxDays);
-  const minGain = state.filterMinGain === 'any' ? null : Number(state.filterMinGain);
+  const cfg = filterConfigForTab();
+  const maxDays = cfg.days && state.filterMaxDays !== 'any' ? Number(state.filterMaxDays) : null;
+  const minGain = cfg.gain && state.filterMinGain !== 'any' ? Number(state.filterMinGain) : null;
   if (maxDays === null && minGain === null) return state.rows;
   return state.rows.filter((r) => {
     if (maxDays !== null) {
@@ -858,7 +868,7 @@ function unsortedFilteredRows() {
       if (d === null || d === undefined || d === '' || Number(d) > maxDays) return false;
     }
     if (minGain !== null) {
-      const g = r.target1_gain_pct;
+      const g = cfg.gain === 'estimate' ? estPct(r.next_high_estimate, r.close) : r.target1_gain_pct;
       if (g === null || g === undefined || g === '' || Number(g) < minGain) return false;
     }
     return true;
@@ -887,6 +897,13 @@ function renderFilterBar() {
   daysSel.value = state.filterMaxDays;
   gainSel.value = state.filterMinGain;
   dateSel.value = state.filterDate;
+  // Only show the filters that apply to this tab (a hidden filter is also
+  // ignored by unsortedFilteredRows, so switching tabs never blanks a table).
+  const cfg = filterConfigForTab();
+  document.getElementById('filterDateGroup').style.display = cfg.date ? '' : 'none';
+  document.getElementById('filterDaysGroup').style.display = cfg.days ? '' : 'none';
+  document.getElementById('filterGainGroup').style.display = cfg.gain ? '' : 'none';
+  if (cfg.gain) document.getElementById('filterGainLabel').textContent = cfg.gainLabel;
 }
 
 async function initDateFilter() {
