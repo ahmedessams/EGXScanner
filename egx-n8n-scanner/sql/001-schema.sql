@@ -552,3 +552,17 @@ BEGIN
     ALTER TABLE probability_stats ADD CONSTRAINT pk_probability_stats PRIMARY KEY (setup_type, market);
   END IF;
 END $$;
+
+-- ---------------------------------------------------------------------
+-- Horizon estimates (2026-09-01): drift + volatility projection per
+-- stock/date (the standard "expected move" framework: mu/sigma of daily
+-- log returns over the trailing 252 sessions, >=60 returns required).
+-- est_*_pct = (e^(mu*h) - 1) * 100 for h = 10/21/63/252 trading days.
+-- A projection of the stock's own measured history — not a forecast.
+-- ---------------------------------------------------------------------
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS drift_annual_pct      NUMERIC(12,4);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS volatility_annual_pct NUMERIC(12,4);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS est_2w_pct            NUMERIC(12,4);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS est_1m_pct            NUMERIC(12,4);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS est_3m_pct            NUMERIC(12,4);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS est_1y_pct            NUMERIC(12,4);

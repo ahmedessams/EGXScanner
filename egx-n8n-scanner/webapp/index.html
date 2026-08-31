@@ -495,6 +495,10 @@ const RANKED_COLUMNS = [
   { key: 'next_day_high_estimate', label: 'Next Day High Est.', num: true, title: 'Estimated HIGH for the NEXT session after the scan date: close + 1x ATR14, the same band the Next Estimate tab tracks. Not a target — a volatility-based ceiling to judge whether Target 1 is reachable in one session. Hover the Next Estimate tab for this stock\'s historical accuracy.', render: (r) => fmt(r.next_day_high_estimate) },
   { key: 'next_day_high_estimate_pct', label: 'Next Day High Est. %', num: true, title: 'The estimated next-session HIGH as a gain % versus the scan-date close (the upside side of the close ± ATR14 band).', render: (r) => changeCell(r.next_day_high_estimate_pct) },
   { key: 'next_day_low_estimate_pct', label: 'Next Day Low Est. %', num: true, title: 'The estimated next-session LOW as a loss % versus the scan-date close (the downside side of the close ± ATR14 band).', render: (r) => changeCell(r.next_day_low_estimate_pct) },
+  { key: 'est_2w_pct', label: 'Est. 2w %', num: true, title: 'Drift projection: expected % change over the next 10 trading days if this stock\'s own measured average daily drift (last 252 sessions) simply continued. A projection of history, not a forecast — open the detail drawer for the ±1σ uncertainty band.', render: (r) => changeCell(r.est_2w_pct) },
+  { key: 'est_1m_pct', label: 'Est. 1m %', num: true, title: 'Drift projection over the next 21 trading days, from this stock\'s own measured daily drift (last 252 sessions). A projection of history, not a forecast.', render: (r) => changeCell(r.est_1m_pct) },
+  { key: 'est_3m_pct', label: 'Est. 3m %', num: true, title: 'Drift projection over the next 63 trading days, from this stock\'s own measured daily drift (last 252 sessions). A projection of history, not a forecast — increasingly uncertain at longer horizons.', render: (r) => changeCell(r.est_3m_pct) },
+  { key: 'est_1y_pct', label: 'Est. 1y %', num: true, title: 'Drift projection over the next 252 trading days, from this stock\'s own measured daily drift. At a 1-year horizon the uncertainty band is very wide — treat as context, never a forecast.', render: (r) => changeCell(r.est_1y_pct) },
 ];
 
 // Top 3 Trade Ideas: a curated subset of the eligible Top 10, filtered
@@ -523,6 +527,17 @@ function estPct(estimate, close) {
   const e = Number(estimate), c = Number(close);
   if (!Number.isFinite(e) || !Number.isFinite(c) || c === 0) return null;
   return ((e - c) / c) * 100;
+}
+
+// ±1σ price band around a horizon drift estimate (null-safe): center comes
+// from the est % (mu·h in log space), half-width is sigma_daily·sqrt(h)
+// derived from the annualized volatility. Standard "expected move" math.
+function horizonBand(close, pct, volAnnualPct, hDays) {
+  const c = Number(close), p = Number(pct), v = Number(volAnnualPct);
+  if (![c, p, v].every(Number.isFinite) || c <= 0 || p <= -100) return null;
+  const muH = Math.log(1 + p / 100);
+  const sigmaH = (v / 100) / Math.sqrt(252) * Math.sqrt(hDays);
+  return { low: c * Math.exp(muH - sigmaH), high: c * Math.exp(muH + sigmaH) };
 }
 
 const RANGE_FORECAST_COLUMNS = [
@@ -592,6 +607,10 @@ const FULL_MARKET_COLUMNS = [
   { key: 'target1_estimated_days', label: 'Est. Days T1', num: true, title: 'Rough ATR-based projection, not a historical statistic or guarantee', render: (r) => fmtDays(r.target1_estimated_days) },
   { key: 'historical_target1_hit_pct', label: 'P(T1) %', num: true, title: 'Historical rate: % of past eligible picks with this setup type that reached Target 1 within their own estimated-days window. Not a forecast for this specific stock — hover the value for sample size.', render: (r) => probCell(r.historical_target1_hit_pct, r.historical_sample_size, true) },
   { key: 'historical_stop_hit_pct', label: 'P(Stop) %', num: true, title: 'Historical rate: % of past eligible picks with this setup type that hit the stop/invalidation level first, within that same window. Hover the value for sample size.', render: (r) => probCell(r.historical_stop_hit_pct, r.historical_sample_size, false) },
+  { key: 'est_2w_pct', label: 'Est. 2w %', num: true, title: 'Drift projection: expected % change over the next 10 trading days if this stock\'s own measured average daily drift (last 252 sessions) simply continued. A projection of history, not a forecast.', render: (r) => changeCell(r.est_2w_pct), sortKey: null },
+  { key: 'est_1m_pct', label: 'Est. 1m %', num: true, title: 'Drift projection over the next 21 trading days, from this stock\'s own measured daily drift (last 252 sessions). A projection of history, not a forecast.', render: (r) => changeCell(r.est_1m_pct), sortKey: null },
+  { key: 'est_3m_pct', label: 'Est. 3m %', num: true, title: 'Drift projection over the next 63 trading days, from this stock\'s own measured daily drift (last 252 sessions). A projection of history, not a forecast — increasingly uncertain at longer horizons.', render: (r) => changeCell(r.est_3m_pct), sortKey: null },
+  { key: 'est_1y_pct', label: 'Est. 1y %', num: true, title: 'Drift projection over the next 252 trading days, from this stock\'s own measured daily drift. At a 1-year horizon the uncertainty band is very wide — treat as context, never a forecast.', render: (r) => changeCell(r.est_1y_pct), sortKey: null },
   { key: 'eligible', label: 'Eligible', render: (r) => r.eligible ? '✓' : '—', sortKey: null },
 ];
 
@@ -658,6 +677,12 @@ const FULL_MARKET_EXPORT_COLUMNS = [
   { key: 'historical_target1_hit_pct', label: 'P(T1) %' },
   { key: 'historical_stop_hit_pct', label: 'P(Stop) %' },
   { key: 'historical_sample_size', label: 'P Sample Size' },
+  { key: 'est_2w_pct', label: 'Est. 2w %' },
+  { key: 'est_1m_pct', label: 'Est. 1m %' },
+  { key: 'est_3m_pct', label: 'Est. 3m %' },
+  { key: 'est_1y_pct', label: 'Est. 1y %' },
+  { key: 'drift_annual_pct', label: 'Drift (ann.) %' },
+  { key: 'volatility_annual_pct', label: 'Volatility (ann.) %' },
 ];
 
 function esc(s) { return (s ?? '').toString().replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -947,7 +972,7 @@ async function initDateFilter() {
 // support/resistance stay one click away in the Columns menu. Exceptions:
 // the Top Relative Volume tab keeps RVOL20 (it is what the tab ranks by) and
 // Track Record keeps Setup (it is the row grouping, not a technical column).
-const DEFAULT_HIDDEN_COLUMN_KEYS = ['rvol20', 'rvol50', 'rsi14', 'setup_type', 'support1', 'resistance1'];
+const DEFAULT_HIDDEN_COLUMN_KEYS = ['rvol20', 'rvol50', 'rsi14', 'setup_type', 'support1', 'resistance1', 'est_2w_pct', 'est_1m_pct', 'est_3m_pct', 'est_1y_pct'];
 function defaultHiddenForTab() {
   const keys = new Set(DEFAULT_HIDDEN_COLUMN_KEYS);
   if (state.tab === 'rvol' || state.tab === 'volume') keys.delete('rvol20');
@@ -1284,6 +1309,33 @@ async function openDetail(symbol) {
         <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">
           * Rough projection from this stock's own average daily range (ATR) — not a
           historical statistic, forecast, or guarantee of when (or whether) a target is reached.
+        </div>
+      ` : ''}
+
+      ${data.horizonEstimates && data.horizonEstimates.est2wPct !== null && data.horizonEstimates.est2wPct !== undefined ? `
+        <div class="section-title">Horizon Estimates</div>
+        <table style="margin-top:8px;">
+          <thead><tr><th></th><th class="num">Est. Price</th><th class="num">Est. %</th><th class="num">±1σ Range**</th></tr></thead>
+          <tbody>
+            ${[['2 Weeks', 'est2wPct', 10], ['1 Month', 'est1mPct', 21], ['3 Months', 'est3mPct', 63], ['1 Year', 'est1yPct', 252]].map(([label, key, h]) => {
+              const pct = data.horizonEstimates[key];
+              const est = (pct === null || pct === undefined || !Number.isFinite(Number(data.close))) ? null : Number(data.close) * (1 + Number(pct) / 100);
+              const band = horizonBand(data.close, pct, data.horizonEstimates.volatilityAnnualPct, h);
+              return `<tr>
+                <td>${label}</td>
+                <td class="num">${fmt(est)}</td>
+                <td class="num">${changeCell(pct)}</td>
+                <td class="num">${band ? `${fmt(band.low)} – ${fmt(band.high)}` : '—'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">
+          ** Drift + volatility projection of this stock's own last 252 sessions
+          (measured annualized drift ${fmt(data.horizonEstimates.driftAnnualPct, 1)}%, volatility ${fmt(data.horizonEstimates.volatilityAnnualPct, 1)}%):
+          center = close × e<sup>drift×days</sup>, range = ±1σ√t — the standard "expected move" math.
+          A projection of measured history, NOT a forecast or guarantee; the range widens fast with the
+          horizon, and anything beyond ~3 months is especially uncertain.
         </div>
       ` : ''}
 

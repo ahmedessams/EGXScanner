@@ -32,6 +32,21 @@ read as structurally weak.
 regardless of how clean its indicators look, because 60 days isn't enough to
 trust a full-cycle read.
 
+**Horizon estimates** (`horizonEstimates(closes)`): the standard
+drift + volatility ("expected move") framework professionals use when only
+price data is available. Over the trailing 252 sessions (at least 60 valid
+daily log returns required, else `null`), measure the stock's own mean daily
+log return (drift, μ) and its standard deviation (volatility, σ). The
+central estimate for a horizon of h trading days is `close × e^(μ·h)`,
+stored as `est_2w_pct` / `est_1m_pct` / `est_3m_pct` / `est_1y_pct`
+(h = 10/21/63/252) alongside `drift_annual_pct` and
+`volatility_annual_pct`; the dashboard derives prices and the ±1σ·√t
+uncertainty band from these. This is a projection of the stock's own
+measured history — it can be negative for weak stocks by construction, it
+is NOT a forecast, and the band widens with √t, so the 3-month and
+especially 1-year numbers are context, not predictions. Surfaced as
+hidden-by-default table columns and a "Horizon Estimates" drawer section.
+
 ## Support/Resistance (`code/supportResistance.js`)
 
 Swing highs/lows via a 5-bar fractal (2 bars each side must be strictly the

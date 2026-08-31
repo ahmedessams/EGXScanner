@@ -189,7 +189,15 @@ SELECT
     -- ai_rank_score to ai_stop_probability_pct"). Nothing reads these views
     -- positionally (n8n's Postgres node returns column-name-keyed JSON), so
     -- the ordering has no functional effect.
-    res.ai_stop_probability_pct::float8 AS ai_stop_probability_pct
+    res.ai_stop_probability_pct::float8 AS ai_stop_probability_pct,
+    -- Horizon estimates (2026-09-01, append-only as above): drift+volatility
+    -- projection of the stock's own trailing-252-session log returns.
+    ta.est_2w_pct::float8 AS est_2w_pct,
+    ta.est_1m_pct::float8 AS est_1m_pct,
+    ta.est_3m_pct::float8 AS est_3m_pct,
+    ta.est_1y_pct::float8 AS est_1y_pct,
+    ta.drift_annual_pct::float8 AS drift_annual_pct,
+    ta.volatility_annual_pct::float8 AS volatility_annual_pct
 
 FROM stocks s
 LEFT JOIN v_latest_prices lp ON lp.stock_id = s.id
@@ -294,7 +302,15 @@ RETURNS SETOF v_full_market AS $$
       -- Same column order as v_full_market's SELECT list, appended at the
       -- end (see the comment on that view's definition) — this function's
       -- RETURNS SETOF v_full_market requires an exact positional match.
-      res.ai_stop_probability_pct::float8 AS ai_stop_probability_pct
+      res.ai_stop_probability_pct::float8 AS ai_stop_probability_pct,
+      -- Horizon estimates (2026-09-01, append-only as above): drift+volatility
+      -- projection of the stock's own trailing-252-session log returns.
+      ta.est_2w_pct::float8 AS est_2w_pct,
+      ta.est_1m_pct::float8 AS est_1m_pct,
+      ta.est_3m_pct::float8 AS est_3m_pct,
+      ta.est_1y_pct::float8 AS est_1y_pct,
+      ta.drift_annual_pct::float8 AS drift_annual_pct,
+      ta.volatility_annual_pct::float8 AS volatility_annual_pct
 
   FROM stocks s
   CROSS JOIN anchor a
@@ -398,7 +414,13 @@ SELECT
     -- lp.close: the latter is the latest/anchored close, which differs from
     -- the scan date when browsing history). Append-only, as above.
     ((rf.next_high_estimate - rf.close) / NULLIF(rf.close, 0) * 100)::float8 AS next_day_high_estimate_pct,
-    ((rf.next_low_estimate - rf.close) / NULLIF(rf.close, 0) * 100)::float8 AS next_day_low_estimate_pct
+    ((rf.next_low_estimate - rf.close) / NULLIF(rf.close, 0) * 100)::float8 AS next_day_low_estimate_pct,
+    -- Horizon estimates (2026-09-01, append-only as above): drift projection
+    -- of the stock's own trailing-252-session log returns, as of the run date.
+    ta.est_2w_pct::float8 AS est_2w_pct,
+    ta.est_1m_pct::float8 AS est_1m_pct,
+    ta.est_3m_pct::float8 AS est_3m_pct,
+    ta.est_1y_pct::float8 AS est_1y_pct
 FROM scanner_results res
 JOIN scanner_runs run ON run.id = res.scanner_run_id
 JOIN stocks s ON s.id = res.stock_id

@@ -207,6 +207,59 @@ function relativeVolume(volumes, period) {
 }
 
 /**
+ * Horizon estimates (drift + volatility projection — the standard "expected
+ * move" framework professionals use when only price data is available):
+ * over the trailing `lookback` sessions (up to 252, requiring at least
+ * `minReturns` valid daily log returns), measure the stock's own mean daily
+ * log return (drift, mu) and its standard deviation (volatility, sigma).
+ * The central estimate for a horizon of h trading days is close * e^(mu*h),
+ * reported as a percentage; the +/-1 sigma*sqrt(h) band (derivable from the
+ * annualized volatility also returned) expresses how uncertain that center
+ * is. This is a projection of the stock's own measured history — NOT a
+ * forecast, and it can be negative for weak stocks by construction.
+ *
+ * Returns arrays aligned with `closes`, null where history is insufficient:
+ * { driftAnnualPct, volatilityAnnualPct, est2wPct, est1mPct, est3mPct, est1yPct }
+ * (horizons: 10 / 21 / 63 / 252 trading days).
+ */
+function horizonEstimates(closes, lookback = 252, minReturns = 60) {
+  const n = closes.length;
+  const logReturns = new Array(n).fill(null);
+  for (let i = 1; i < n; i++) {
+    if (isNumber(closes[i]) && isNumber(closes[i - 1]) && closes[i] > 0 && closes[i - 1] > 0) {
+      logReturns[i] = Math.log(closes[i] / closes[i - 1]);
+    }
+  }
+
+  const out = {
+    driftAnnualPct: new Array(n).fill(null),
+    volatilityAnnualPct: new Array(n).fill(null),
+    est2wPct: new Array(n).fill(null),
+    est1mPct: new Array(n).fill(null),
+    est3mPct: new Array(n).fill(null),
+    est1yPct: new Array(n).fill(null),
+  };
+
+  for (let i = 0; i < n; i++) {
+    const window = logReturns.slice(Math.max(1, i - lookback + 1), i + 1).filter(isNumber);
+    const k = window.length;
+    if (k < minReturns) continue;
+
+    const mean = window.reduce((a, b) => a + b, 0) / k;
+    const variance = window.reduce((s, v) => s + (v - mean) * (v - mean), 0) / (k - 1);
+    const sigma = Math.sqrt(variance);
+
+    out.driftAnnualPct[i] = (Math.exp(mean * 252) - 1) * 100;
+    out.volatilityAnnualPct[i] = sigma * Math.sqrt(252) * 100;
+    out.est2wPct[i] = (Math.exp(mean * 10) - 1) * 100;
+    out.est1mPct[i] = (Math.exp(mean * 21) - 1) * 100;
+    out.est3mPct[i] = (Math.exp(mean * 63) - 1) * 100;
+    out.est1yPct[i] = (Math.exp(mean * 252) - 1) * 100;
+  }
+  return out;
+}
+
+/**
  * Computes the full technical_analysis row set for every bar of a sorted
  * candle series. Returns an array aligned with `candles`; each element is
  * either null (insufficient history at that index for ANY indicator we still
@@ -254,6 +307,8 @@ function calculateAllIndicators(candles) {
   const low20 = rollingLow(candles, 20);
   const low50 = rollingLow(candles, 50);
   const low252 = rollingLow(candles, 252);
+
+  const horizons = horizonEstimates(closes);
 
   return candles.map((c, i) => {
     const distance52wHigh = isNumber(high252[i]) ? ((c.close - high252[i]) / high252[i]) * 100 : null;
@@ -320,6 +375,13 @@ function calculateAllIndicators(candles) {
 
       distance52wHigh: round(distance52wHigh, 4),
       distance52wLow: round(distance52wLow, 4),
+
+      driftAnnualPct: round(horizons.driftAnnualPct[i], 4),
+      volatilityAnnualPct: round(horizons.volatilityAnnualPct[i], 4),
+      est2wPct: round(horizons.est2wPct[i], 4),
+      est1mPct: round(horizons.est1mPct[i], 4),
+      est3mPct: round(horizons.est3mPct[i], 4),
+      est1yPct: round(horizons.est1yPct[i], 4),
     };
   });
 }
@@ -373,6 +435,7 @@ module.exports = {
   rollingLow,
   averageVolume,
   relativeVolume,
+  horizonEstimates,
   calculateAllIndicators,
   classifyTrend,
 };
