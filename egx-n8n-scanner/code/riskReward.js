@@ -124,20 +124,31 @@ function estimateDaysToTarget(entry, target, atr14) {
  * is missing/already passed, falls back to an ATR multiple projection
  * (1.5x / 2.5x / 3.5x ATR from entry) so a target is still an evidence-based
  * projection, never a fixed arbitrary percentage.
+ *
+ * The ladder is strictly ascending (entry < T1 < T2 < T3): an ATR fallback
+ * rung at or below the previous target is skipped rather than emitted, so a
+ * single far-away real resistance at T1 can never be followed by a CHEAPER
+ * "T2"/"T3" (a real inversion observed live: T1 22.40 from resistance, then
+ * fallbacks 20.94/22.17 below it). Better an honest null than a fabricated
+ * lower target.
  */
 function deriveTargets({ entry, close, atr, resistances }) {
   const candidates = resistances.filter((r) => isNumber(r) && r > entry);
+  const atrTargets = isNumber(atr) ? [1.5, 2.5, 3.5].map((m) => entry + atr * m) : [];
   const targets = [];
+  let atrIdx = 0;
+  let prev = null;
 
   for (let i = 0; i < 3; i++) {
-    if (candidates[i] !== undefined) {
-      targets.push(candidates[i]);
-    } else if (isNumber(atr)) {
-      const multiple = [1.5, 2.5, 3.5][i];
-      targets.push(entry + atr * multiple);
+    let next = null;
+    if (candidates[i] !== undefined && (prev === null || candidates[i] > prev)) {
+      next = candidates[i];
     } else {
-      targets.push(null);
+      while (atrIdx < atrTargets.length && prev !== null && atrTargets[atrIdx] <= prev) atrIdx++;
+      if (atrIdx < atrTargets.length) next = atrTargets[atrIdx++];
     }
+    targets.push(next);
+    if (next !== null) prev = next;
   }
   return targets;
 }
