@@ -140,7 +140,7 @@ toggle; older n8n versions use the Active toggle directly.
 | `GET /webhook/egx/stocks/volume` | Sorted by raw volume. `?date=YYYY-MM-DD` |
 | `GET /webhook/egx/stocks/relative-volume` | Sorted by RVOL20. `?date=YYYY-MM-DD` |
 | `GET /webhook/egx/top` | Overall Top N (eligible only). `?limit=`, `?date=YYYY-MM-DD` |
-| `GET /webhook/egx/top-picks` | Curated Top 3 trade ideas: eligible Top 10 picks filtered to ≥5% potential gain to Target 1, capped at 3 rows — fewer (down to zero) on a day nothing clears the bar. `?date=YYYY-MM-DD` |
+| `GET /webhook/egx/top-picks` | Curated Top 3 trade ideas: eligible Top 10 picks that pass all three gates — ≥5% potential gain to Target 1; a measured ≥50% Target-1 hit rate on ≥20 past Top-10 picks of the same setup type with a similar-size target (0.6×–1.5×, same market, runs strictly before this one); AI P(T1) ≥40% when assessed. Capped at 3 rows, never lower than rank 10 — fewer (down to zero) on a day nothing clears the bar. Each row adds `similar_n`, `similar_target1_hit_pct`, `similar_stop_hit_pct`. Walk-forward check (2026-09-02): US 47.8%→61.8% hit, 17.4%→5.9% stop, mean realized +2.25%→+4.34% (34 of 69 picks kept); EGX neutral within noise (59.5%→61.5% hit, 15.0%→17.8% stop, +3.33%→+3.14%). `?date=YYYY-MM-DD`, `?market=` |
 | `GET /webhook/egx/breakout` | Top N by breakout_score. `?date=YYYY-MM-DD` |
 | `GET /webhook/egx/momentum` | Top N by momentum_score. `?date=YYYY-MM-DD` |
 | `GET /webhook/egx/pullback` | Top N by pullback_score. `?date=YYYY-MM-DD` |
