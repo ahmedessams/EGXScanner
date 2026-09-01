@@ -185,11 +185,40 @@ confident call than one scoring 90 with reversal also at 85.
 
 Entry/invalidation/targets are ALWAYS derived from real support/resistance
 levels or ATR multiples actually present in the data — never an arbitrary
-fixed percentage. Targets prefer real resistance levels above entry; when
-fewer than 3 exist, later targets fall back to ATR multiples (1.5×/2.5×/3.5×
-from entry). Any risk/reward calculation where `risk <= 0` (invalidation at
-or above entry) is rejected outright (`null`), never silently clamped to a
-fake positive number.
+fixed percentage. Targets prefer real resistance levels above entry that
+clear the per-market floor `markets.min_target_gain_pct` (EGX 2% / US 1.5%
+— a level 0.3% above the close is daily noise, not a target); when fewer
+than 3 qualify, later rungs fall back to ATR multiples, and the ladder is
+kept strictly ascending (entry < T1 < T2 < T3, honest `null` over an
+invented lower rung). Any risk/reward calculation where `risk <= 0`
+(invalidation at or above entry) is rejected outright (`null`), never
+silently clamped to a fake positive number.
+
+**Per-market ATR stop (`markets.atr_stop_mult`, EGX 2.0 / US 1.5).** The
+ATR-based stop used by MOMENTUM / ACCUMULATION / default setups (and as the
+BREAKOUT fallback when no support exists) sits `m × ATR14` below entry, and
+the ATR target ladder is derived from the same multiple as `(m, m+1, m+2) ×
+ATR`, so the fallback Target-1 R:R is exactly 1.0 by construction whatever
+`m` is. PULLBACK / REVERSAL stops (support × 0.985, or 1.2 × ATR) are not
+affected. Workflow 11 reads the value from `Load Market Config`.
+
+Why 2.0 for EGX and not US: the scoring-lab replay (`scripts/scoring-lab.js`,
+run 2026-09-02 over 510 BACKTEST + 87 LIVE-era Top-10 picks for EGX and
+440 + 70 for US) compared a dozen candidate variants on gain-aware metrics
+(hit / stop-out / expired rates, median gain at T1, mean and median realized
+%, expectancy in R, target-free 10-session forward return) and required an
+improvement on **both** the backtest slice and the live-era slice before
+anything shipped — the 2026-08-24 calibration that was rolled back had won
+on hit rate alone. On EGX, `atr_stop_mult = 2.0` cut stop-outs from 16.1% to
+10.0% (live slice 26.4% → 15.7%) at an unchanged ~49% hit rate and raised
+mean realized gain from +1.59% to +1.98% (live +1.02% → +2.20%). On US the
+same change did not help and no other variant was robust on both slices, so
+US keeps 1.5. Variants that were **rejected** because they lowered the EGX
+hit rate 3–9 points or flipped sign on the live slice: RSI overbought
+penalties (>70 / >65), a stronger momentum overextension penalty, blending
+the historical probability into the rank (20% / 30%), shifting weight toward
+mean-reversion factors, an accumulation boost, and requiring T1 R:R ≥ 1.5.
+Any future retune must clear the same two-slice bar.
 
 **Potential gain % and estimated days to target** (`target1_gain_pct` /
 `target1_estimated_days` etc., spec: user-requested addition beyond the

@@ -86,3 +86,50 @@ console.log("riskReward.test.js: all assertions passed");
 }
 
 console.log("riskReward.test.js: float-boundary assertions passed");
+
+// markets.atr_stop_mult (2026-09-02): the stop and the ATR target ladder
+// scale together, so the fallback T1 R:R is exactly 1.0 for any multiple.
+{
+  const base = { close: 10, atr14: 1, resistances: [null, null, null], supports: [null, null, null], setupType: "MOMENTUM" };
+  const d = buildTradeStructure(base); // no multiple given -> legacy 1.5
+  assert.strictEqual(d.invalidation, 8.5);
+  assert.deepStrictEqual([d.target1, d.target2, d.target3], [11.5, 12.5, 13.5]);
+  assert.strictEqual(d.riskRewardT1, 1);
+
+  const e = buildTradeStructure({ ...base, atrStopMult: 2 }); // EGX setting
+  assert.strictEqual(e.invalidation, 8);
+  assert.deepStrictEqual([e.target1, e.target2, e.target3], [12, 13, 14]);
+  assert.strictEqual(e.riskRewardT1, 1);
+  assert.strictEqual(e.target1EstimatedDays, 4);
+
+  // Real resistances are untouched by the multiple; only the stop moves.
+  const f = buildTradeStructure({ ...base, resistances: [11, 12, 13], atrStopMult: 2 });
+  assert.deepStrictEqual([f.target1, f.target2, f.target3], [11, 12, 13]);
+  assert.strictEqual(f.invalidation, 8);
+  assert.strictEqual(f.riskRewardT1, 0.5);
+
+  // A support-based stop (BREAKOUT with s1) ignores the multiple entirely.
+  const g = buildTradeStructure({ ...base, setupType: "BREAKOUT", resistances: [11, null, null], supports: [9.5, null, null], atrStopMult: 2 });
+  assert.strictEqual(g.invalidation, 9.5);
+
+  // Garbage multiples fall back to 1.5 instead of producing a null stop.
+  for (const bad of [0, -1, null, undefined, "2", NaN]) {
+    assert.strictEqual(buildTradeStructure({ ...base, atrStopMult: bad }).invalidation, 8.5, `bad multiple ${bad}`);
+  }
+}
+
+// markets.min_target_gain_pct floor: a resistance closer than the floor is
+// skipped and the ATR ladder takes over from the first rung that clears it.
+{
+  const r = buildTradeStructure({
+    close: 100, atr14: 1, resistances: [100.5, 101.2, 106], supports: [null, null, null],
+    setupType: "MOMENTUM", minGainPct: 2, atrStopMult: 2,
+  });
+  // 100.5 (0.5%) and 101.2 (1.2%) fail the 2% floor; 106 (6%) passes.
+  // Rungs: 102 (2%) is >= floor, then 103, 104 — but a real level wins slot 0.
+  assert.strictEqual(r.target1, 106);
+  assert.ok(r.target2 === null || r.target2 > 106, `T2 must clear T1 or be null, got ${r.target2}`);
+  assert.ok(r.target1GainPct >= 2);
+}
+
+console.log("riskReward.test.js: atr_stop_mult / min-gain-floor assertions passed");

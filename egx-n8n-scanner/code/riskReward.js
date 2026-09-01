@@ -16,11 +16,28 @@ const { isNumber, round, safeDivide } = require("./helpers");
  * `supports` — [support1, support2, support3] (nulls allowed).
  * `setupType` — one of BREAKOUT | MOMENTUM | PULLBACK | REVERSAL | ACCUMULATION.
  *
+ * `minGainPct` (markets.min_target_gain_pct, e.g. EGX 2 / US 1.5): the
+ * minimum distance above entry for a level to count as Target 1. Added
+ * 2026-08-30: a resistance 0.3% above the close is not a trade target — it
+ * is reached by daily noise — yet the outcome evaluation counted every such
+ * touch as a success, which let the rolled-back 08-24 calibration fill the
+ * Top 10 with near-worthless targets.
+ *
+ * `atrStopMult` (markets.atr_stop_mult, EGX 2.0 / US 1.5): ATR multiple
+ * below entry for the ATR-based stop. The ATR target ladder is derived from
+ * it as (m, m+1, m+2) x ATR, so the fallback Target-1 R:R is exactly 1.0 by
+ * construction whatever the multiple. Backed by the scoring-lab replay
+ * (scripts/scoring-lab.js, 2026-09-02): on EGX 2.0 halved the stop-out rate
+ * at an unchanged hit rate and raised mean realized gain ~25%; on US it did
+ * not help, so US keeps 1.5.
+ *
  * Returns { entry, invalidation, target1, target2, target3, riskRewardT1/2/3 }.
  * Any field that cannot be derived from real structure is left null rather
  * than guessed.
  */
-function buildTradeStructure({ close, atr14, resistances = [], supports = [], setupType }) {
+const DEFAULT_ATR_STOP_MULT = 1.5;
+
+function buildTradeStructure({ close, atr14, resistances = [], supports = [], setupType, minGainPct, atrStopMult }) {
   if (!isNumber(close)) {
     return emptyStructure();
   }
@@ -28,6 +45,7 @@ function buildTradeStructure({ close, atr14, resistances = [], supports = [], se
   const [r1, r2, r3] = resistances;
   const [s1, s2, s3] = supports;
   const atr = isNumber(atr14) ? atr14 : null;
+  const stopMult = isNumber(atrStopMult) && atrStopMult > 0 ? atrStopMult : DEFAULT_ATR_STOP_MULT;
 
   let entry = null;
   let invalidation = null;
@@ -37,12 +55,12 @@ function buildTradeStructure({ close, atr14, resistances = [], supports = [], se
       // Entry triggers on a confirmed break above resistance1 (small buffer);
       // invalidation sits just below the breakout level / recent support.
       entry = isNumber(r1) ? r1 * 1.002 : close;
-      invalidation = isNumber(s1) ? s1 : (atr ? close - atr * 1.5 : null);
+      invalidation = isNumber(s1) ? s1 : (atr ? close - atr * stopMult : null);
       break;
 
     case "MOMENTUM":
       entry = close;
-      invalidation = atr ? close - atr * 1.5 : (isNumber(s1) ? s1 : null);
+      invalidation = atr ? close - atr * stopMult : (isNumber(s1) ? s1 : null);
       break;
 
     case "PULLBACK":
@@ -57,10 +75,13 @@ function buildTradeStructure({ close, atr14, resistances = [], supports = [], se
 
     default:
       entry = close;
-      invalidation = atr ? close - atr * 1.5 : null;
+      invalidation = atr ? close - atr * stopMult : null;
   }
 
-  const targets = deriveTargets({ entry: entry ?? close, close, atr, resistances: [r1, r2, r3] });
+  const targets = deriveTargets({
+    entry: entry ?? close, close, atr, resistances: [r1, r2, r3], minGainPct,
+    atrMultiples: [stopMult, stopMult + 1, stopMult + 2],
+  });
   const risk = isNumber(entry) && isNumber(invalidation) ? entry - invalidation : null;
 
   const withRR = targets.map((t) => ({
@@ -125,10 +146,12 @@ function estimateDaysToTarget(entry, target, atr14) {
 }
 
 /**
- * Targets prefer real resistance levels above entry; when a resistance slot
- * is missing/already passed, falls back to an ATR multiple projection
- * (1.5x / 2.5x / 3.5x ATR from entry) so a target is still an evidence-based
- * projection, never a fixed arbitrary percentage.
+ * Targets prefer real resistance levels above entry that clear the minimum
+ * meaningful distance (`minGainPct`); remaining slots fall back to ATR
+ * multiples (`atrMultiples`, default 1.5x / 2.5x / 3.5x from entry) that
+ * also clear it, so a target is still an evidence-based projection, never a
+ * fixed arbitrary percentage. A stock so quiet that even the top rung is
+ * below the floor gets no target (null) rather than an invented one.
  *
  * The ladder is strictly ascending (entry < T1 < T2 < T3): an ATR fallback
  * rung at or below the previous target is skipped rather than emitted, so a
@@ -137,9 +160,12 @@ function estimateDaysToTarget(entry, target, atr14) {
  * fallbacks 20.94/22.17 below it). Better an honest null than a fabricated
  * lower target.
  */
-function deriveTargets({ entry, close, atr, resistances }) {
-  const candidates = resistances.filter((r) => isNumber(r) && r > entry);
-  const atrTargets = isNumber(atr) ? [1.5, 2.5, 3.5].map((m) => entry + atr * m) : [];
+function deriveTargets({ entry, close, atr, resistances, minGainPct, atrMultiples = [1.5, 2.5, 3.5] }) {
+  const floor = isNumber(minGainPct) && minGainPct > 0 ? entry * (1 + minGainPct / 100) : entry;
+  const candidates = resistances.filter((r) => isNumber(r) && r > entry && r >= floor);
+  const atrTargets = isNumber(atr)
+    ? atrMultiples.map((m) => entry + atr * m).filter((t) => t > entry && t >= floor)
+    : [];
   const targets = [];
   let atrIdx = 0;
   let prev = null;

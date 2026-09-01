@@ -70,8 +70,18 @@ CREATE TABLE IF NOT EXISTS markets (
     -- calibration incident: a resistance 0.3% away counts as a "hit" ~80% of
     -- the time, which let the ranking game the hit-rate metric with
     -- worthless targets. Seeded per market in 004-seed-settings.sql.
-    min_target_gain_pct   NUMERIC(5,2) NOT NULL DEFAULT 2.00
+    min_target_gain_pct   NUMERIC(5,2) NOT NULL DEFAULT 2.00,
+    -- ATR multiple below entry for the MOMENTUM/ACCUMULATION/default stop
+    -- (and the BREAKOUT fallback when no support exists). The ATR target
+    -- ladder is derived from it as (m, m+1, m+2) x ATR so Target-1 R:R stays
+    -- exactly 1.0 by construction. Added 2026-09-02 from the scoring-lab
+    -- replay (scripts/scoring-lab.js): on EGX, 2.0 cut the stop-out rate
+    -- from 16.1% to 10.0% (live slice 26.4% -> 15.7%) at an unchanged hit
+    -- rate and +25% mean realized gain; on US it did not help, so US stays
+    -- at the original 1.5. Seeded per market in 004-seed-settings.sql.
+    atr_stop_mult         NUMERIC(4,2) NOT NULL DEFAULT 1.50
 );
+ALTER TABLE markets ADD COLUMN IF NOT EXISTS atr_stop_mult NUMERIC(4,2) NOT NULL DEFAULT 1.50;
 
 COMMENT ON TABLE markets IS 'Multi-market configuration: one row per market the pipeline can scan (currency, timezone, EODHD exchange code, per-market liquidity thresholds). Seeded in 004-seed-settings.sql.';
 COMMENT ON COLUMN markets.active IS 'Whether this market has an automatic daily Schedule Trigger in 12-egx-daily-master-workflow — not the same as "exists and is manually runnable", which any row here already is.';
