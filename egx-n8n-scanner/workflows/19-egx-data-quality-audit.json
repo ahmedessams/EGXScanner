@@ -1,0 +1,141 @@
+{
+  "name": "19 - EGX Data Quality Audit",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {},
+      "id": "9065da50-7274-40cd-a317-6af8c7db0457"
+    },
+    {
+      "name": "Flag OHLCV-Identical Pairs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH recent AS (SELECT stock_id, trading_date, close, high, low, volume FROM daily_prices WHERE trading_date > CURRENT_DATE - INTERVAL '45 days'), pairs AS (SELECT a.stock_id AS id1, b.stock_id AS id2, COUNT(*)::int AS same_days FROM recent a JOIN recent b ON b.trading_date = a.trading_date AND b.stock_id > a.stock_id AND b.close = a.close AND b.high = a.high AND b.low = a.low AND b.volume = a.volume GROUP BY a.stock_id, b.stock_id HAVING COUNT(*) >= 15), flagged AS (SELECT s1.symbol AS sym1, s2.symbol AS sym2, s1.exchange, p.same_days FROM pairs p JOIN stocks s1 ON s1.id = p.id1 JOIN stocks s2 ON s2.id = p.id2 WHERE s1.active AND s2.active AND NOT s1.excluded AND NOT s2.excluded), ins AS (INSERT INTO workflow_errors (workflow_name, symbol, error_message, payload) SELECT '19-egx-data-quality-audit', f.sym1 || '/' || f.sym2, 'Probable duplicate listing: identical OHLCV on ' || f.same_days || ' of the last ~30 sessions. Review and set stocks.excluded = TRUE (and active = FALSE) on the alias symbol.', jsonb_build_object('exchange', f.exchange, 'symbols', ARRAY[f.sym1, f.sym2], 'sameDays', f.same_days) FROM flagged f RETURNING 1) SELECT (SELECT COUNT(*) FROM ins)::int AS ohlcv_pairs_flagged;",
+        "options": {}
+      },
+      "id": "bcae55fc-6faf-49bc-8303-6e1cc68e63ba",
+      "executeOnce": true
+    },
+    {
+      "name": "Flag Stale Shared-ISIN Pairs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH isin_pairs AS (SELECT s1.id AS id1, s2.id AS id2, s1.symbol AS sym1, s2.symbol AS sym2, s1.exchange, s1.isin FROM stocks s1 JOIN stocks s2 ON s2.exchange = s1.exchange AND s2.isin = s1.isin AND s2.id > s1.id WHERE s1.active AND s2.active AND NOT s1.excluded AND NOT s2.excluded AND s1.isin IS NOT NULL AND s1.isin <> ''), enriched AS (SELECT p.*, (SELECT MAX(trading_date) FROM daily_prices WHERE stock_id = p.id1) AS last1, (SELECT MAX(trading_date) FROM daily_prices WHERE stock_id = p.id2) AS last2 FROM isin_pairs p), stale AS (SELECT * FROM enriched WHERE LEAST(last1, last2) < CURRENT_DATE - 10), ins AS (INSERT INTO workflow_errors (workflow_name, symbol, error_message, payload) SELECT '19-egx-data-quality-audit', s.sym1 || '/' || s.sym2, 'Shared ISIN ' || s.isin || ' and one side has no prices in 10+ days - likely a ticker rename leftover. Review and set stocks.excluded on the stale symbol.', jsonb_build_object('exchange', s.exchange, 'symbols', ARRAY[s.sym1, s.sym2], 'isin', s.isin, 'lastPriceDays', ARRAY[s.last1::text, s.last2::text]) FROM stale s RETURNING 1) SELECT (SELECT COUNT(*) FROM ins)::int AS stale_isin_pairs_flagged;",
+        "options": {}
+      },
+      "id": "bde16391-5907-49b6-b683-21a7762c996a",
+      "executeOnce": true
+    },
+    {
+      "name": "Build Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const isin = $input.first().json.stale_isin_pairs_flagged;\nconst ohlcv = $('Flag OHLCV-Identical Pairs').first().json.ohlcv_pairs_flagged;\nreturn [{ json: {\n  workflow: '19-egx-data-quality-audit',\n  finishedAt: new Date().toISOString(),\n  ohlcvPairsFlagged: ohlcv,\n  staleIsinPairsFlagged: isin,\n  message: `Data quality audit done. ${ohlcv} OHLCV-identical pair(s) and ${isin} stale shared-ISIN pair(s) flagged into workflow_errors.`,\n} }];"
+      },
+      "id": "5ae3968a-aa36-473e-9791-8dcea013e075"
+    },
+    {
+      "name": "Schedule Trigger (Weekly)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        192
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 5 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "92dc0410-0607-4409-a3f0-cb4e73bc9172"
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Flag OHLCV-Identical Pairs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flag OHLCV-Identical Pairs": {
+      "main": [
+        [
+          {
+            "node": "Flag Stale Shared-ISIN Pairs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flag Stale Shared-ISIN Pairs": {
+      "main": [
+        [
+          {
+            "node": "Build Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger (Weekly)": {
+      "main": [
+        [
+          {
+            "node": "Flag OHLCV-Identical Pairs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "rapkAM8ryTJAAHZE",
+  "tags": []
+}

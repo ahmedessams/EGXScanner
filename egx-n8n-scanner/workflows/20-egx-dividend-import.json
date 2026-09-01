@@ -1,0 +1,256 @@
+{
+  "name": "20 - EGX Dividend Import",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Weekly Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        80
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                5
+              ],
+              "triggerAtHour": 18,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "20315f62-cd9e-4f25-8105-2c8fcd3109b7"
+    },
+    {
+      "name": "Load Active Stocks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        224,
+        192
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, symbol FROM stocks WHERE exchange = 'EGX' AND active = TRUE ORDER BY symbol;",
+        "options": {}
+      },
+      "id": "998577ad-bd7e-4c9d-b02a-03b7f119bd0b",
+      "executeOnce": true
+    },
+    {
+      "name": "Summarize",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*)::int AS dividend_rows, COUNT(DISTINCT stock_id)::int AS stocks_with_dividends, MAX(ex_date)::text AS latest_ex_date FROM dividends;",
+        "options": {}
+      },
+      "id": "64c34a82-4bd8-42b5-aea7-0d93f134f0de",
+      "executeOnce": true
+    },
+    {
+      "name": "Fetch Dividends",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        672,
+        192
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.MARKET_API_BASE_URL }}/div/{{ $json.symbol }}.EGX",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "api_token",
+              "value": "={{ $env.MARKET_API_KEY }}"
+            },
+            {
+              "name": "fmt",
+              "value": "json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "816fe09f-474a-4c48-9ef9-76b27dca2d5a",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Normalize Dividends",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// One item per stock (fullResponse keeps array bodies from splitting).\n// A non-200 or non-array body degrades to zero rows for that stock —\n// never fails the whole import.\nconst items = $input.all();\nconst out = [];\nfor (let i = 0; i < items.length; i++) {\n  let stock;\n  try { stock = $('Loop Over Stocks (Batch)').itemMatching(i).json; } catch (e) { continue; }\n  const resp = items[i].json || {};\n  const body = (resp.statusCode === 200 && Array.isArray(resp.body)) ? resp.body : [];\n  const rows = body.filter((d) => d && d.date && !isNaN(Date.parse(d.date)));\n  out.push({ json: {\n    stockId: stock.id,\n    symbol: stock.symbol,\n    divCount: rows.length,\n    divsJson: JSON.stringify(rows.map((d) => ({ date: d.date, value: d.value, unadjustedValue: d.unadjustedValue, currency: d.currency }))),\n  } });\n}\nreturn out;"
+      },
+      "id": "4eadd6f4-ff34-4309-bfde-17e36d2cba02"
+    },
+    {
+      "name": "Upsert Dividends",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1120,
+        272
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO dividends (stock_id, ex_date, value, unadjusted_value, currency)\nSELECT $1,\n       (e->>'date')::date,\n       NULLIF(e->>'value', '')::numeric,\n       NULLIF(e->>'unadjustedValue', '')::numeric,\n       NULLIF(e->>'currency', '')\nFROM jsonb_array_elements($2::jsonb) e\nON CONFLICT (stock_id, ex_date) DO UPDATE SET\n  value = EXCLUDED.value,\n  unadjusted_value = EXCLUDED.unadjusted_value,\n  currency = EXCLUDED.currency;",
+        "options": {
+          "queryReplacement": "={{ [$json.stockId, $json.divsJson] }}"
+        }
+      },
+      "id": "ca4524f3-4c70-4493-a719-4f34f7acb410",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Loop Over Stocks (Batch)",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        448,
+        192
+      ],
+      "parameters": {
+        "batchSize": 25
+      },
+      "id": "907da3fe-f50e-4830-9d37-7617e8febc5e"
+    },
+    {
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        272
+      ],
+      "parameters": {},
+      "id": "cd7b07f5-1679-4649-b2fd-314ba9c7cc8b"
+    }
+  ],
+  "connections": {
+    "Weekly Schedule": {
+      "main": [
+        [
+          {
+            "node": "Load Active Stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Active Stocks": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Stocks (Batch)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Dividends": {
+      "main": [
+        [
+          {
+            "node": "Normalize Dividends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Dividends": {
+      "main": [
+        [
+          {
+            "node": "Upsert Dividends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Dividends": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Stocks (Batch)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Stocks (Batch)": {
+      "main": [
+        [
+          {
+            "node": "Summarize",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Dividends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Active Stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "tPNF0BByZDAlIG6t",
+  "tags": []
+}

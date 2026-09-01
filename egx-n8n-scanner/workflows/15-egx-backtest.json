@@ -49,7 +49,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "// the trigger lookup THROWS if that trigger never executed (e.g. this workflow\n// run via Manual Trigger alone) — confirmed via live E2E testing. try/catch\n// makes \"never executed\" and \"executed with zero items\" behave the same.\nlet trigger = {};\ntry {\n  const triggerItems = $('When Executed by Another Workflow').all();\n  trigger = triggerItems.length ? triggerItems[0].json : {};\n} catch (e) { trigger = {}; }\n\nconst today = new Date();\nconst defaultEnd = new Date(today);\ndefaultEnd.setDate(defaultEnd.getDate() - 1);\nconst defaultStart = new Date(defaultEnd);\ndefaultStart.setDate(defaultStart.getDate() - 90);\n\nconst startDate = trigger.startDate || defaultStart.toISOString().slice(0, 10);\nconst endDate = trigger.endDate || defaultEnd.toISOString().slice(0, 10);\nconst minimumScore = isFinite(Number(trigger.minimumScore)) ? Number(trigger.minimumScore) : 0;\nconst setupType = trigger.setupType || 'ANY';\nconst topN = Number(trigger.topN) || Number($env.TOP_N) || 10;\n\nreturn [{ json: { startDate, endDate, minimumScore, setupType, topN } }];"
+        "jsCode": "// the trigger lookup THROWS if that trigger never executed (e.g. this workflow\n// run via Manual Trigger alone) — confirmed via live E2E testing. try/catch\n// makes \"never executed\" and \"executed with zero items\" behave the same.\nlet trigger = {};\ntry {\n  const triggerItems = $('When Executed by Another Workflow').all();\n  trigger = triggerItems.length ? triggerItems[0].json : {};\n} catch (e) { trigger = {}; }\n\nconst today = new Date();\nconst defaultEnd = new Date(today);\ndefaultEnd.setDate(defaultEnd.getDate() - 1);\nconst defaultStart = new Date(defaultEnd);\ndefaultStart.setDate(defaultStart.getDate() - 90);\n\nconst startDate = trigger.startDate || defaultStart.toISOString().slice(0, 10);\nconst endDate = trigger.endDate || defaultEnd.toISOString().slice(0, 10);\nconst minimumScore = isFinite(Number(trigger.minimumScore)) ? Number(trigger.minimumScore) : 0;\nconst setupType = trigger.setupType || 'ANY';\nconst topN = Number(trigger.topN) || Number($env.TOP_N) || 10;\nconst market = trigger.market || 'EGX';\n// runType: 'BACKTEST' (default) replays production scoring into the real\n// history; 'MANUAL' is the experiment scope (paired with a non-default\n// scoringProfile) so candidate scorings can be compared side-by-side in\n// the Track Record without overwriting the BACKTEST rows or feeding\n// probability_stats. scoringProfile is passed through to workflow 11.\nconst runType = trigger.runType === 'MANUAL' ? 'MANUAL' : 'BACKTEST';\nconst scoringProfile = trigger.scoringProfile || 'default';\n\nreturn [{ json: { startDate, endDate, minimumScore, setupType, topN, market, runType, scoringProfile } }];"
       },
       "position": [
         520,
@@ -63,9 +63,9 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT DISTINCT trading_date::text AS trading_date FROM daily_prices\nWHERE trading_date BETWEEN $1 AND $2\nORDER BY trading_date ASC;",
+        "query": "SELECT DISTINCT dp.trading_date::text AS trading_date\nFROM daily_prices dp\nJOIN stocks s ON s.id = dp.stock_id\nWHERE s.exchange = $3 AND dp.trading_date BETWEEN $1 AND $2\nORDER BY trading_date ASC;",
         "options": {
-          "queryReplacement": "={{ [$json.startDate, $json.endDate] }}"
+          "queryReplacement": "={{ [$json.startDate, $json.endDate, $json.market] }}"
         }
       },
       "executeOnce": true,
@@ -96,7 +96,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const params = $('Resolve Backtest Parameters').first().json;\nconst dateRow = $input.first().json;\nreturn [{ json: {\n  asOfDate: dateRow.trading_date,\n  runType: 'BACKTEST',\n  minimumScore: params.minimumScore,\n  setupType: params.setupType,\n  topN: params.topN,\n} }];"
+        "jsCode": "const params = $('Resolve Backtest Parameters').first().json;\nconst dateRow = $input.first().json;\nreturn [{ json: {\n  asOfDate: dateRow.trading_date,\n  runType: params.runType || 'BACKTEST',\n  market: params.market,\n  scoringProfile: params.scoringProfile || 'default',\n  minimumScore: params.minimumScore,\n  setupType: params.setupType,\n  topN: params.topN,\n} }];"
       },
       "position": [
         1300,
@@ -111,7 +111,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType } }];"
+        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType, market: ctx.market } }];"
       },
       "position": [
         1560,
@@ -146,7 +146,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType } }];"
+        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType, market: ctx.market } }];"
       },
       "position": [
         2080,
@@ -181,7 +181,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType } }];"
+        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType, market: ctx.market } }];"
       },
       "position": [
         2600,
@@ -216,7 +216,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType } }];"
+        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType, market: ctx.market } }];"
       },
       "position": [
         260,
@@ -251,7 +251,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType } }];"
+        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType, market: ctx.market } }];"
       },
       "position": [
         780,
@@ -286,7 +286,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType } }];"
+        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType, market: ctx.market } }];"
       },
       "position": [
         1300,
@@ -321,7 +321,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType } }];"
+        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType, market: ctx.market } }];"
       },
       "position": [
         1820,
@@ -356,7 +356,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType } }];"
+        "jsCode": "const ctx = $('Capture Current Date').first().json;\nreturn [{ json: { asOfDate: ctx.asOfDate, runType: ctx.runType, market: ctx.market, scoringProfile: ctx.scoringProfile || 'default' } }];"
       },
       "position": [
         2340,
@@ -397,7 +397,8 @@
         0,
         400
       ],
-      "id": "4d437e67-7a2b-4814-a4a8-99514f63c5d9"
+      "id": "4d437e67-7a2b-4814-a4a8-99514f63c5d9",
+      "webhookId": "c0d1e370-7376-4e60-b72c-1590d00f216d"
     },
     {
       "name": "Prep for 14",
@@ -406,7 +407,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "return [{ json: { runType: 'BACKTEST' } }];"
+        "jsCode": "const params = $('Resolve Backtest Parameters').first().json;\nreturn [{ json: { runType: params.runType || 'BACKTEST', market: params.market } }];"
       },
       "position": [
         260,
@@ -765,7 +766,10 @@
   },
   "pinData": {},
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "saveExecutionProgress": false,
+    "saveDataSuccessExecution": "none"
   },
   "staticData": null,
   "meta": {

@@ -181,7 +181,7 @@
           },
           "conditions": [
             {
-              "id": "a58fb95d-8a86-4bf8-8727-689eb21a4c60",
+              "id": "f578789a-d583-4bff-8651-9fc1edee7578",
               "leftValue": "={{ $json._valid }}",
               "rightValue": "",
               "operator": {
@@ -261,7 +261,8 @@
         0,
         200
       ],
-      "id": "070b531c-db4d-4f0b-94bd-28cc68431184"
+      "id": "070b531c-db4d-4f0b-94bd-28cc68431184",
+      "webhookId": "01460adf-eaed-4bb2-8e24-11e8b0cf3eba"
     },
     {
       "name": "Count Imported Rows",
@@ -456,7 +457,8 @@
   },
   "pinData": {},
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "availableInMCP": true
   },
   "staticData": null,
   "meta": {

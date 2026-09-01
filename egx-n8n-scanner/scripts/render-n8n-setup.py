@@ -41,12 +41,17 @@ PUBLISH_ORDER = [
     "09-egx-pullback-scanner.json",
     "10-egx-reversal-scanner.json",
     "11-egx-overall-ranking.json",
+    "16-egx-target-window-evaluation.json",
     "17-egx-ai-assessment.json",
+    "18-egx-range-forecast.json",
+    # 12 last among the callers: its Execute Workflow nodes reference 16/17/18
+    # (and 01-11), which must already be published for n8n's publish validation.
     "12-egx-daily-master-workflow.json",
     "13-egx-report-api.json",
     "14-egx-prediction-evaluation.json",
     "15-egx-backtest.json",
-    "16-egx-target-window-evaluation.json",
+    "19-egx-data-quality-audit.json",
+    "20-egx-dividend-import.json",
 ]
 
 

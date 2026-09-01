@@ -67,7 +67,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "// the trigger lookup THROWS if that trigger never executed (e.g. this workflow\n// run via Manual Trigger alone) — confirmed via live E2E testing. try/catch\n// makes \"never executed\" and \"executed with zero items\" behave the same.\nlet trigger = {};\ntry {\n  const triggerItems = $('When Executed by Another Workflow').all();\n  trigger = triggerItems.length ? triggerItems[0].json : {};\n} catch (e) { trigger = {}; }\nconst asOfDate = trigger.asOfDate || new Date().toISOString().slice(0, 10);\nconst backfillAll = trigger.backfillAll === true;\n\nreturn $input.all().map((item) => ({\n  json: { ...item.json, asOfDate, backfillAll },\n}));"
+        "jsCode": "let trigger = {};\ntry {\n  const triggerItems = $('When Executed by Another Workflow').all();\n  trigger = triggerItems.length ? triggerItems[0].json : {};\n} catch (e) { trigger = {}; }\nconst asOfDate = trigger.asOfDate || new Date().toISOString().slice(0, 10);\nconst backfillAll = trigger.backfillAll === true;\n\nreturn $input.all().map((item) => ({\n  json: { ...item.json, asOfDate, backfillAll },\n}));"
       },
       "position": [
         780,
@@ -156,6 +156,19 @@
         0
       ],
       "id": "02ab0688-d129-4f2f-9882-9585c8f108d1"
+    },
+    {
+      "name": "Loop Over Stocks (Batch)",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1000,
+        -150
+      ],
+      "parameters": {
+        "batchSize": "={{ Number($env.TA_BATCH_SIZE) || 50 }}"
+      },
+      "id": "9ba60369-5a83-4ce3-8d41-bc93712bb9bf"
     }
   ],
   "connections": {
@@ -192,17 +205,6 @@
         ]
       ]
     },
-    "Attach As-Of Date": {
-      "main": [
-        [
-          {
-            "node": "Load Price History (as JSON array)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Load Price History (as JSON array)": {
       "main": [
         [
@@ -225,17 +227,6 @@
         ]
       ]
     },
-    "Upsert Technical Analysis": {
-      "main": [
-        [
-          {
-            "node": "Count Technical Analysis Rows",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Count Technical Analysis Rows": {
       "main": [
         [
@@ -246,11 +237,54 @@
           }
         ]
       ]
+    },
+    "Attach As-Of Date": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Stocks (Batch)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Stocks (Batch)": {
+      "main": [
+        [
+          {
+            "node": "Count Technical Analysis Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Price History (as JSON array)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Technical Analysis": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Stocks (Batch)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "saveExecutionProgress": false,
+    "saveDataSuccessExecution": "none"
   },
   "staticData": null,
   "meta": {

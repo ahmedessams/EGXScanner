@@ -59,36 +59,10 @@
       "id": "84d99f97-810f-495b-bff1-a3e58bb6b3c9"
     },
     {
-      "name": "Attach Market",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "let trigger = {};\ntry {\n  const triggerItems = $('When Executed by Another Workflow').all();\n  trigger = triggerItems.length ? triggerItems[0].json : {};\n} catch (e) { trigger = {}; }\nconst market = trigger.market || 'EGX';\nreturn [{ json: { market } }];"
-      },
-      "position": [
-        520,
-        0
-      ],
-      "id": "09095867-30bb-4e69-8812-030645bdb857"
-    },
-    {
       "name": "Fetch EGX Universe (CONFIGURE ENDPOINT)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "parameters": {
-        "method": "GET",
-        "url": "={{ $env.MARKET_API_BASE_URL }}/CONFIGURE-EXCHANGE-SYMBOL-LIST-ENDPOINT",
-        "options": {
-          "timeout": 30000,
-          "response": {
-            "response": {
-              "neverError": true
-            }
-          }
-        },
-        "sendQuery": true,
         "queryParameters": {
           "parameters": [
             {
@@ -102,13 +76,30 @@
             {
               "name": "fmt",
               "value": "json"
+            },
+            {
+              "name": "type",
+              "value": "common_stock"
             }
           ]
-        }
+        },
+        "method": "GET",
+        "url": "={{ $env.MARKET_API_BASE_URL }}/CONFIGURE-EXCHANGE-SYMBOL-LIST-ENDPOINT",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "jsonQuery": ""
       },
       "onError": "continueRegularOutput",
       "position": [
-        780,
+        520,
         0
       ],
       "id": "9bb24eef-8282-4859-b524-0449960ecd9c"
@@ -120,10 +111,10 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "// Normalizes a raw provider response into the internal stock-universe row shape:\n// { symbol, name, isin, sector, exchange, currency, _valid, errors[] }\n// Tolerant of shape differences between providers (array directly, or wrapped in\n// a \"data\"/\"symbols\" property) since the exact provider contract varies.\n//\n// IMPORTANT: n8n's HTTP Request node auto-splits a top-level JSON ARRAY\n// response into one item per element — confirmed via live E2E testing\n// against EODHD's exchange-symbol-list endpoint (241 real tickers arrived\n// as 241 separate items, not one item holding a 241-element array). Must\n// use $input.all(), not $input.first().\nconst exchange = $('Attach Market').first().json.market;\nconst items = $input.all().map((i) => i.json);\n\nfunction looksLikeSymbolRecord(v) {\n  return v && typeof v === 'object' && !Array.isArray(v)\n    && (v.Code || v.symbol || v.Symbol || v.ticker);\n}\n\nlet list;\nif (items.length > 1 || looksLikeSymbolRecord(items[0])) {\n  // Auto-split case: every item IS already one symbol object (also covers\n  // the single-ticker edge case, detected by shape rather than count).\n  list = items;\n} else {\n  // Single-item case wrapping an array, e.g. { data: [...] }.\n  const raw = items[0];\n  list = raw;\n  if (!Array.isArray(list)) {\n    list = (raw && (raw.data || raw.symbols || raw.results)) || [];\n  }\n}\nif (!Array.isArray(list)) {\n  throw new Error('Provider response for the stock universe was not a recognizable list. Check the HTTP Request node URL/response shape.');\n}\n\nconst rows = list.map((entry) => {\n  const symbol = entry.Code || entry.symbol || entry.Symbol || entry.ticker || null;\n  const name = entry.Name || entry.name || entry.CompanyName || null;\n  const isin = entry.Isin || entry.isin || null;\n  const sector = entry.Sector || entry.sector || null;\n  // Provider-supplied currency wins when present; otherwise fall back to\n  // this market's known currency rather than always assuming EGP — a\n  // small, deliberately duplicated map (also present in the markets seed\n  // row) rather than a DB round-trip for what should be a rarely-hit path\n  // (EODHD's exchange-symbol-list normally does include Currency).\n  const marketCurrency = { EGX: 'EGP', US: 'USD' }[exchange] || 'EGP';\n  const currency = entry.Currency || entry.currency || marketCurrency;\n\n  const errors = [];\n  if (!symbol || typeof symbol !== 'string') errors.push('missing/invalid symbol');\n  if (!name || typeof name !== 'string') errors.push('missing/invalid name');\n\n  return {\n    symbol: symbol ? String(symbol).trim().toUpperCase() : null,\n    name: name ? String(name).trim() : null,\n    isin: isin || null,\n    sector: sector || null,\n    exchange,\n    currency,\n    _valid: errors.length === 0,\n    errors,\n  };\n});\n\n// De-duplicate by symbol, keeping the last occurrence.\nconst bySymbol = new Map();\nfor (const row of rows) {\n  const key = row.symbol || `__invalid_${Math.random()}`;\n  bySymbol.set(key, row);\n}\n\nreturn Array.from(bySymbol.values()).map((json) => ({ json }));"
+        "jsCode": "// Normalizes a raw provider response into the internal stock-universe row shape:\n// { symbol, name, isin, sector, exchange, currency, _valid, errors[] }\n// Tolerant of shape differences between providers (array directly, or wrapped in\n// a \"data\"/\"symbols\" property) since the exact provider contract varies.\n//\n// IMPORTANT: n8n's HTTP Request node auto-splits a top-level JSON ARRAY\n// response into one item per element — confirmed via live E2E testing\n// against EODHD's exchange-symbol-list endpoint (241 real tickers arrived\n// as 241 separate items, not one item holding a 241-element array). Must\n// use $input.all(), not $input.first().\nconst exchange = $('Attach Market').first().json.market;\nconst items = $input.all().map((i) => i.json);\n\n// Optional allow-list restriction (see market_universe_seed in\n// sql/005-seed-us-universe.sql). Empty/absent for a market = no\n// restriction — the full provider list is used, as EGX does today.\nconst seedSymbols = $('Load Universe Seed').first().json.seed_symbols || [];\nconst seedSet = new Set(seedSymbols.map((s) => String(s).toUpperCase()));\n\nfunction looksLikeSymbolRecord(v) {\n  return v && typeof v === 'object' && !Array.isArray(v)\n    && (v.Code || v.symbol || v.Symbol || v.ticker);\n}\n\nlet list;\nif (items.length > 1 || looksLikeSymbolRecord(items[0])) {\n  // Auto-split case: every item IS already one symbol object (also covers\n  // the single-ticker edge case, detected by shape rather than count).\n  list = items;\n} else {\n  // Single-item case wrapping an array, e.g. { data: [...] }.\n  const raw = items[0];\n  list = raw;\n  if (!Array.isArray(list)) {\n    list = (raw && (raw.data || raw.symbols || raw.results)) || [];\n  }\n}\nif (!Array.isArray(list)) {\n  throw new Error('Provider response for the stock universe was not a recognizable list. Check the HTTP Request node URL/response shape.');\n}\n\nif (seedSet.size > 0) {\n  list = list.filter((entry) => {\n    const code = String(entry.Code || entry.symbol || entry.Symbol || entry.ticker || '').toUpperCase();\n    return seedSet.has(code) || seedSet.has(code.replace('-', '.'));\n  });\n}\n\nconst rows = list.map((entry) => {\n  const symbol = entry.Code || entry.symbol || entry.Symbol || entry.ticker || null;\n  const name = entry.Name || entry.name || entry.CompanyName || null;\n  const isin = entry.Isin || entry.isin || null;\n  const sector = entry.Sector || entry.sector || null;\n  // Provider-supplied currency wins when present; otherwise fall back to\n  // this market's known currency rather than always assuming EGP — a\n  // small, deliberately duplicated map (also present in the markets seed\n  // row) rather than a DB round-trip for what should be a rarely-hit path\n  // (EODHD's exchange-symbol-list normally does include Currency).\n  const marketCurrency = { EGX: 'EGP', US: 'USD' }[exchange] || 'EGP';\n  const currency = entry.Currency || entry.currency || marketCurrency;\n\n  const errors = [];\n  if (!symbol || typeof symbol !== 'string') errors.push('missing/invalid symbol');\n  if (!name || typeof name !== 'string') errors.push('missing/invalid name');\n\n  return {\n    symbol: symbol ? String(symbol).trim().toUpperCase() : null,\n    name: name ? String(name).trim() : null,\n    isin: isin || null,\n    sector: sector || null,\n    exchange,\n    currency,\n    _valid: errors.length === 0,\n    errors,\n  };\n});\n\n// De-duplicate by symbol, keeping the last occurrence.\nconst bySymbol = new Map();\nfor (const row of rows) {\n  const key = row.symbol || `__invalid_${Math.random()}`;\n  bySymbol.set(key, row);\n}\n\nreturn Array.from(bySymbol.values()).map((json) => ({ json }));"
       },
       "position": [
-        1040,
+        780,
         0
       ],
       "id": "a0a3389f-b863-4bdc-a4ed-622abd2d56de"
@@ -141,7 +132,7 @@
           },
           "conditions": [
             {
-              "id": "f478f856-94eb-449a-b9ba-d5c644912b6c",
+              "id": "4317f8d2-b78b-4dcb-b5a3-d486bf624021",
               "leftValue": "={{ $json._valid }}",
               "rightValue": "",
               "operator": {
@@ -156,7 +147,7 @@
         "options": {}
       },
       "position": [
-        1300,
+        1040,
         0
       ],
       "id": "ec0cfb73-68e0-43ee-9cb4-50fe556e6980"
@@ -167,14 +158,14 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO stocks (symbol, name, isin, sector, exchange, currency, active, first_seen, last_seen)\nVALUES ($1, $2, $3, $4, $5, $6, TRUE, CURRENT_DATE, CURRENT_DATE)\nON CONFLICT (exchange, symbol) DO UPDATE SET\n  name = EXCLUDED.name,\n  isin = EXCLUDED.isin,\n  sector = EXCLUDED.sector,\n  currency = EXCLUDED.currency,\n  active = TRUE,\n  last_seen = CURRENT_DATE,\n  updated_at = now();",
+        "query": "INSERT INTO stocks (symbol, name, isin, sector, exchange, currency, active, first_seen, last_seen)\nVALUES ($1, $2, $3, $4, $5, $6, TRUE, CURRENT_DATE, CURRENT_DATE)\nON CONFLICT (exchange, symbol) DO UPDATE SET\n  name = EXCLUDED.name,\n  isin = EXCLUDED.isin,\n  sector = EXCLUDED.sector,\n  currency = EXCLUDED.currency,\n  -- Respect the manual duplicate blocklist: an excluded alias symbol must\n  -- never be re-activated by the nightly universe refresh (root cause of\n  -- the 2026-08 duplicate-ticker incident: EODHD lists legacy + current\n  -- symbols for the same security with identical price data).\n  active = (NOT stocks.excluded),\n  last_seen = CURRENT_DATE,\n  updated_at = now();",
         "options": {
           "queryReplacement": "={{ [$json.symbol, $json.name, $json.isin, $json.sector, $json.exchange, $json.currency] }}"
         }
       },
       "onError": "continueRegularOutput",
       "position": [
-        1560,
+        1300,
         0
       ],
       "id": "72bc49fa-8538-467a-9e87-0a060aeaf71d"
@@ -192,7 +183,7 @@
       },
       "onError": "continueRegularOutput",
       "position": [
-        1820,
+        1560,
         0
       ],
       "id": "a532f9fd-4384-4640-be77-a7e6edc99f0b"
@@ -203,7 +194,7 @@
       "typeVersion": 1,
       "parameters": {},
       "position": [
-        2080,
+        1820,
         0
       ],
       "id": "2bc6a761-fde2-4ae1-b9b6-47908bc6bae5"
@@ -221,7 +212,7 @@
       },
       "executeOnce": true,
       "position": [
-        2340,
+        2080,
         0
       ],
       "id": "4967957a-fff8-46b0-9580-b4a3ffbc8568"
@@ -239,7 +230,7 @@
       },
       "executeOnce": true,
       "position": [
-        2600,
+        2340,
         0
       ],
       "id": "13cff536-e80c-4b1c-8ddc-06c32bb75bc3"
@@ -254,46 +245,45 @@
         "jsCode": "const count = $input.first().json.active_stock_count;\nreturn [{ json: {\n  workflow: '01-egx-stock-universe',\n  finishedAt: new Date().toISOString(),\n  activeStockCount: count,\n  message: `Stock universe refreshed. ${count} active EGX stocks.`,\n} }];"
       },
       "position": [
-        0,
-        200
+        2600,
+        0
       ],
       "id": "84b19bdf-72b6-4516-a65b-ec1fc17aa234"
+    },
+    {
+      "name": "Attach Market",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "let trigger = {};\ntry {\n  const triggerItems = $('When Executed by Another Workflow').all();\n  trigger = triggerItems.length ? triggerItems[0].json : {};\n} catch (e) { trigger = {}; }\nconst market = trigger.market || 'EGX';\nreturn [{ json: { market } }];"
+      },
+      "position": [
+        130,
+        0
+      ],
+      "id": "09095867-30bb-4e69-8812-030645bdb857"
+    },
+    {
+      "name": "Load Universe Seed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        390,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COALESCE(array_agg(symbol), ARRAY[]::text[]) AS seed_symbols FROM market_universe_seed WHERE market_code = $1;",
+        "options": {
+          "queryReplacement": "={{ [$json.market] }}"
+        }
+      },
+      "id": "b2e1c4a0-1234-4abc-9def-000000000001"
     }
   ],
   "connections": {
-    "Manual Trigger": {
-      "main": [
-        [
-          {
-            "node": "Attach Market",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "When Executed by Another Workflow": {
-      "main": [
-        [
-          {
-            "node": "Attach Market",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Attach Market": {
-      "main": [
-        [
-          {
-            "node": "Fetch EGX Universe (CONFIGURE ENDPOINT)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Fetch EGX Universe (CONFIGURE ENDPOINT)": {
       "main": [
         [
@@ -388,11 +378,56 @@
           }
         ]
       ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Attach Market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Attach Market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Market": {
+      "main": [
+        [
+          {
+            "node": "Load Universe Seed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Universe Seed": {
+      "main": [
+        [
+          {
+            "node": "Fetch EGX Universe (CONFIGURE ENDPOINT)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "availableInMCP": true
   },
   "staticData": null,
   "meta": {

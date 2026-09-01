@@ -124,7 +124,7 @@
           },
           "conditions": [
             {
-              "id": "060fb4be-6efb-4b8a-80ea-6449d6c3a649",
+              "id": "d5744b1a-3964-4d47-8493-b0100b0967b8",
               "leftValue": "={{ $json._skip }}",
               "rightValue": "",
               "operator": {
@@ -179,7 +179,7 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO probability_stats (\n  setup_type, market, sample_size, target1_hit_pct, stop_hit_pct, expired_no_hit_pct, updated_at\n)\nSELECT r.setup_type, run.market,\n       COUNT(*)::int,\n       ROUND(100.0 * COUNT(*) FILTER (WHERE twe.outcome = 'TARGET1_HIT') / COUNT(*), 2),\n       ROUND(100.0 * COUNT(*) FILTER (WHERE twe.outcome = 'STOP_HIT') / COUNT(*), 2),\n       ROUND(100.0 * COUNT(*) FILTER (WHERE twe.outcome = 'EXPIRED_NO_HIT') / COUNT(*), 2),\n       now()\nFROM target_window_evaluation twe\nJOIN scanner_results r ON r.id = twe.scanner_result_id\nJOIN scanner_runs run ON run.id = r.scanner_run_id\nGROUP BY r.setup_type, run.market\nON CONFLICT (setup_type, market) DO UPDATE SET\n  sample_size = EXCLUDED.sample_size,\n  target1_hit_pct = EXCLUDED.target1_hit_pct,\n  stop_hit_pct = EXCLUDED.stop_hit_pct,\n  expired_no_hit_pct = EXCLUDED.expired_no_hit_pct,\n  updated_at = now();",
+        "query": "INSERT INTO probability_stats (\n  setup_type, market, sample_size, target1_hit_pct, stop_hit_pct, expired_no_hit_pct, updated_at\n)\nSELECT r.setup_type, run.market,\n       COUNT(*)::int,\n       ROUND(100.0 * COUNT(*) FILTER (WHERE twe.outcome = 'TARGET1_HIT') / COUNT(*), 2),\n       ROUND(100.0 * COUNT(*) FILTER (WHERE twe.outcome = 'STOP_HIT') / COUNT(*), 2),\n       ROUND(100.0 * COUNT(*) FILTER (WHERE twe.outcome = 'EXPIRED_NO_HIT') / COUNT(*), 2),\n       now()\nFROM target_window_evaluation twe\nJOIN scanner_results r ON r.id = twe.scanner_result_id\nJOIN scanner_runs run ON run.id = r.scanner_run_id\nJOIN markets m ON m.code = run.market\n-- LIVE + BACKTEST only: MANUAL runs are scoring experiments (candidate\n-- profiles replayed by the backtest launcher) and must not feed the\n-- probabilities shown on the dashboard. Sub-floor targets are excluded so\n-- trivially-reachable levels can't inflate P(T1) (2026-08-24 incident).\nWHERE run.run_type IN ('LIVE', 'BACKTEST')\n  AND r.entry_price > 0\n  AND (r.target1 - r.entry_price) / r.entry_price * 100 >= m.min_target_gain_pct\nGROUP BY r.setup_type, run.market\nON CONFLICT (setup_type, market) DO UPDATE SET\n  sample_size = EXCLUDED.sample_size,\n  target1_hit_pct = EXCLUDED.target1_hit_pct,\n  stop_hit_pct = EXCLUDED.stop_hit_pct,\n  expired_no_hit_pct = EXCLUDED.expired_no_hit_pct,\n  updated_at = now();",
         "options": {}
       },
       "executeOnce": true,
@@ -353,7 +353,8 @@
   },
   "pinData": {},
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "availableInMCP": true
   },
   "staticData": null,
   "meta": {

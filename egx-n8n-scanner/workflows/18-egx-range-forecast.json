@@ -1,0 +1,292 @@
+{
+  "name": "18 - EGX Range Forecast",
+  "active": false,
+  "nodes": [
+    {
+      "name": "Sticky Note 47444917",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "content": "## 18 - EGX Range Forecast\n\nNext-session High/Low estimate (close +/- 1x ATR14) plus a backtested per-stock containment-rate accuracy: walking this stock's own history, on what % of past sessions did the ACTUAL next-session high/low both fall inside the band this same formula would have predicted the day before?\n\nSelf-sufficient: computes its own ATR14 from raw candles (same pattern as 05-egx-support-resistance), no dependency on 04 having run first.\n\nA simple, transparent projection -- not a guarantee. Deliberately not tuned to look accurate.",
+        "color": 5
+      },
+      "id": "f730cd7c-021d-4809-9708-d1641dd6fbc3"
+    },
+    {
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {},
+      "id": "e5b089c0-9b5b-4ddc-8ffa-3f1539346549"
+    },
+    {
+      "name": "Load Active Stocks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, symbol FROM stocks WHERE exchange = $1 AND active = TRUE ORDER BY symbol;",
+        "options": {
+          "queryReplacement": "={{ [$json.market || \"EGX\"] }}"
+        }
+      },
+      "id": "032fc9fa-b43b-4efc-95cc-7edaf5e5323a",
+      "executeOnce": true
+    },
+    {
+      "name": "Attach As-Of Date",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "let trigger = {};\ntry {\n  const triggerItems = $('When Executed by Another Workflow').all();\n  trigger = triggerItems.length ? triggerItems[0].json : {};\n} catch (e) { trigger = {}; }\nconst asOfDate = trigger.asOfDate || new Date().toISOString().slice(0, 10);\nreturn $input.all().map((item) => ({ json: { ...item.json, asOfDate } }));"
+      },
+      "id": "30a5725a-84ac-4f58-ba0c-a4c7e00a3348"
+    },
+    {
+      "name": "Count Range Forecast Rows",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1300,
+        220
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*)::int AS row_count FROM range_forecast;"
+      },
+      "id": "73314c99-dd17-4a23-ae69-6d2b7c7dec18",
+      "executeOnce": true
+    },
+    {
+      "name": "Build Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        220
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const count = $input.first().json.row_count;\nreturn [{ json: {\n  workflow: '18-egx-range-forecast',\n  finishedAt: new Date().toISOString(),\n  rangeForecastRowCount: count,\n} }];"
+      },
+      "id": "46a6ddf0-e0e1-4d2e-98f7-119449b2dcca"
+    },
+    {
+      "name": "Load Price History (as JSON array)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1300,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT json_agg(t.* ORDER BY t.date ASC) AS candles\nFROM (\n  SELECT trading_date AS date, open, high, low, close, volume\n  FROM daily_prices\n  WHERE stock_id = $1 AND trading_date <= $2\n) t;",
+        "options": {
+          "queryReplacement": "={{ [$json.id, $json.asOfDate] }}"
+        }
+      },
+      "id": "82b55bea-426f-4d80-82b8-880513e1e249",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Calculate Range Forecast",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "function isNumber(v) { return typeof v === 'number' && Number.isFinite(v); }\nfunction round(v, d) { if (!isNumber(v)) return null; const f = Math.pow(10, d); return Math.round(v * f) / f; }\nfunction atr14(candles) {\n  const period = 14;\n  const out = new Array(candles.length).fill(null);\n  if (candles.length < period + 1) return out;\n  const trueRanges = candles.map((c, i) => {\n    if (i === 0) return c.high - c.low;\n    const prevClose = candles[i - 1].close;\n    return Math.max(c.high - c.low, Math.abs(c.high - prevClose), Math.abs(c.low - prevClose));\n  });\n  let avgTr = trueRanges.slice(1, period + 1).reduce((a, b) => a + b, 0) / period;\n  out[period] = avgTr;\n  for (let i = period + 1; i < candles.length; i++) {\n    avgTr = (avgTr * (period - 1) + trueRanges[i]) / period;\n    out[i] = avgTr;\n  }\n  return out;\n}\n\nconst items = $input.all();\nconst out = [];\n\nfor (let i = 0; i < items.length; i++) {\n  let original;\n  try { original = $('Attach As-Of Date').itemMatching(i).json; } catch (e) { continue; }\n  const stockId = original.id;\n\n  const row = items[i].json;\n  const rawCandles = row.candles || [];\n  if (!Array.isArray(rawCandles) || rawCandles.length < 16) continue;\n\n  const candles = [...rawCandles].sort((a, b) => new Date(a.date) - new Date(b.date));\n  const atrSeries = atr14(candles);\n\n  // One forecast row per bar with a valid ATR (full history, idempotent\n  // backfill on every run). accuracyPct at bar k is the expanding-window\n  // containment rate over bars 14..k-1 ONLY -- data available as of that\n  // date, nothing from the future. The final bar's row is numerically\n  // identical to what the previous single-row version of this node emitted.\n  const rows = [];\n  let contained = 0;\n  let total = 0;\n  for (let k = 14; k < candles.length; k++) {\n    if (!isNumber(atrSeries[k])) continue;\n    rows.push({\n      tradingDate: candles[k].date,\n      close: candles[k].close,\n      nextHighEstimate: round(candles[k].close + atrSeries[k], 6),\n      nextLowEstimate: round(candles[k].close - atrSeries[k], 6),\n      accuracyPct: total > 0 ? round((contained / total) * 100, 2) : null,\n      sampleSize: total,\n    });\n    // This bar's own outcome becomes known the NEXT session; fold it into\n    // the running counters so it counts toward accuracy from bar k+1 on.\n    if (k < candles.length - 1) {\n      const predictedHigh = candles[k].close + atrSeries[k];\n      const predictedLow = candles[k].close - atrSeries[k];\n      total++;\n      if (candles[k + 1].high <= predictedHigh && candles[k + 1].low >= predictedLow) contained++;\n    }\n  }\n  if (!rows.length) continue;\n\n  // ONE item per stock carrying the rows as a JSON string -- emitting one\n  // item per bar (250k+ at US scale) would repeat the OOM pattern that\n  // crashed workflows 04/05 before they were batched.\n  out.push({ json: { stockId, rowsJson: JSON.stringify(rows) } });\n}\n\nreturn out;"
+      },
+      "id": "ceb65172-0743-4544-bc2b-b9022ac4966e"
+    },
+    {
+      "name": "Upsert Range Forecast",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1820,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO range_forecast (stock_id, trading_date, close, next_high_estimate, next_low_estimate, accuracy_pct, sample_size)\nSELECT $1, r.\"tradingDate\"::date, r.close, r.\"nextHighEstimate\", r.\"nextLowEstimate\", r.\"accuracyPct\", r.\"sampleSize\"\nFROM jsonb_to_recordset($2::jsonb) AS r(\"tradingDate\" text, close numeric, \"nextHighEstimate\" numeric, \"nextLowEstimate\" numeric, \"accuracyPct\" numeric, \"sampleSize\" int)\nON CONFLICT (stock_id, trading_date) DO UPDATE SET\n  close = EXCLUDED.close,\n  next_high_estimate = EXCLUDED.next_high_estimate,\n  next_low_estimate = EXCLUDED.next_low_estimate,\n  accuracy_pct = EXCLUDED.accuracy_pct,\n  sample_size = EXCLUDED.sample_size;",
+        "options": {
+          "queryReplacement": "={{ [$json.stockId, $json.rowsJson] }}"
+        }
+      },
+      "id": "dadbe9de-0eb4-40e4-88e9-bcba50936191",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Loop Over Stocks (Batch)",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1040,
+        0
+      ],
+      "parameters": {
+        "batchSize": "={{ Number($env.TA_BATCH_SIZE) || 50 }}"
+      },
+      "id": "b285e9ba-65bf-4ded-addd-c4c2236d3b83"
+    },
+    {
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "60af27a7-0c17-42e9-9db4-702e412d9897"
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Active Stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Active Stocks": {
+      "main": [
+        [
+          {
+            "node": "Attach As-Of Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach As-Of Date": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Stocks (Batch)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Range Forecast Rows": {
+      "main": [
+        [
+          {
+            "node": "Build Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Price History (as JSON array)": {
+      "main": [
+        [
+          {
+            "node": "Calculate Range Forecast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Range Forecast": {
+      "main": [
+        [
+          {
+            "node": "Upsert Range Forecast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Range Forecast": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Stocks (Batch)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Stocks (Batch)": {
+      "main": [
+        [
+          {
+            "node": "Count Range Forecast Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Price History (as JSON array)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Load Active Stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "saveExecutionProgress": false,
+    "saveDataSuccessExecution": "none"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "u30jZhtUK4XPYJVs",
+  "tags": []
+}

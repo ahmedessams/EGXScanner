@@ -141,7 +141,7 @@
           },
           "conditions": [
             {
-              "id": "842dfdc9-cade-4960-97cf-a836e59eeb24",
+              "id": "546991eb-5768-448b-9d5f-1d12b4ed414d",
               "leftValue": "={{ $json._skip }}",
               "rightValue": "",
               "operator": {
@@ -354,7 +354,8 @@
   },
   "pinData": {},
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "availableInMCP": true
   },
   "staticData": null,
   "meta": {

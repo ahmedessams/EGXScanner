@@ -11,7 +11,7 @@
         -300
       ],
       "parameters": {
-        "content": "## 03 - EGX Daily Market Update\n\nFetches the most recent trading sessions (a short lookback window, not the full history) per active stock, upserts into `daily_prices`, and reports whether TODAY actually has data — EGX does not trade every weekday (holidays), so this workflow never assumes a session happened; it verifies.\n\nOptionally fetches that market's broad index candles (EGX30 for EGX, per-market via markets.index_code) into `index_prices` for market-regime use.\n\nCalled by 12-egx-daily-master-workflow after 01; can also be run manually.",
+        "content": "## 03 - EGX Daily Market Update\n\nFetches the most recent trading sessions (a short lookback window, not the full history) per active stock, upserts into `daily_prices`, and reports whether TODAY actually has data — EGX does not trade every weekday (holidays), so this workflow never assumes a session happened; it verifies.\n\nOptionally fetches EGX30 index candles into `index_prices` for market-regime use.\n\nCalled by 12-egx-daily-master-workflow after 01; can also be run manually.",
         "height": 320,
         "width": 480,
         "color": 5
@@ -27,7 +27,7 @@
         -300
       ],
       "parameters": {
-        "content": "### ⚠️ CONFIGURE BEFORE USE\n\nSame endpoint-configuration note as workflow 02 — edit the HTTP Request node URLs to match your provider's documented endpoints. The index fetch is OPTIONAL and tolerant of failure (continues without index data).",
+        "content": "### ⚠️ CONFIGURE BEFORE USE\n\nSame endpoint-configuration note as workflow 02 — edit the HTTP Request node URLs to match your provider's documented endpoints. The index fetch is OPTIONAL and tolerant of failure (continues without EGX30 data).",
         "height": 220,
         "width": 440,
         "color": 7
@@ -84,9 +84,9 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT s.id, s.symbol, $1 AS market, m.index_code\nFROM stocks s LEFT JOIN (SELECT index_code FROM markets WHERE code = $1) m ON TRUE\nWHERE s.exchange = $1 AND s.active = TRUE ORDER BY s.symbol;",
+        "query": "SELECT s.id, s.symbol, $1 AS market, $2::text AS as_of_date, m.index_code\nFROM stocks s LEFT JOIN (SELECT index_code FROM markets WHERE code = $1) m ON TRUE\nWHERE s.exchange = $1 AND s.active = TRUE ORDER BY s.symbol;",
         "options": {
-          "queryReplacement": "={{ [$json.market || \"EGX\"] }}"
+          "queryReplacement": "={{ [$json.market || \"EGX\", $json.asOfDate || null] }}"
         }
       },
       "executeOnce": true,
@@ -201,7 +201,7 @@
           },
           "conditions": [
             {
-              "id": "6d3a5537-284c-46a7-96b0-26758d7d66f7",
+              "id": "42964019-b8a2-4a63-a242-2de9f290011f",
               "leftValue": "={{ $json._valid }}",
               "rightValue": "",
               "operator": {
@@ -281,7 +281,8 @@
         260,
         200
       ],
-      "id": "bc78bd6c-43c8-4657-87ec-aabaa694d168"
+      "id": "bc78bd6c-43c8-4657-87ec-aabaa694d168",
+      "webhookId": "cdbd75f6-7a44-4ea8-9b4e-0559d84fa7ce"
     },
     {
       "name": "Fetch Market Index (OPTIONAL, CONFIGURE ENDPOINT)",
@@ -360,7 +361,7 @@
           },
           "conditions": [
             {
-              "id": "ee3df1fe-d464-46d6-bb47-7598a10f8aeb",
+              "id": "2ced26f0-447e-47ab-8f0c-9efb177f7c28",
               "leftValue": "={{ $json.indexUpserted }}",
               "rightValue": "",
               "operator": {
@@ -415,9 +416,9 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT\n  (SELECT COUNT(*) FROM stocks WHERE exchange = $1 AND active = TRUE)::int AS active_stock_count,\n  (SELECT COUNT(*) FROM daily_prices dp JOIN stocks s ON s.id = dp.stock_id\n     WHERE s.exchange = $1 AND s.active = TRUE AND dp.trading_date = CURRENT_DATE)::int AS today_price_count;",
+        "query": "SELECT\n  (SELECT COUNT(*) FROM stocks WHERE exchange = $1 AND active = TRUE)::int AS active_stock_count,\n  (SELECT COUNT(*) FROM daily_prices dp JOIN stocks s ON s.id = dp.stock_id\n     WHERE s.exchange = $1 AND s.active = TRUE\n       AND dp.trading_date = COALESCE($2::date, CURRENT_DATE))::int AS today_price_count,\n  COALESCE($2::date, CURRENT_DATE)::text AS effective_date;",
         "options": {
-          "queryReplacement": "={{ [$('Load Active Stocks').first().json.market] }}"
+          "queryReplacement": "={{ [$('Load Active Stocks').first().json.market, $('Load Active Stocks').first().json.as_of_date] }}"
         }
       },
       "executeOnce": true,
@@ -434,13 +435,52 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const row = $input.first().json;\nconst isTradingDay = row.today_price_count > 0;\nconst completenessPct = row.active_stock_count > 0\n  ? Math.round((row.today_price_count / row.active_stock_count) * 1000) / 10\n  : 0;\n\nreturn [{ json: {\n  workflow: '03-egx-daily-market-update',\n  finishedAt: new Date().toISOString(),\n  tradingDate: new Date().toISOString().slice(0, 10),\n  isTradingDay,\n  activeStockCount: row.active_stock_count,\n  todayPriceCount: row.today_price_count,\n  completenessPct,\n  message: isTradingDay\n    ? `Data completeness ${completenessPct}% (${row.today_price_count}/${row.active_stock_count} stocks).`\n    : 'No price data found for today — likely a non-trading day (holiday/weekend) or provider delay. Downstream scanning should be skipped.',\n} }];"
+        "jsCode": "const row = $input.first().json;\nconst isTradingDay = row.today_price_count > 0;\nconst completenessPct = row.active_stock_count > 0\n  ? Math.round((row.today_price_count / row.active_stock_count) * 1000) / 10\n  : 0;\n\n// effective_date is the caller-supplied asOfDate (threaded through Load\n// Active Stocks), falling back to CURRENT_DATE for schedule/manual runs —\n// previously this workflow hard-coded \"today\" everywhere, which silently\n// broke any run whose session date differs from the server's UTC date\n// (the 03:00-Cairo US schedule, and any catch-up run for a past session).\nreturn [{ json: {\n  workflow: '03-egx-daily-market-update',\n  finishedAt: new Date().toISOString(),\n  tradingDate: row.effective_date || new Date().toISOString().slice(0, 10),\n  isTradingDay,\n  activeStockCount: row.active_stock_count,\n  todayPriceCount: row.today_price_count,\n  completenessPct,\n  message: isTradingDay\n    ? `Data completeness ${completenessPct}% (${row.today_price_count}/${row.active_stock_count} stocks) for ${row.effective_date}.`\n    : `No price data found for ${row.effective_date} — likely a non-trading day (holiday/weekend) or provider delay. Downstream scanning should be skipped.`,\n} }];"
       },
       "position": [
         2080,
         200
       ],
       "id": "7644e43c-dcdd-4e7e-a061-499d42ead0e5"
+    },
+    {
+      "name": "Schedule Trigger (Retry Import US)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        520,
+        400
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0,30 23 * * 1-5"
+            },
+            {
+              "field": "cronExpression",
+              "expression": "0,30 0-2 * * 2-6"
+            }
+          ]
+        }
+      },
+      "id": "e54b8542-3571-41db-8c1c-6c31a889b4fe"
+    },
+    {
+      "name": "Attach Market (US Schedule)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        550
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: { market: 'US' } }];"
+      },
+      "id": "646e201b-1589-4a54-a55a-4884d2459ad7"
     }
   ],
   "connections": {
@@ -601,17 +641,6 @@
         ]
       ]
     },
-    "Fetch Market Index (OPTIONAL, CONFIGURE ENDPOINT)": {
-      "main": [
-        [
-          {
-            "node": "Normalize & Upsert Index (Skip on Failure)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Normalize & Upsert Index (Skip on Failure)": {
       "main": [
         [
@@ -673,11 +702,46 @@
           }
         ]
       ]
+    },
+    "Fetch Market Index (OPTIONAL, CONFIGURE ENDPOINT)": {
+      "main": [
+        [
+          {
+            "node": "Normalize & Upsert Index (Skip on Failure)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger (Retry Import US)": {
+      "main": [
+        [
+          {
+            "node": "Attach Market (US Schedule)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Market (US Schedule)": {
+      "main": [
+        [
+          {
+            "node": "Load Active Stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
   },
   "staticData": null,
   "meta": {
