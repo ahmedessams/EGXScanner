@@ -985,7 +985,12 @@ const DEFAULT_HIDDEN_COLUMN_KEYS = ['rvol20', 'rvol50', 'rsi14', 'setup_type', '
 function defaultHiddenForTab() {
   const keys = new Set(DEFAULT_HIDDEN_COLUMN_KEYS);
   if (state.tab === 'rvol' || state.tab === 'volume') keys.delete('rvol20');
-  if (state.tab === 'outcomes') keys.delete('setup_type');
+  // The four scanner tabs rank by ONE sub-score, but a row's classified
+  // setup can differ (e.g. a MOMENTUM-classified stock legitimately among
+  // the day's best breakout scores) — show the Setup badge there by default
+  // so the distinction is visible without opening the drawer. Track Record
+  // keeps it because setup is the row grouping.
+  if (['breakout', 'momentum', 'pullback', 'reversal', 'outcomes'].includes(state.tab)) keys.delete('setup_type');
   const available = new Set(columnsForTab().map((c) => c.key));
   return new Set([...keys].filter((k) => available.has(k)));
 }
