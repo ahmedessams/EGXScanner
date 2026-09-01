@@ -9,7 +9,7 @@
  * "no look-ahead" rule, spec section 30).
  */
 
-const { isNumber, safeDivide, round } = require("./helpers");
+const { isNumber, safeDivide, round, clamp } = require("./helpers");
 
 /** Simple Moving Average over `period` closes. */
 function sma(values, period) {
@@ -260,6 +260,61 @@ function horizonEstimates(closes, lookback = 252, minReturns = 60) {
 }
 
 /**
+ * Long-term technical quality score (0-100): a price-only "durable uptrend"
+ * read for LONG-horizon holders, deliberately different from the four setup
+ * scanners (which hunt short-term entries). Components:
+ *   - Trend position (30): close above SMA200 (15) + SMA200 higher than 63
+ *     sessions ago (15).
+ *   - Consistency (20): share of the last 252 sessions that closed above
+ *     their own SMA200 (needs >=60 comparable bars).
+ *   - Drawdown resilience (20): distance below the 52-week high, full marks
+ *     at the high, zero at 30%+ below it.
+ *   - Long-horizon returns (15): positive 12-month return (8) + positive
+ *     6-month return (7).
+ *   - Volatility discipline (15): annualized volatility 30% or less scores
+ *     full, fading to zero at 90%+.
+ * Null until SMA200 exists (~200 sessions). An UNTUNED, non-backtested
+ * heuristic — a screening aid for "is this in a durable uptrend?", not a
+ * forecast and not investment advice.
+ */
+function longTermTechScore(closes, sma200, high252, volAnnualPct) {
+  const n = closes.length;
+  const out = new Array(n).fill(null);
+  for (let i = 0; i < n; i++) {
+    if (!isNumber(closes[i]) || !isNumber(sma200[i])) continue;
+    let s = 0;
+
+    if (closes[i] > sma200[i]) s += 15;
+    const smaAgo = i >= 63 ? sma200[i - 63] : null;
+    if (isNumber(smaAgo) && sma200[i] > smaAgo) s += 15;
+
+    let above = 0, comparable = 0;
+    for (let j = Math.max(0, i - 251); j <= i; j++) {
+      if (isNumber(closes[j]) && isNumber(sma200[j])) {
+        comparable++;
+        if (closes[j] > sma200[j]) above++;
+      }
+    }
+    if (comparable >= 60) s += (above / comparable) * 20;
+
+    if (isNumber(high252[i]) && high252[i] > 0) {
+      const drawdown = (high252[i] - closes[i]) / high252[i];
+      s += clamp(1 - drawdown / 0.3, 0, 1) * 20;
+    }
+
+    const close252Ago = i >= 252 ? closes[i - 252] : null;
+    const close126Ago = i >= 126 ? closes[i - 126] : null;
+    if (isNumber(close252Ago) && close252Ago > 0 && closes[i] > close252Ago) s += 8;
+    if (isNumber(close126Ago) && close126Ago > 0 && closes[i] > close126Ago) s += 7;
+
+    if (isNumber(volAnnualPct[i])) s += clamp((90 - volAnnualPct[i]) / 60, 0, 1) * 15;
+
+    out[i] = round(clamp(s, 0, 100), 2);
+  }
+  return out;
+}
+
+/**
  * Computes the full technical_analysis row set for every bar of a sorted
  * candle series. Returns an array aligned with `candles`; each element is
  * either null (insufficient history at that index for ANY indicator we still
@@ -309,6 +364,7 @@ function calculateAllIndicators(candles) {
   const low252 = rollingLow(candles, 252);
 
   const horizons = horizonEstimates(closes);
+  const ltScore = longTermTechScore(closes, sma200, high252, horizons.volatilityAnnualPct);
 
   return candles.map((c, i) => {
     const distance52wHigh = isNumber(high252[i]) ? ((c.close - high252[i]) / high252[i]) * 100 : null;
@@ -382,6 +438,8 @@ function calculateAllIndicators(candles) {
       est1mPct: round(horizons.est1mPct[i], 4),
       est3mPct: round(horizons.est3mPct[i], 4),
       est1yPct: round(horizons.est1yPct[i], 4),
+
+      longTermScore: ltScore[i],
     };
   });
 }
@@ -436,6 +494,7 @@ module.exports = {
   averageVolume,
   relativeVolume,
   horizonEstimates,
+  longTermTechScore,
   calculateAllIndicators,
   classifyTrend,
 };

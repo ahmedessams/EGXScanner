@@ -566,3 +566,26 @@ ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS est_2w_pct            NU
 ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS est_1m_pct            NUMERIC(12,4);
 ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS est_3m_pct            NUMERIC(12,4);
 ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS est_1y_pct            NUMERIC(12,4);
+
+-- ---------------------------------------------------------------------
+-- Long-term quality (2026-09-01): price-only durable-uptrend score
+-- (code/indicators.js longTermTechScore — untuned heuristic, see
+-- docs/SCORING.md) and the dividends table feeding TTM-yield / payout
+-- consistency, imported weekly from the provider's /div endpoint by
+-- "20 - EGX Dividend Import". `value` is the provider's split-adjusted
+-- per-share amount (aligns with adjusted price history).
+-- ---------------------------------------------------------------------
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS long_term_score NUMERIC(6,2);
+
+CREATE TABLE IF NOT EXISTS dividends (
+    id               BIGSERIAL PRIMARY KEY,
+    stock_id         BIGINT NOT NULL REFERENCES stocks(id) ON DELETE CASCADE,
+    ex_date          DATE   NOT NULL,
+    value            NUMERIC(18,6),
+    unadjusted_value NUMERIC(18,6),
+    currency         VARCHAR(8),
+    imported_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_dividends_stock_exdate UNIQUE (stock_id, ex_date)
+);
+COMMENT ON TABLE dividends IS 'Per-stock dividend history (split-adjusted value), weekly import';
+CREATE INDEX IF NOT EXISTS idx_dividends_stock_date ON dividends (stock_id, ex_date DESC);

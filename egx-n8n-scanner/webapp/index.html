@@ -499,6 +499,8 @@ const RANKED_COLUMNS = [
   { key: 'est_1m_pct', label: 'Est. 1m %', num: true, title: 'Drift projection over the next 21 trading days, from this stock\'s own measured daily drift (last 252 sessions). A projection of history, not a forecast.', render: (r) => changeCell(r.est_1m_pct) },
   { key: 'est_3m_pct', label: 'Est. 3m %', num: true, title: 'Drift projection over the next 63 trading days, from this stock\'s own measured daily drift (last 252 sessions). A projection of history, not a forecast — increasingly uncertain at longer horizons.', render: (r) => changeCell(r.est_3m_pct) },
   { key: 'est_1y_pct', label: 'Est. 1y %', num: true, title: 'Drift projection over the next 252 trading days, from this stock\'s own measured daily drift. At a 1-year horizon the uncertainty band is very wide — treat as context, never a forecast.', render: (r) => changeCell(r.est_1y_pct) },
+  { key: 'long_term_score', label: 'LT Score', num: true, title: 'Long-term technical quality (0–100): price-only durable-uptrend heuristic — SMA200 position and slope, consistency above SMA200, drawdown vs the 52-week high, 6/12-month returns, volatility discipline. An untuned screening aid for long holding horizons, not a forecast.', render: (r) => scoreCell(r.long_term_score) },
+  { key: 'dividend_yield_pct', label: 'Div Yield %', num: true, title: 'Trailing-12-month dividends per share divided by this date\'s close (from the weekly dividend import). "—" when the stock paid nothing in the last year.', render: (r) => (r.dividend_yield_pct === null || r.dividend_yield_pct === undefined) ? '—' : fmt(r.dividend_yield_pct, 2) + '%' },
 ];
 
 // Top 3 Trade Ideas: a curated subset of the eligible Top 10, filtered
@@ -611,6 +613,8 @@ const FULL_MARKET_COLUMNS = [
   { key: 'est_1m_pct', label: 'Est. 1m %', num: true, title: 'Drift projection over the next 21 trading days, from this stock\'s own measured daily drift (last 252 sessions). A projection of history, not a forecast.', render: (r) => changeCell(r.est_1m_pct), sortKey: null },
   { key: 'est_3m_pct', label: 'Est. 3m %', num: true, title: 'Drift projection over the next 63 trading days, from this stock\'s own measured daily drift (last 252 sessions). A projection of history, not a forecast — increasingly uncertain at longer horizons.', render: (r) => changeCell(r.est_3m_pct), sortKey: null },
   { key: 'est_1y_pct', label: 'Est. 1y %', num: true, title: 'Drift projection over the next 252 trading days, from this stock\'s own measured daily drift. At a 1-year horizon the uncertainty band is very wide — treat as context, never a forecast.', render: (r) => changeCell(r.est_1y_pct), sortKey: null },
+  { key: 'long_term_score', label: 'LT Score', num: true, title: 'Long-term technical quality (0–100): price-only durable-uptrend heuristic — SMA200 position and slope, consistency above SMA200, drawdown vs the 52-week high, 6/12-month returns, volatility discipline. An untuned screening aid for long holding horizons, not a forecast.', render: (r) => scoreCell(r.long_term_score), sortKey: null },
+  { key: 'dividend_yield_pct', label: 'Div Yield %', num: true, title: 'Trailing-12-month dividends per share divided by this date\'s close (from the weekly dividend import). "—" when the stock paid nothing in the last year.', render: (r) => (r.dividend_yield_pct === null || r.dividend_yield_pct === undefined) ? '—' : fmt(r.dividend_yield_pct, 2) + '%', sortKey: null },
   { key: 'eligible', label: 'Eligible', render: (r) => r.eligible ? '✓' : '—', sortKey: null },
 ];
 
@@ -683,6 +687,11 @@ const FULL_MARKET_EXPORT_COLUMNS = [
   { key: 'est_1y_pct', label: 'Est. 1y %' },
   { key: 'drift_annual_pct', label: 'Drift (ann.) %' },
   { key: 'volatility_annual_pct', label: 'Volatility (ann.) %' },
+  { key: 'long_term_score', label: 'LT Score' },
+  { key: 'dividend_ttm', label: 'Div TTM' },
+  { key: 'dividend_yield_pct', label: 'Div Yield %' },
+  { key: 'dividend_years_paid_5y', label: 'Div Years Paid (5y)' },
+  { key: 'dividend_growth_pct', label: 'Div Growth %' },
 ];
 
 function esc(s) { return (s ?? '').toString().replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -1336,6 +1345,22 @@ async function openDetail(symbol) {
           center = close × e<sup>drift×days</sup>, range = ±1σ√t — the standard "expected move" math.
           A projection of measured history, NOT a forecast or guarantee; the range widens fast with the
           horizon, and anything beyond ~3 months is especially uncertain.
+        </div>
+      ` : ''}
+
+      ${data.longTermQuality && (data.longTermQuality.longTermScore !== null && data.longTermQuality.longTermScore !== undefined || data.longTermQuality.dividendTtm !== null && data.longTermQuality.dividendTtm !== undefined) ? `
+        <div class="section-title">Long-Term Quality</div>
+        <div class="kv-grid">
+          <div class="kv"><div class="label">LT Score</div><div class="value">${scoreCell(data.longTermQuality.longTermScore)}</div></div>
+          <div class="kv"><div class="label">Div Yield (TTM)</div><div class="value">${(data.longTermQuality.dividendYieldPct === null || data.longTermQuality.dividendYieldPct === undefined) ? '—' : fmt(data.longTermQuality.dividendYieldPct, 2) + '%'}</div></div>
+          <div class="kv"><div class="label">Years Paid (last 5)</div><div class="value">${(data.longTermQuality.dividendYearsPaid5y === null || data.longTermQuality.dividendYearsPaid5y === undefined) ? '—' : data.longTermQuality.dividendYearsPaid5y + ' / 5'}</div></div>
+          <div class="kv"><div class="label">Div Growth (TTM)</div><div class="value">${changeCell(data.longTermQuality.dividendGrowthPct)}</div></div>
+        </div>
+        <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">
+          LT Score is a price-only durable-uptrend heuristic (SMA200 position/slope, consistency,
+          drawdown vs 52-week high, 6/12-month returns, volatility) — untuned and not backtested.
+          Dividend figures come from the weekly dividend import (trailing 12 months vs this date's
+          close). Screening aids for a long holding horizon — not forecasts, not investment advice.
         </div>
       ` : ''}
 

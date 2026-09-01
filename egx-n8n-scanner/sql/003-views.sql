@@ -197,7 +197,14 @@ SELECT
     ta.est_3m_pct::float8 AS est_3m_pct,
     ta.est_1y_pct::float8 AS est_1y_pct,
     ta.drift_annual_pct::float8 AS drift_annual_pct,
-    ta.volatility_annual_pct::float8 AS volatility_annual_pct
+    ta.volatility_annual_pct::float8 AS volatility_annual_pct,
+    -- Long-term quality (2026-09-01, append-only as above): durable-uptrend
+    -- score + dividend signals (TTM yield, 5y payout count, TTM growth).
+    ta.long_term_score::float8 AS long_term_score,
+    dv.ttm::float8 AS dividend_ttm,
+    (CASE WHEN lp.close > 0 THEN dv.ttm / lp.close * 100 END)::float8 AS dividend_yield_pct,
+    COALESCE(dv.years_paid_5y, 0)::int AS dividend_years_paid_5y,
+    (CASE WHEN dv.prior_ttm > 0 THEN (dv.ttm / dv.prior_ttm - 1) * 100 END)::float8 AS dividend_growth_pct
 
 FROM stocks s
 LEFT JOIN v_latest_prices lp ON lp.stock_id = s.id
@@ -207,6 +214,17 @@ LEFT JOIN support_resistance srz
     ON srz.stock_id = s.id AND srz.trading_date = lp.trading_date
 LEFT JOIN volume_analysis va
     ON va.stock_id = s.id AND va.trading_date = lp.trading_date
+LEFT JOIN LATERAL (
+    SELECT
+        SUM(d.value) FILTER (WHERE d.ex_date > lp.trading_date - INTERVAL '365 days') AS ttm,
+        SUM(d.value) FILTER (WHERE d.ex_date <= lp.trading_date - INTERVAL '365 days'
+                             AND d.ex_date > lp.trading_date - INTERVAL '730 days') AS prior_ttm,
+        COUNT(DISTINCT EXTRACT(YEAR FROM d.ex_date)) FILTER (
+            WHERE d.ex_date >= make_date(EXTRACT(YEAR FROM lp.trading_date)::int - 5, 1, 1)
+              AND d.ex_date <  make_date(EXTRACT(YEAR FROM lp.trading_date)::int, 1, 1)) AS years_paid_5y
+    FROM dividends d
+    WHERE d.stock_id = s.id AND d.ex_date <= lp.trading_date
+) dv ON TRUE
 LEFT JOIN v_latest_scanner_run latest_run ON TRUE
 LEFT JOIN scanner_results res
     ON res.stock_id = s.id AND res.scanner_run_id = latest_run.id
@@ -310,7 +328,14 @@ RETURNS SETOF v_full_market AS $$
       ta.est_3m_pct::float8 AS est_3m_pct,
       ta.est_1y_pct::float8 AS est_1y_pct,
       ta.drift_annual_pct::float8 AS drift_annual_pct,
-      ta.volatility_annual_pct::float8 AS volatility_annual_pct
+      ta.volatility_annual_pct::float8 AS volatility_annual_pct,
+      -- Long-term quality (2026-09-01, append-only as above): durable-uptrend
+      -- score + dividend signals (TTM yield, 5y payout count, TTM growth).
+      ta.long_term_score::float8 AS long_term_score,
+      dv.ttm::float8 AS dividend_ttm,
+      (CASE WHEN lp.close > 0 THEN dv.ttm / lp.close * 100 END)::float8 AS dividend_yield_pct,
+      COALESCE(dv.years_paid_5y, 0)::int AS dividend_years_paid_5y,
+      (CASE WHEN dv.prior_ttm > 0 THEN (dv.ttm / dv.prior_ttm - 1) * 100 END)::float8 AS dividend_growth_pct
 
   FROM stocks s
   CROSS JOIN anchor a
@@ -333,6 +358,17 @@ RETURNS SETOF v_full_market AS $$
       ON srz.stock_id = s.id AND srz.trading_date = lp.trading_date
   LEFT JOIN volume_analysis va
       ON va.stock_id = s.id AND va.trading_date = lp.trading_date
+  LEFT JOIN LATERAL (
+      SELECT
+          SUM(d.value) FILTER (WHERE d.ex_date > lp.trading_date - INTERVAL '365 days') AS ttm,
+          SUM(d.value) FILTER (WHERE d.ex_date <= lp.trading_date - INTERVAL '365 days'
+                               AND d.ex_date > lp.trading_date - INTERVAL '730 days') AS prior_ttm,
+          COUNT(DISTINCT EXTRACT(YEAR FROM d.ex_date)) FILTER (
+              WHERE d.ex_date >= make_date(EXTRACT(YEAR FROM lp.trading_date)::int - 5, 1, 1)
+                AND d.ex_date <  make_date(EXTRACT(YEAR FROM lp.trading_date)::int, 1, 1)) AS years_paid_5y
+      FROM dividends d
+      WHERE d.stock_id = s.id AND d.ex_date <= lp.trading_date
+  ) dv ON TRUE
   LEFT JOIN scanner_run_as_of(p_date, p_market) run ON TRUE
   LEFT JOIN scanner_results res
       ON res.stock_id = s.id AND res.scanner_run_id = run.id
@@ -420,7 +456,10 @@ SELECT
     ta.est_2w_pct::float8 AS est_2w_pct,
     ta.est_1m_pct::float8 AS est_1m_pct,
     ta.est_3m_pct::float8 AS est_3m_pct,
-    ta.est_1y_pct::float8 AS est_1y_pct
+    ta.est_1y_pct::float8 AS est_1y_pct,
+    -- Long-term quality (2026-09-01, append-only as above).
+    ta.long_term_score::float8 AS long_term_score,
+    (CASE WHEN lp.close > 0 THEN dv.ttm / lp.close * 100 END)::float8 AS dividend_yield_pct
 FROM scanner_results res
 JOIN scanner_runs run ON run.id = res.scanner_run_id
 JOIN stocks s ON s.id = res.stock_id
@@ -454,6 +493,11 @@ LEFT JOIN support_resistance srz
 -- joining on setup_type alone would multiply rows (one per market per
 -- setup_type) once more than one market has stats. run.market gives the
 -- correct per-row market context directly, no separate parameter needed.
+LEFT JOIN LATERAL (
+    SELECT SUM(d.value) FILTER (WHERE d.ex_date > run.trading_date - INTERVAL '365 days') AS ttm
+    FROM dividends d
+    WHERE d.stock_id = s.id AND d.ex_date <= run.trading_date
+) dv ON TRUE
 LEFT JOIN probability_stats ps ON ps.setup_type = res.setup_type AND ps.market = run.market
 LEFT JOIN target_window_evaluation twe ON twe.scanner_result_id = res.id
 LEFT JOIN range_forecast rf ON rf.stock_id = res.stock_id AND rf.trading_date = run.trading_date

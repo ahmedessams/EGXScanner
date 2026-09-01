@@ -47,6 +47,30 @@ is NOT a forecast, and the band widens with √t, so the 3-month and
 especially 1-year numbers are context, not predictions. Surfaced as
 hidden-by-default table columns and a "Horizon Estimates" drawer section.
 
+**Long-term technical quality** (`longTermTechScore`, `long_term_score`,
+"LT Score"): a price-only durable-uptrend read for LONG holding horizons,
+deliberately separate from the four setup scanners (which hunt short-term
+entries). Components: trend position (30 — close above SMA200 + SMA200
+higher than 63 sessions ago), consistency (20 — share of the last 252
+sessions closing above their own SMA200), drawdown resilience (20 — scaled
+distance below the 52-week high, zero at 30%+ below), long-horizon returns
+(15 — positive 12-month + positive 6-month), volatility discipline (15 —
+full marks at ≤30% annualized, zero at 90%+). Null until SMA200 exists.
+The weights and thresholds are an UNTUNED, non-backtested heuristic — a
+screening aid, not a forecast, and not investment advice.
+
+**Dividend signals** (`dividends` table, weekly import from the provider's
+`/div` endpoint by `20 - EGX Dividend Import`): trailing-12-month dividend
+sum and yield vs the row's close (`dividend_yield_pct`), distinct calendar
+years with a payout among the last 5 (`dividend_years_paid_5y`), and TTM
+growth vs the prior TTM (`dividend_growth_pct`) — all derived in the views
+at read time, nothing precomputed to go stale. Dividend `value` is the
+provider's split-adjusted per-share amount. These are measured payout
+history, the closest a price-feed-only system gets to a fundamentals
+quality screen; the full valuation screen (P/E, ROE, EV/EBITDA) requires
+the provider's Fundamentals subscription, which returns 403 on the current
+plan (checked 2026-09-01).
+
 ## Support/Resistance (`code/supportResistance.js`)
 
 Swing highs/lows via a 5-bar fractal (2 bars each side must be strictly the
