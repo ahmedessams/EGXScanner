@@ -116,7 +116,12 @@ function estimateDaysToTarget(entry, target, atr14) {
   const distance = target - entry;
   if (distance <= 0) return null;
   const assumedDailyProgress = atr14 * 0.5;
-  return Math.max(1, Math.ceil(distance / assumedDailyProgress));
+  // Epsilon before ceil: ATR-fallback targets sit at EXACT multiples of the
+  // daily-progress unit (entry + 1.5*atr over 0.5*atr = exactly 3), but the
+  // float division lands a hair above the integer roughly half the time,
+  // silently inflating the window by a day (confirmed live 2026-09-01:
+  // ~15 of 241 stocks stored 4d for an exactly-3d distance).
+  return Math.max(1, Math.ceil(distance / assumedDailyProgress - 1e-9));
 }
 
 /**

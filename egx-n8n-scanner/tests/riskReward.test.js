@@ -69,3 +69,20 @@ function assertAscending(r, label) {
 }
 
 console.log("riskReward.test.js: all assertions passed");
+
+// Float-boundary regression: an ATR-fallback target at EXACTLY 1.5x ATR must
+// estimate exactly 3 days (was 4 for ~half of entry/atr combinations because
+// the float division landed a hair above 3.0 before ceil).
+{
+  let bad = 0, total = 0;
+  for (let e = 1; e < 200; e += 0.37) {
+    for (const atr of [0.01, 0.061994, 0.1239, 0.55, 1.23, 2.7]) {
+      const r = buildTradeStructure({ close: e, atr14: atr, resistances: [null, null, null], supports: [null, null, null], setupType: "MOMENTUM" });
+      total++;
+      if (r.target1EstimatedDays !== 3) bad++;
+    }
+  }
+  assert.strictEqual(bad, 0, `exact-1.5xATR distance must always be 3 days; ${bad}/${total} were not`);
+}
+
+console.log("riskReward.test.js: float-boundary assertions passed");
