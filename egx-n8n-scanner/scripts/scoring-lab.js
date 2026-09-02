@@ -21,7 +21,8 @@
  *   1. node scripts/scoring-lab.js            (self-test on synthetic data)
  *   2. pasted into the "Replay Variants" Code node of the ZZ Scoring Lab
  *      helper workflow, where `rows` = $('Inputs').all() and `candles` =
- *      $input.all() (see runLab at the bottom).
+ *      $input.all() (see runLab at the bottom). The Inputs SQL lives in
+ *      scripts/scoring-lab-inputs.sql.
  */
 
 // ---------------------------------------------------------------- helpers
@@ -191,6 +192,11 @@ function emptyStructure() {
 //                    market median (what workflow 11 stores as relative_strength_20d)
 //   rsSlope          factor points per percentage point of RS input (production 3)
 //   eqBlend          blend Entry Quality (code/entryQuality.js) into the score, 0..1
+//   minMarketScore   regime gate: skip the WHOLE date (no picks) when the run's
+//                    scanner_runs.market_score is below this. Rows must carry
+//                    `market_score` (Inputs query: select r.market_score). Compare
+//                    variants on realized return per DAY as well as per pick —
+//                    a gate that only drops days trades fewer opportunities.
 //   stopAtrMult      defaults to cfg.atrStopMult (production, per market) when unset
 const VARIANTS = [
   { key: "V0_default", profile: "default" },
@@ -213,6 +219,14 @@ const VARIANTS = [
   { key: "V13_eqBlend10", profile: "default", eqBlend: 0.1 },
   { key: "V14_eqBlend20", profile: "default", eqBlend: 0.2 },
   { key: "V15_rsVsMkt_eq10", profile: "default", rsVsMarket: true, eqBlend: 0.1 },
+  // Regime gate (2026-09-02 stored-data cut, indicative only — stored BACKTEST
+  // picks predate the current scoring): EGX Top-10 stop rate rises monotonically
+  // as market_score falls (band 70: 10.5%, 60: 11.7%, 50: 20.4%, 40: 28.1%;
+  // mean realized 2.52 → 1.13). US shows no pattern. Only 3 EGX LIVE days sat
+  // at >=60, so the two-slice rule cannot be applied until the weekend replay
+  // refreshes BACKTEST rows — re-run these then, per market.
+  { key: "V16_mktScore50", profile: "default", minMarketScore: 50 },
+  { key: "V17_mktScore60", profile: "default", minMarketScore: 60 },
 ];
 
 // Entry Quality — same arithmetic as code/entryQuality.js (extension 40 /
@@ -382,7 +396,8 @@ function runLab(rows, candles, { market, cfg, topN = 10, variants = VARIANTS, pr
   const numCols = ["close", "avg_volume20", "avg_traded_value20", "active_days20", "close20d_ago", "atr14", "data_confidence",
     "macd_histogram", "relative_volume20", "rsi14", "ema20", "resistance1", "resistance2", "resistance3", "support1", "support2",
     "support3", "nearest_resistance_distance_pct", "nearest_support_distance_pct", "accumulation_score", "breakout_score",
-    "momentum_score", "pullback_score", "reversal_score", "stored_score", "stored_rank", "high", "low", "rsi14_3d_ago"];
+    "momentum_score", "pullback_score", "reversal_score", "stored_score", "stored_rank", "high", "low", "rsi14_3d_ago",
+    "market_score"];
   for (const r of rows) for (const c of numCols) r[c] = num(r[c]);
 
   // Same-day market benchmark for rsVsMarket: median 20d return across every
@@ -431,6 +446,12 @@ function runLab(rows, candles, { market, cfg, topN = 10, variants = VARIANTS, pr
     const liveMatch = { n: 0, exact: 0, absDiffSum: 0 };
     for (const d of dates) {
       const di = dateIdx.get(d);
+      // Regime gate: the day's market_score is a run-level value, identical on
+      // every row of the date. Missing/NULL score fails the gate (conservative).
+      if (isNumber(v.minMarketScore)) {
+        const mktScore = byDate.get(d)[0]?.market_score;
+        if (!(isNumber(mktScore) && mktScore >= v.minMarketScore)) continue;
+      }
       let probs = null;
       const needsProbs = v.profile === "candidate" || (isNumber(v.probBlend) && v.probBlend > 0);
       if (needsProbs) {
@@ -458,7 +479,7 @@ function runLab(rows, candles, { market, cfg, topN = 10, variants = VARIANTS, pr
     }
     const bySetup = {}; const byRun = {};
     for (const p of picks) { (bySetup[p.setupType] ||= []).push(p); (byRun[p.run_type] ||= []).push(p); }
-    const vr = { options: { ...v }, all: summarize(picks), byRunType: {}, bySetup: {} };
+    const vr = { options: { ...v }, daysWithPicks: new Set(picks.map((p) => p.d)).size, all: summarize(picks), byRunType: {}, bySetup: {} };
     for (const k of Object.keys(byRun)) vr.byRunType[k] = summarize(byRun[k]);
     for (const k of Object.keys(bySetup)) vr.bySetup[k] = summarize(bySetup[k]);
     vr.setupMix = Object.fromEntries(Object.entries(bySetup).map(([k, a]) => [k, a.length]));
@@ -473,6 +494,7 @@ if (typeof module !== "undefined" && require.main === module) {
   const rows = []; const candles = [];
   const dates = Array.from({ length: 40 }, (_, i) => `2026-06-${String(1 + (i % 28)).padStart(2, "0")}${i >= 28 ? "b" : ""}`).sort();
   let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const marketScoreByDate = dates.map((_, i) => 30 + (i % 5) * 10); // 30..70, run-level value
   for (let s = 1; s <= 30; s++) {
     let px = 10 + rnd() * 50;
     for (let i = 0; i < dates.length; i++) {
@@ -480,6 +502,7 @@ if (typeof module !== "undefined" && require.main === module) {
       const atr = px * 0.02;
       candles.push({ stock_id: s, d: dates[i], high: px * 1.015, low: px * 0.985, close: px });
       rows.push({ d: dates[i], run_type: i < 30 ? "BACKTEST" : "LIVE", stock_id: s, symbol: "S" + s, close: px,
+        market_score: String(marketScoreByDate[i]),
         avg_volume20: 1e6, avg_traded_value20: 1e7, active_days20: 20, close20d_ago: px * (1 - (rnd() - 0.5) * 0.1),
         atr14: atr, macd_histogram: (rnd() - 0.5) * 0.2, relative_volume20: 0.5 + rnd() * 2, medium_term_trend: "BULLISH",
         rsi14: 30 + rnd() * 50, rsi14_3d_ago: 30 + rnd() * 50, ema20: px * (1 - (rnd() - 0.5) * 0.05),
@@ -495,7 +518,12 @@ if (typeof module !== "undefined" && require.main === module) {
   const rep = runLab(rows, candles, { market: "EGX", cfg });
   const v0 = rep.variants.V0_default.all;
   if (!(v0.picks > 0 && isNumber(v0.hit) && v0.hit + v0.stop + v0.expired > 99)) { console.error("self-test failed", v0); process.exit(1); }
-  for (const [k, v] of Object.entries(rep.variants)) console.log(k.padEnd(18), JSON.stringify(v.all));
+  // Regime gate: scores cycle 30..70 so >=50 keeps 3/5 of the days, >=60 keeps 2/5.
+  const days = (k) => rep.variants[k].daysWithPicks;
+  if (!(days("V0_default") === 40 && days("V16_mktScore50") === 24 && days("V17_mktScore60") === 16)) {
+    console.error("self-test failed: minMarketScore gate", { V0: days("V0_default"), V16: days("V16_mktScore50"), V17: days("V17_mktScore60") }); process.exit(1);
+  }
+  for (const [k, v] of Object.entries(rep.variants)) console.log(k.padEnd(18), `days=${String(v.daysWithPicks).padStart(2)}`, JSON.stringify(v.all));
   console.log("self-test ok");
 }
 
