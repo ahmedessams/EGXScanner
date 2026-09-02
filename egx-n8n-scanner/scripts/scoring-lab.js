@@ -187,6 +187,11 @@ function emptyStructure() {
 //   usRsiPenalty / estDaysPenalty / probBlend   the three candidate corrections, individually
 //   rsiPenalty       { above, perPoint, max } overbought penalty for any market
 //   setupPenalty     { SETUP: +/-points } flat adjustment by setup type
+//   rsVsMarket       relative_strength factor from the 20d return MINUS the same-day
+//                    market median (what workflow 11 stores as relative_strength_20d)
+//   rsSlope          factor points per percentage point of RS input (production 3)
+//   eqBlend          blend Entry Quality (code/entryQuality.js) into the score, 0..1
+//   stopAtrMult      defaults to cfg.atrStopMult (production, per market) when unset
 const VARIANTS = [
   { key: "V0_default", profile: "default" },
   { key: "V1_candidate", profile: "candidate" },
@@ -198,9 +203,38 @@ const VARIANTS = [
   { key: "V7_accumOverext", profile: "default", requireTarget: true, accumOverext: true },
   { key: "V8_noBreakout", profile: "default", requireTarget: true, excludeSetups: ["BREAKOUT"] },
   { key: "V9_cand_minRR1", profile: "candidate", requireTarget: true, minRR: 1.0 },
+  // Tier 1 (2026-09-02): market-relative RS and Entry Quality as ranking inputs.
+  // Verdict (both markets, BACKTEST+LIVE, see docs/SCORING.md): V10-V12 neutral
+  // within noise; V13-V15 worse on LIVE for both markets (EGX also worse on
+  // BACKTEST). None shipped — both stay display-only columns.
+  { key: "V10_rsVsMarket", profile: "default", rsVsMarket: true },
+  { key: "V11_rsVsMkt_w10", profile: "default", rsVsMarket: true, weights: { relative_strength: 10 } },
+  { key: "V12_rsVsMkt_s5", profile: "default", rsVsMarket: true, rsSlope: 5 },
+  { key: "V13_eqBlend10", profile: "default", eqBlend: 0.1 },
+  { key: "V14_eqBlend20", profile: "default", eqBlend: 0.2 },
+  { key: "V15_rsVsMkt_eq10", profile: "default", rsVsMarket: true, eqBlend: 0.1 },
 ];
 
-function scoreRow(row, cfg, v, probs) {
+// Entry Quality — same arithmetic as code/entryQuality.js (extension 40 /
+// close position 30 / RSI 3-session slope 30; missing inputs sit at midpoint).
+function entryQualityScore(row) {
+  const close = row.close;
+  let ext = 20;
+  if (isNumber(close) && isNumber(row.ema20) && isNumber(row.atr14) && row.atr14 > 0) {
+    const e = (close - row.ema20) / row.atr14;
+    ext = e >= -0.5 && e <= 1.0 ? 40 : e > 1.0 ? clamp(40 * (1 - (e - 1.0) / 2.0), 0, 40) : clamp(40 * (1 - (-0.5 - e) / 1.5), 0, 40);
+  }
+  let pos = 15;
+  if (isNumber(close) && isNumber(row.high) && isNumber(row.low)) {
+    const range = row.high - row.low;
+    pos = (range > 0 ? clamp((close - row.low) / range, 0, 1) : 0.5) * 30;
+  }
+  let slope = 15;
+  if (isNumber(row.rsi14) && isNumber(row.rsi14_3d_ago)) slope = clamp(15 + (row.rsi14 - row.rsi14_3d_ago) * 1.5, 0, 30);
+  return clamp(round(ext + pos + slope, 2), 0, 100);
+}
+
+function scoreRow(row, cfg, v, probs, ctx = {}) {
   const close = row.close;
   if (!isNumber(close)) return { eligible: false, rankable: false, setupType: "AVOID", score: 0, structure: emptyStructure() };
   let eligible = true;
@@ -216,7 +250,12 @@ function scoreRow(row, cfg, v, probs) {
   const priceStructureFactor = isNumber(row.nearest_resistance_distance_pct)
     ? clamp(100 - Math.min(100, row.nearest_resistance_distance_pct * 10), 0, 100) : 50;
   const return20d = isNumber(row.close20d_ago) && row.close20d_ago > 0 ? ((close - row.close20d_ago) / row.close20d_ago) * 100 : null;
-  const relativeStrengthFactor = isNumber(return20d) ? clamp(50 + return20d * 3, 0, 100) : 50;
+  // Production: ABSOLUTE 20d return. rsVsMarket: minus the same-day median
+  // 20d return of the market's universe (ctx.marketReturn20d, what workflow
+  // 11 now stores as relative_strength_20d). rsSlope: points per pp (prod 3).
+  const rsInput = v.rsVsMarket && isNumber(return20d) && isNumber(ctx.marketReturn20d) ? return20d - ctx.marketReturn20d : return20d;
+  const rsSlope = isNumber(v.rsSlope) ? v.rsSlope : 3;
+  const relativeStrengthFactor = isNumber(rsInput) ? clamp(50 + rsInput * rsSlope, 0, 100) : 50;
 
   let accumulation = row.accumulation_score || 0;
   if (v.accumOverext) {
@@ -232,12 +271,15 @@ function scoreRow(row, cfg, v, probs) {
   };
   const setupType = classifySetupType(subScores, { eligible });
   const setupConfidence = calculateSetupConfidence(subScores);
+  // Production stop multiple comes from markets.atr_stop_mult (EGX 2.0 / US
+  // 1.5 since 2026-09-02) and the ATR target ladder is (m, m+1, m+2) x ATR.
+  const stopAtrMult = isNumber(v.stopAtrMult) ? v.stopAtrMult : (isNumber(cfg.atrStopMult) ? cfg.atrStopMult : 1.5);
   const structure = buildTradeStructure({
     close, atr14: row.atr14,
     resistances: [row.resistance1, row.resistance2, row.resistance3],
     supports: [row.support1, row.support2, row.support3],
     setupType, minGainPct: cfg.minTargetGainPct,
-    atrMultiples: v.atrMultiples, stopAtrMult: v.stopAtrMult,
+    atrMultiples: v.atrMultiples || [stopAtrMult, stopAtrMult + 1, stopAtrMult + 2], stopAtrMult,
   });
   const riskRewardFactor = isNumber(structure.riskRewardT1) ? clamp(structure.riskRewardT1 * 30, 0, 100) : 0;
   const weights = { ...DEFAULT_WEIGHTS, ...(v.weights || {}) };
@@ -254,8 +296,15 @@ function scoreRow(row, cfg, v, probs) {
   const usRsiPenalty = cand || v.usRsiPenalty;
   const estDaysPenalty = cand || v.estDaysPenalty;
   const probBlend = cand ? 0.2 : (isNumber(v.probBlend) ? v.probBlend : 0);
-  if (usRsiPenalty || estDaysPenalty || probBlend > 0 || v.setupPenalty || v.rsiPenalty) {
+  const eqBlend = isNumber(v.eqBlend) ? v.eqBlend : 0;
+  if (usRsiPenalty || estDaysPenalty || probBlend > 0 || eqBlend > 0 || v.setupPenalty || v.rsiPenalty) {
     let s = overallScore;
+    // Entry Quality (code/entryQuality.js, stored as entry_quality_score) blended
+    // into the setup score: eqBlend = 0.1 means 90% setup / 10% entry timing.
+    if (eqBlend > 0) {
+      const eq = entryQualityScore(row);
+      if (isNumber(eq)) s = s * (1 - eqBlend) + eq * eqBlend;
+    }
     if (usRsiPenalty && cfg.market === "US" && isNumber(row.rsi14) && row.rsi14 > 70) s -= Math.min((row.rsi14 - 70) * 0.8, 16);
     // market-agnostic overbought penalty: rsiPenalty = { above: 70, perPoint: 0.8, max: 16 }
     if (v.rsiPenalty && isNumber(row.rsi14) && row.rsi14 > v.rsiPenalty.above) {
@@ -333,8 +382,16 @@ function runLab(rows, candles, { market, cfg, topN = 10, variants = VARIANTS, pr
   const numCols = ["close", "avg_volume20", "avg_traded_value20", "active_days20", "close20d_ago", "atr14", "data_confidence",
     "macd_histogram", "relative_volume20", "rsi14", "ema20", "resistance1", "resistance2", "resistance3", "support1", "support2",
     "support3", "nearest_resistance_distance_pct", "nearest_support_distance_pct", "accumulation_score", "breakout_score",
-    "momentum_score", "pullback_score", "reversal_score", "stored_score", "stored_rank"];
+    "momentum_score", "pullback_score", "reversal_score", "stored_score", "stored_rank", "high", "low", "rsi14_3d_ago"];
   for (const r of rows) for (const c of numCols) r[c] = num(r[c]);
+
+  // Same-day market benchmark for rsVsMarket: median 20d return across every
+  // row of the date (workflow 11 computes it over the same batch).
+  const ret20 = (r) => isNumber(r.close) && isNumber(r.close20d_ago) && r.close20d_ago > 0 ? ((r.close - r.close20d_ago) / r.close20d_ago) * 100 : null;
+  const marketRetByDate = new Map();
+  for (const r of rows) { if (!marketRetByDate.has(r.d)) marketRetByDate.set(r.d, []); marketRetByDate.get(r.d).push(ret20(r)); }
+  for (const [d, arr] of marketRetByDate) marketRetByDate.set(d, median(arr));
+  const ctxFor = (d) => ({ marketReturn20d: marketRetByDate.get(d) ?? null });
 
   // Forward-candle index: stock_id -> ascending candles.
   const byStock = new Map();
@@ -359,7 +416,7 @@ function runLab(rows, candles, { market, cfg, topN = 10, variants = VARIANTS, pr
     const resolvedBySetup = new Map(); // setup -> [{dateIdx, hit}]
     for (const d of dates) {
       for (const r of byDate.get(d)) {
-        const s = scoreRow(r, cfg, { ...v, profile: "default" }, null);
+        const s = scoreRow(r, cfg, { ...v, profile: "default" }, null, ctxFor(d));
         const ev = evaluate({ structure: s.structure, close: r.close }, forward(r.stock_id, d));
         const rec = { d, di: dateIdx.get(d), stock_id: r.stock_id, symbol: r.symbol, run_type: r.run_type, close: r.close, row: r, ...s, ev };
         scored.push(rec);
@@ -386,7 +443,7 @@ function runLab(rows, candles, { market, cfg, topN = 10, variants = VARIANTS, pr
       const rescoring = needsProbs || v.usRsiPenalty || v.estDaysPenalty || v.setupPenalty || v.rsiPenalty;
       const dayRecs = scored.filter((x) => x.d === d).map((x) => {
         if (!rescoring) return x;
-        const s = scoreRow(x.row, cfg, v, probs);
+        const s = scoreRow(x.row, cfg, v, probs, ctxFor(d));
         return { ...x, ...s, ev: x.ev };
       });
       if (v.key === "V0_default") {
@@ -425,7 +482,8 @@ if (typeof module !== "undefined" && require.main === module) {
       rows.push({ d: dates[i], run_type: i < 30 ? "BACKTEST" : "LIVE", stock_id: s, symbol: "S" + s, close: px,
         avg_volume20: 1e6, avg_traded_value20: 1e7, active_days20: 20, close20d_ago: px * (1 - (rnd() - 0.5) * 0.1),
         atr14: atr, macd_histogram: (rnd() - 0.5) * 0.2, relative_volume20: 0.5 + rnd() * 2, medium_term_trend: "BULLISH",
-        rsi14: 30 + rnd() * 50, ema20: px * (1 - (rnd() - 0.5) * 0.05),
+        rsi14: 30 + rnd() * 50, rsi14_3d_ago: 30 + rnd() * 50, ema20: px * (1 - (rnd() - 0.5) * 0.05),
+        high: px * 1.015, low: px * 0.985,
         resistance1: px * (1 + rnd() * 0.05), resistance2: px * 1.08, resistance3: px * 1.12,
         support1: px * (1 - rnd() * 0.04), support2: px * 0.92, support3: px * 0.88,
         nearest_resistance_distance_pct: rnd() * 5, nearest_support_distance_pct: rnd() * 4,
@@ -433,7 +491,7 @@ if (typeof module !== "undefined" && require.main === module) {
         pullback_score: rnd() * 60, reversal_score: rnd() * 60, stored_score: null, stored_rank: null });
     }
   }
-  const cfg = { market: "EGX", minAvgTradedValue: 500000, minAvgVolume: 50000, minActiveDays20: 15, minTargetGainPct: 2 };
+  const cfg = { market: "EGX", minAvgTradedValue: 500000, minAvgVolume: 50000, minActiveDays20: 15, minTargetGainPct: 2, atrStopMult: 2.0 };
   const rep = runLab(rows, candles, { market: "EGX", cfg });
   const v0 = rep.variants.V0_default.all;
   if (!(v0.picks > 0 && isNumber(v0.hit) && v0.hit + v0.stop + v0.expired > 99)) { console.error("self-test failed", v0); process.exit(1); }

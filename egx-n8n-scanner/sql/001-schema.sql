@@ -377,6 +377,21 @@ COMMENT ON COLUMN scanner_results.ai_stop_probability_pct IS 'AI Assessment: a l
 COMMENT ON COLUMN scanner_results.ai_rank_score IS 'AI Assessment: 0-100 conviction score used to derive ai_rank; independent of overall_score.';
 COMMENT ON COLUMN scanner_results.ai_rank IS 'Rank (1=highest) among that day''s Top 10 by ai_rank_score — a second, AI-driven ordering shown alongside overall_rank, not a replacement for it.';
 
+-- Entry Quality + market-relative strength (2026-09-02, code/entryQuality.js).
+-- Stored per pick so they can be evaluated against outcomes before either is
+-- allowed to move the ranking. Same append-only ALTER pattern as above.
+ALTER TABLE scanner_results ADD COLUMN IF NOT EXISTS relative_strength_20d NUMERIC(10,4);
+ALTER TABLE scanner_results ADD COLUMN IF NOT EXISTS entry_quality_score NUMERIC(6,2);
+ALTER TABLE scanner_results ADD COLUMN IF NOT EXISTS extension_atr NUMERIC(10,4);
+ALTER TABLE scanner_results ADD COLUMN IF NOT EXISTS close_position_pct NUMERIC(6,2);
+ALTER TABLE scanner_results ADD COLUMN IF NOT EXISTS rsi_slope3 NUMERIC(8,4);
+
+COMMENT ON COLUMN scanner_results.relative_strength_20d IS 'Stock 20-day return minus the MEDIAN 20-day return of the market''s active universe on the scan date, in percentage points (+5 = beat the typical stock by 5 points). Market-relative, unlike the overall_score relative_strength factor which is still the absolute 20-day return. Benchmark is the universe median (not the index) because index_prices has no history before Aug 2026.';
+COMMENT ON COLUMN scanner_results.entry_quality_score IS 'Entry Quality 0-100 (code/entryQuality.js): is TODAY a good entry, separate from how good the setup is. 40 pts extension vs EMA20 in ATR (best -0.5..+1.0), 30 pts close position in the day''s range, 30 pts 3-session RSI slope. Display-only; not a ranking factor until validated.';
+COMMENT ON COLUMN scanner_results.extension_atr IS '(close - ema20) / atr14 on the scan date. >2 = extended/chasing, <-1 = well below trend.';
+COMMENT ON COLUMN scanner_results.close_position_pct IS 'Where the scan-day close sits in the day''s high-low range, 0 (at the low) to 100 (at the high).';
+COMMENT ON COLUMN scanner_results.rsi_slope3 IS 'rsi14 on the scan date minus rsi14 three sessions earlier (RSI points). Positive = momentum building.';
+
 -- ---------------------------------------------------------------------
 -- prediction_evaluation: forward-looking evaluation of scanner_results
 -- ---------------------------------------------------------------------
@@ -524,6 +539,32 @@ CREATE TABLE IF NOT EXISTS target_window_evaluation (
 COMMENT ON TABLE target_window_evaluation IS 'Per-pick outcome walking forward up to target1_estimated_days trading sessions: did price reach target1 first, hit the invalidation/stop level first, or neither within the window?';
 COMMENT ON COLUMN target_window_evaluation.outcome IS 'TARGET1_HIT: high touched target1 before invalidation, within the window. STOP_HIT: invalidation touched first (or same day as target1 — ambiguous intraday order, treated conservatively as a stop, matching prediction_evaluation.success convention). EXPIRED_NO_HIT: neither triggered by the time target1_estimated_days sessions had elapsed.';
 COMMENT ON COLUMN target_window_evaluation.resolved_day_number IS 'Which trading day (1-indexed from the scan date) the outcome resolved on; NULL for EXPIRED_NO_HIT.';
+
+-- Multi-horizon labels (2026-09-02). The single TARGET1_HIT/STOP_HIT/EXPIRED
+-- outcome depends on the pick's own target and window, so it cannot tell a
+-- "went +4% then faded" pick from one that never moved. These fixed-horizon
+-- excursions are target-free: MFE = highest high vs entry, MAE = lowest low
+-- vs entry over the first N sessions AFTER the scan date; ret = close on
+-- session N vs entry. Filled by 16-egx-target-window-evaluation's "Fill
+-- Multi-Horizon Labels" node in SQL (also backfills existing rows), horizon
+-- N only once N forward sessions exist — NULL until then. All in % of entry.
+ALTER TABLE target_window_evaluation ADD COLUMN IF NOT EXISTS mfe_1d_pct  NUMERIC(10,4);
+ALTER TABLE target_window_evaluation ADD COLUMN IF NOT EXISTS mae_1d_pct  NUMERIC(10,4);
+ALTER TABLE target_window_evaluation ADD COLUMN IF NOT EXISTS mfe_3d_pct  NUMERIC(10,4);
+ALTER TABLE target_window_evaluation ADD COLUMN IF NOT EXISTS mae_3d_pct  NUMERIC(10,4);
+ALTER TABLE target_window_evaluation ADD COLUMN IF NOT EXISTS mfe_5d_pct  NUMERIC(10,4);
+ALTER TABLE target_window_evaluation ADD COLUMN IF NOT EXISTS mae_5d_pct  NUMERIC(10,4);
+ALTER TABLE target_window_evaluation ADD COLUMN IF NOT EXISTS mfe_10d_pct NUMERIC(10,4);
+ALTER TABLE target_window_evaluation ADD COLUMN IF NOT EXISTS mae_10d_pct NUMERIC(10,4);
+ALTER TABLE target_window_evaluation ADD COLUMN IF NOT EXISTS ret_5d_pct  NUMERIC(10,4);
+ALTER TABLE target_window_evaluation ADD COLUMN IF NOT EXISTS ret_10d_pct NUMERIC(10,4);
+ALTER TABLE target_window_evaluation ADD COLUMN IF NOT EXISTS horizon_bars SMALLINT;
+ALTER TABLE target_window_evaluation ADD COLUMN IF NOT EXISTS labels_updated_at TIMESTAMPTZ;
+
+COMMENT ON COLUMN target_window_evaluation.mfe_10d_pct IS 'Maximum favorable excursion: (highest high over the first 10 sessions after the scan date - entry_price) / entry_price * 100. Target-free label; mfe_1d/3d/5d likewise.';
+COMMENT ON COLUMN target_window_evaluation.mae_10d_pct IS 'Maximum adverse excursion: (lowest low over the first 10 sessions after the scan date - entry_price) / entry_price * 100 (negative or zero). mae_1d/3d/5d likewise.';
+COMMENT ON COLUMN target_window_evaluation.ret_10d_pct IS 'Close on the 10th session after the scan date vs entry_price, in %. ret_5d_pct likewise.';
+COMMENT ON COLUMN target_window_evaluation.horizon_bars IS 'How many forward sessions (capped at 10) existed when the labels were last computed; horizons beyond it are still NULL and get filled on a later run.';
 
 CREATE TABLE IF NOT EXISTS probability_stats (
     setup_type          VARCHAR(20) NOT NULL,

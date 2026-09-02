@@ -84,6 +84,13 @@ factors (trend/volume/momentum/breakout/price-structure/MACD/RSI/relative-
 strength/risk-reward — see [SCORING.md](SCORING.md) for exactly how each is
 derived), calls `overallScore.js` for the composite, `classifySetupType`,
 `calculateSetupConfidence`, and `riskReward.js` for the trade structure.
+Since 2026-09-02 the same node also computes two display-only companions
+(see SCORING.md "Entry Quality"): `entry_quality_score` with its raw inputs
+(`extension_atr`, `close_position_pct`, `rsi_slope3` — the query carries
+`high`/`low` and `rsi14` from three sessions earlier for this) and
+`relative_strength_20d` (20-day return minus the batch median 20-day
+return, computed in-node across the same run's stocks). Neither moves
+`overall_score` until it passes the scoring-lab two-slice bar.
 Upserts into `scanner_results`, then assigns `overall_rank` via a single
 `RANK() OVER (ORDER BY overall_score DESC)` window-function `UPDATE`, then
 computes market breadth (`marketRegime.js`, including an EGX30 index
@@ -133,6 +140,12 @@ activated for its production webhook URLs to respond** — on n8n versions
 with the newer draft/version model (confirmed on 2.35.3 via live E2E
 testing), this means clicking **Publish** (top-right), not a simple Active
 toggle; older n8n versions use the Active toggle directly.
+
+Since 2026-09-02 every row of `/stocks`, `/top` and `/top-picks` also
+carries `relative_strength_20d`, `entry_quality_score` (+ `extension_atr`,
+`close_position_pct`, `rsi_slope3`), `risk_pct` and `expected_value_pct`
+(see SCORING.md "Entry Quality" / "Expected value"); `/top-picks` adds
+`similar_expected_value_pct` from its similar-target cohort.
 
 | Route | Notes |
 |---|---|
@@ -216,6 +229,20 @@ guessed early. Then refreshes `probability_stats`, aggregated by
 "Historical probability" for the full methodology and why grouping is
 setup-type-only). Batches at 3000 rows per run like `14`/`15` — re-run to
 catch up backlog. Not time-critical; scheduled weekly rather than daily.
+
+**Multi-horizon labels** (2026-09-02, "Fill Multi-Horizon Labels" node): a
+single hit/stop/expired outcome depends on the pick's own target and
+window, so it cannot tell a pick that ran +4% and faded from one that never
+moved. This node adds target-free labels to every `target_window_evaluation`
+row in SQL: maximum favorable / adverse excursion (`mfe_Nd_pct` /
+`mae_Nd_pct`, highest high / lowest low vs `entry_price`) over the first 1,
+3, 5 and 10 sessions after the scan date, plus `ret_5d_pct` / `ret_10d_pct`
+(close on session N vs entry). A horizon is filled only once that many
+forward sessions exist; `horizon_bars` records how far the labels got, and
+rows with `mfe_10d_pct IS NULL` are revisited each run (never-touched rows
+first, up to 6000 per run) until the 10-session horizon closes. The summary
+reports `horizonLabelsFilled` / `horizonLabelsCompleted`. Backfill over the
+existing 37k rows took seven manual runs.
 
 ## A note on empty-input edges
 

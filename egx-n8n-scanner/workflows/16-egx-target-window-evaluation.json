@@ -11,7 +11,7 @@
         -420
       ],
       "parameters": {
-        "content": "## 16 - EGX Target Window Evaluation\n\nAnswers the actual question 'what's the historical probability of reaching Target 1 within its estimated days, vs hitting the stop first?' — distinct from 14-egx-prediction-evaluation, which only looks at the single NEXT trading session. This walks forward day-by-day, up to each pick's own target1_estimated_days, and records which happened first: target1 touched, invalidation touched, or neither (EXPIRED_NO_HIT) by the time the window fully elapsed. Rows with insufficient future price history yet are left unevaluated and re-checked on the next run — never guessed early.\n\nSame-day ambiguity (both target1 and invalidation touched on the same daily bar) is treated conservatively as STOP_HIT, matching prediction_evaluation.success's convention — daily OHLC can't tell us the intraday order.\n\nAggregates into probability_stats by setup_type (docs/SCORING.md explains why not a finer score-band breakdown: current sample sizes are too thin per-bucket to be meaningfully precise). v_scanner_top / v_full_market read from that table to attach a probability + sample size to every current pick.\n\nNot time-critical — schedule weekly, or run manually after a backtest.",
+        "content": "## 16 - EGX Target Window Evaluation\n\nAnswers the actual question 'what's the historical probability of reaching Target 1 within its estimated days, vs hitting the stop first?' — distinct from 14-egx-prediction-evaluation, which only looks at the single NEXT trading session. This walks forward day-by-day, up to each pick's own target1_estimated_days, and records which happened first: target1 touched, invalidation touched, or neither (EXPIRED_NO_HIT) by the time the window fully elapsed. Rows with insufficient future price history yet are left unevaluated and re-checked on the next run — never guessed early.\n\nSame-day ambiguity (both target1 and invalidation touched on the same daily bar) is treated conservatively as STOP_HIT, matching prediction_evaluation.success's convention — daily OHLC can't tell us the intraday order.\n\nAggregates into probability_stats by setup_type (docs/SCORING.md explains why not a finer score-band breakdown: current sample sizes are too thin per-bucket to be meaningfully precise). v_scanner_top / v_full_market read from that table to attach a probability + sample size to every current pick.\n\nAlso fills target-free multi-horizon labels (MFE/MAE at 1/3/5/10 sessions, close return at 5/10) on every evaluated row in SQL — up to 6000 rows per run, never-touched rows first, so run it repeatedly after a backtest until horizonLabelsFilled is 0. These labels do not depend on the pick's target, so they can tell a 'went +4% then faded' pick from one that never moved.\n\nNot time-critical — schedule weekly, or run manually after a backtest.",
         "height": 420,
         "width": 560,
         "color": 5
@@ -174,6 +174,23 @@
       "id": "eb22964a-b735-42b6-86c2-dcdad5445fc3"
     },
     {
+      "name": "Fill Multi-Horizon Labels",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Target-free multi-horizon labels for every evaluated pick (column comments\n-- on target_window_evaluation explain each). MFE/MAE = highest high / lowest\n-- low vs entry over the first N sessions AFTER the scan date; ret = close on\n-- session N vs entry. Up to 6000 unfinished rows per run, never-touched rows\n-- first so in-progress ones cannot starve the backlog: a row is finished once\n-- 10 forward sessions exist; until then it is refilled on every run with\n-- whatever horizons are already knowable. Idempotent, and it\n-- backfills history the same way (run the workflow repeatedly until it\n-- touches 0 rows). Uses only bars strictly after the scan date — no\n-- look-ahead into the scan day itself.\nWITH todo AS (\n  SELECT twe.id, r.stock_id, r.entry_price::float8 AS entry, run.trading_date\n  FROM target_window_evaluation twe\n  JOIN scanner_results r ON r.id = twe.scanner_result_id\n  JOIN scanner_runs run ON run.id = r.scanner_run_id\n  WHERE twe.mfe_10d_pct IS NULL AND r.entry_price > 0\n  ORDER BY (twe.horizon_bars IS NOT NULL), twe.id\n  LIMIT 6000\n),\nfwd AS (\n  SELECT t.id, t.entry, dp.high::float8 AS high, dp.low::float8 AS low, dp.close::float8 AS close,\n         ROW_NUMBER() OVER (PARTITION BY t.id ORDER BY dp.trading_date) AS d\n  FROM todo t\n  JOIN daily_prices dp ON dp.stock_id = t.stock_id\n   AND dp.trading_date > t.trading_date\n   AND dp.trading_date <= t.trading_date + 45\n),\nagg AS (\n  SELECT id, entry, MAX(d)::int AS bars,\n    MAX(high) FILTER (WHERE d <= 1)  AS h1,  MIN(low) FILTER (WHERE d <= 1)  AS l1,\n    MAX(high) FILTER (WHERE d <= 3)  AS h3,  MIN(low) FILTER (WHERE d <= 3)  AS l3,\n    MAX(high) FILTER (WHERE d <= 5)  AS h5,  MIN(low) FILTER (WHERE d <= 5)  AS l5,\n    MAX(high) FILTER (WHERE d <= 10) AS h10, MIN(low) FILTER (WHERE d <= 10) AS l10,\n    MAX(close) FILTER (WHERE d = 5)  AS c5,  MAX(close) FILTER (WHERE d = 10) AS c10\n  FROM fwd\n  WHERE d <= 10\n  GROUP BY id, entry\n),\nupd AS (\n  UPDATE target_window_evaluation twe SET\n    mfe_1d_pct  = CASE WHEN a.bars >= 1  THEN ROUND(((a.h1  - a.entry) / a.entry * 100)::numeric, 4) END,\n    mae_1d_pct  = CASE WHEN a.bars >= 1  THEN ROUND(((a.l1  - a.entry) / a.entry * 100)::numeric, 4) END,\n    mfe_3d_pct  = CASE WHEN a.bars >= 3  THEN ROUND(((a.h3  - a.entry) / a.entry * 100)::numeric, 4) END,\n    mae_3d_pct  = CASE WHEN a.bars >= 3  THEN ROUND(((a.l3  - a.entry) / a.entry * 100)::numeric, 4) END,\n    mfe_5d_pct  = CASE WHEN a.bars >= 5  THEN ROUND(((a.h5  - a.entry) / a.entry * 100)::numeric, 4) END,\n    mae_5d_pct  = CASE WHEN a.bars >= 5  THEN ROUND(((a.l5  - a.entry) / a.entry * 100)::numeric, 4) END,\n    mfe_10d_pct = CASE WHEN a.bars >= 10 THEN ROUND(((a.h10 - a.entry) / a.entry * 100)::numeric, 4) END,\n    mae_10d_pct = CASE WHEN a.bars >= 10 THEN ROUND(((a.l10 - a.entry) / a.entry * 100)::numeric, 4) END,\n    ret_5d_pct  = CASE WHEN a.bars >= 5  THEN ROUND(((a.c5  - a.entry) / a.entry * 100)::numeric, 4) END,\n    ret_10d_pct = CASE WHEN a.bars >= 10 THEN ROUND(((a.c10 - a.entry) / a.entry * 100)::numeric, 4) END,\n    horizon_bars = LEAST(a.bars, 10),\n    labels_updated_at = now()\n  FROM agg a\n  WHERE twe.id = a.id\n  RETURNING twe.id, twe.horizon_bars\n)\nSELECT COUNT(*)::int AS labelled_rows,\n       COUNT(*) FILTER (WHERE horizon_bars >= 10)::int AS completed_rows\nFROM upd;\n",
+        "options": {}
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "position": [
+        2340,
+        0
+      ],
+      "id": "8847e0d4-ac34-4d20-bd3a-93bb44f859ab"
+    },
+    {
       "name": "Refresh Probability Stats",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
@@ -184,7 +201,7 @@
       },
       "executeOnce": true,
       "position": [
-        2340,
+        2600,
         0
       ],
       "id": "e7b651f6-2d41-4ac8-90b3-0050099cbb54"
@@ -200,7 +217,7 @@
       },
       "executeOnce": true,
       "position": [
-        2600,
+        2860,
         0
       ],
       "id": "763bd8b3-442e-4d9c-b229-844f98f8ead9"
@@ -212,7 +229,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const count = $input.first().json.evaluated_count;\nreturn [{ json: {\n  workflow: '16-egx-target-window-evaluation',\n  finishedAt: new Date().toISOString(),\n  totalEvaluatedRows: count,\n} }];"
+        "jsCode": "const count = $input.first().json.evaluated_count;\nlet labels = {};\ntry { labels = $('Fill Multi-Horizon Labels').first().json || {}; } catch (e) {}\nreturn [{ json: {\n  workflow: '16-egx-target-window-evaluation',\n  finishedAt: new Date().toISOString(),\n  totalEvaluatedRows: count,\n  horizonLabelsFilled: labels.labelled_rows ?? null,\n  horizonLabelsCompleted: labels.completed_rows ?? null,\n} }];"
       },
       "position": [
         0,
@@ -321,7 +338,7 @@
       "main": [
         [
           {
-            "node": "Refresh Probability Stats",
+            "node": "Fill Multi-Horizon Labels",
             "type": "main",
             "index": 0
           }
@@ -344,6 +361,17 @@
         [
           {
             "node": "Build Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fill Multi-Horizon Labels": {
+      "main": [
+        [
+          {
+            "node": "Refresh Probability Stats",
             "type": "main",
             "index": 0
           }

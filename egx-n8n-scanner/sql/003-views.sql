@@ -204,7 +204,19 @@ SELECT
     dv.ttm::float8 AS dividend_ttm,
     (CASE WHEN lp.close > 0 THEN dv.ttm / lp.close * 100 END)::float8 AS dividend_yield_pct,
     COALESCE(dv.years_paid_5y, 0)::int AS dividend_years_paid_5y,
-    (CASE WHEN dv.prior_ttm > 0 THEN (dv.ttm / dv.prior_ttm - 1) * 100 END)::float8 AS dividend_growth_pct
+    (CASE WHEN dv.prior_ttm > 0 THEN (dv.ttm / dv.prior_ttm - 1) * 100 END)::float8 AS dividend_growth_pct,
+    -- Entry Quality + relative strength (2026-09-02, append-only as above);
+    -- see code/entryQuality.js. Stored per run by workflow 11.
+    res.relative_strength_20d::float8 AS relative_strength_20d,
+    res.entry_quality_score::float8 AS entry_quality_score,
+    res.extension_atr::float8 AS extension_atr,
+    res.close_position_pct::float8 AS close_position_pct,
+    res.rsi_slope3::float8 AS rsi_slope3,
+    (CASE WHEN res.entry_price > 0 AND res.invalidation_price > 0 AND res.invalidation_price < res.entry_price
+          THEN (res.entry_price - res.invalidation_price) / res.entry_price * 100 END)::float8 AS risk_pct,
+    (CASE WHEN ps.sample_size > 0 AND res.entry_price > 0 AND res.invalidation_price > 0 AND res.invalidation_price < res.entry_price
+          THEN ps.target1_hit_pct / 100 * res.target1_gain_pct
+             - ps.stop_hit_pct / 100 * ((res.entry_price - res.invalidation_price) / res.entry_price * 100) END)::float8 AS expected_value_pct
 
 FROM stocks s
 LEFT JOIN v_latest_prices lp ON lp.stock_id = s.id
@@ -335,7 +347,18 @@ RETURNS SETOF v_full_market AS $$
       dv.ttm::float8 AS dividend_ttm,
       (CASE WHEN lp.close > 0 THEN dv.ttm / lp.close * 100 END)::float8 AS dividend_yield_pct,
       COALESCE(dv.years_paid_5y, 0)::int AS dividend_years_paid_5y,
-      (CASE WHEN dv.prior_ttm > 0 THEN (dv.ttm / dv.prior_ttm - 1) * 100 END)::float8 AS dividend_growth_pct
+      (CASE WHEN dv.prior_ttm > 0 THEN (dv.ttm / dv.prior_ttm - 1) * 100 END)::float8 AS dividend_growth_pct,
+      -- Entry Quality + relative strength (2026-09-02, append-only as above).
+      res.relative_strength_20d::float8 AS relative_strength_20d,
+      res.entry_quality_score::float8 AS entry_quality_score,
+      res.extension_atr::float8 AS extension_atr,
+      res.close_position_pct::float8 AS close_position_pct,
+      res.rsi_slope3::float8 AS rsi_slope3,
+      (CASE WHEN res.entry_price > 0 AND res.invalidation_price > 0 AND res.invalidation_price < res.entry_price
+            THEN (res.entry_price - res.invalidation_price) / res.entry_price * 100 END)::float8 AS risk_pct,
+      (CASE WHEN ps.sample_size > 0 AND res.entry_price > 0 AND res.invalidation_price > 0 AND res.invalidation_price < res.entry_price
+            THEN ps.target1_hit_pct / 100 * res.target1_gain_pct
+               - ps.stop_hit_pct / 100 * ((res.entry_price - res.invalidation_price) / res.entry_price * 100) END)::float8 AS expected_value_pct
 
   FROM stocks s
   CROSS JOIN anchor a
@@ -459,7 +482,33 @@ SELECT
     ta.est_1y_pct::float8 AS est_1y_pct,
     -- Long-term quality (2026-09-01, append-only as above).
     ta.long_term_score::float8 AS long_term_score,
-    (CASE WHEN lp.close > 0 THEN dv.ttm / lp.close * 100 END)::float8 AS dividend_yield_pct
+    (CASE WHEN lp.close > 0 THEN dv.ttm / lp.close * 100 END)::float8 AS dividend_yield_pct,
+    -- Entry Quality + market-relative strength (2026-09-02, append-only as
+    -- above; see code/entryQuality.js and the scanner_results column comments).
+    res.relative_strength_20d::float8 AS relative_strength_20d,
+    res.entry_quality_score::float8 AS entry_quality_score,
+    res.extension_atr::float8 AS extension_atr,
+    res.close_position_pct::float8 AS close_position_pct,
+    res.rsi_slope3::float8 AS rsi_slope3,
+    -- Risk to the stop in % of entry, and the expected value of the trade in
+    -- % of entry using the MEASURED per-setup-per-market base rates:
+    --   EV = P(T1) * gain_to_T1 - P(stop) * risk_to_stop
+    -- (EXPIRED_NO_HIT contributes 0 — its realized return is unknown ahead of
+    -- time). NULL until probability_stats has a row for the setup/market.
+    -- A 3% target at 80% is worth less than a 12% target at 45%; this is the
+    -- number that says so.
+    (CASE WHEN res.entry_price > 0 AND res.invalidation_price > 0 AND res.invalidation_price < res.entry_price
+          THEN (res.entry_price - res.invalidation_price) / res.entry_price * 100 END)::float8 AS risk_pct,
+    (CASE WHEN ps.sample_size > 0 AND res.entry_price > 0 AND res.invalidation_price > 0
+               AND res.invalidation_price < res.entry_price AND res.target1_gain_pct IS NOT NULL
+          THEN ps.target1_hit_pct / 100 * res.target1_gain_pct
+             - ps.stop_hit_pct / 100 * ((res.entry_price - res.invalidation_price) / res.entry_price * 100) END)::float8
+        AS expected_value_pct,
+    -- Target-free multi-horizon labels from workflow 16 (NULL until enough
+    -- forward sessions exist); the 10-session pair is what the webapp shows.
+    twe.mfe_10d_pct::float8 AS mfe_10d_pct,
+    twe.mae_10d_pct::float8 AS mae_10d_pct,
+    twe.ret_10d_pct::float8 AS ret_10d_pct
 FROM scanner_results res
 JOIN scanner_runs run ON run.id = res.scanner_run_id
 JOIN stocks s ON s.id = res.stock_id

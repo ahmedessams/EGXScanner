@@ -43,6 +43,24 @@ sets `overall_score`, `setup_type`, `overall_rank`, `eligible`,
 This lets each scanner run and be tested completely independently while
 still converging on one row per stock per scan.
 
+`11` also writes the 2026-09-02 display-only companions (append-only `ALTER
+TABLE ... ADD COLUMN IF NOT EXISTS` in `001-schema.sql`, so an existing
+database upgrades in place): `relative_strength_20d` (20-day return minus
+the run's median 20-day return), `entry_quality_score` and its inputs
+`extension_atr` / `close_position_pct` / `rsi_slope3`. They are stored per
+pick precisely so they can be scored against realized outcomes
+(`target_window_evaluation`) before either is allowed to move the ranking.
+
+`target_window_evaluation` carries, besides the single hit/stop/expired
+outcome, target-free multi-horizon labels filled by `16`: `mfe_{1,3,5,10}d_pct`
+/ `mae_{1,3,5,10}d_pct` (max favorable / adverse excursion vs `entry_price`
+over the first N sessions after the scan date), `ret_5d_pct` / `ret_10d_pct`
+(close on session N vs entry), `horizon_bars` (how many forward sessions
+existed when last labelled — a horizon stays NULL until it can close) and
+`labels_updated_at`. `expected_value_pct` / `risk_pct` are NOT stored: the
+views derive them from the pick's stored gain/stop and the current
+`probability_stats` base rates.
+
 ## Views
 
 - `v_latest_scanner_run` — the most recent completed `LIVE` run.

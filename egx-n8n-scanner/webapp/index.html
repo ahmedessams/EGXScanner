@@ -475,9 +475,15 @@ const RANKED_COLUMNS = [
   { key: 'close', label: 'Close', num: true, render: (r) => fmt(r.close) },
   { key: 'change_pct', label: 'Chg %', num: true, render: (r) => changeCell(r.change_pct) },
   { key: 'overall_score', label: 'Score', num: true, render: (r) => scoreCell(r.overall_score) },
+  { key: 'entry_quality_score', label: 'Entry Q', num: true, title: 'Entry Quality (0–100): how good TODAY is as an entry, separate from the Score (how good the setup is). Extension from the 20-day EMA in ATRs (40 pts — best on or just above the trend, 0 when 3 ATR above it), where the close sat in the day\'s range (30 pts), and the 3-session RSI slope (30 pts). Not a ranking factor.', render: (r) => scoreCell(r.entry_quality_score) },
+  { key: 'expected_value_pct', label: 'EV %', num: true, title: 'Expected value per trade = P(T1) × Gain % T1 − P(Stop) × risk to the stop, using the measured setup-wide rates in the P(T1)/P(Stop) columns. Positive means the historical odds pay for the risk; a base-rate arithmetic, not a forecast for this stock.', render: (r) => changeCell(r.expected_value_pct) },
   { key: 'setup_type', label: 'Setup', render: (r) => setupBadge(r.setup_type) },
   { key: 'rvol20', label: 'RVOL20', num: true, render: (r) => fmtx(r.rvol20) },
   { key: 'rsi14', label: 'RSI14', num: true, render: (r) => fmt(r.rsi14, 1) },
+  { key: 'relative_strength_20d', label: 'RS vs Mkt', num: true, title: 'Relative strength: this stock\'s 20-day return minus the median 20-day return of the market\'s active universe on the same date (percentage points). Positive = outperforming the market. Stored for validation; not yet a ranking factor.', render: (r) => changeCell(r.relative_strength_20d) },
+  { key: 'extension_atr', label: 'Ext. (ATR)', num: true, title: 'How far the close sits from the 20-day EMA, in ATR14 units. Around 0 to +1 is on-trend; above +2 the stock is extended (chasing risk); below −1 it is well under its mean.', render: (r) => fmtx(r.extension_atr) },
+  { key: 'close_position_pct', label: 'Close Pos %', num: true, title: 'Where the close sat inside the scan day\'s high–low range: 100% = closed on the high, 0% = closed on the low.', render: (r) => (r.close_position_pct === null || r.close_position_pct === undefined) ? '—' : fmt(r.close_position_pct, 0) + '%' },
+  { key: 'rsi_slope3', label: 'RSI Slope 3d', num: true, title: 'RSI14 today minus RSI14 three sessions earlier. Positive = momentum building.', render: (r) => fmt(r.rsi_slope3, 1) },
   { key: 'support1', label: 'Support', num: true, render: (r) => fmt(r.support1) },
   { key: 'resistance1', label: 'Resistance', num: true, render: (r) => fmt(r.resistance1) },
   { key: 'entry_price', label: 'Entry', num: true, render: (r) => fmt(r.entry_price) },
@@ -492,6 +498,9 @@ const RANKED_COLUMNS = [
   { key: 'actual_window_high', label: 'Actual High (T1 win.)', num: true, title: 'The ACTUAL highest price reached during this pick\'s own Est. Days T1 window (the sessions after the scan date). "—" until at least one later session exists.', render: (r) => fmt(r.actual_window_high) },
   { key: 'actual_window_low', label: 'Actual Low (T1 win.)', num: true, title: 'The ACTUAL lowest price reached during this pick\'s own Est. Days T1 window.', render: (r) => fmt(r.actual_window_low) },
   { key: 'window_outcome', label: 'Outcome', title: 'Evaluated result of this recommendation: did price touch Target 1 or the stop first within the Est. Days T1 window? Evaluated by the weekly target-window evaluation; Pending until the window has fully elapsed and been evaluated.', render: (r) => windowOutcomeCell(r.window_outcome, r.resolved_day_number, r.window_sessions_elapsed, r.target1_estimated_days) },
+  { key: 'mfe_10d_pct', label: 'MFE 10d %', num: true, title: 'Maximum favourable excursion: the highest high in the 10 sessions after the scan date as a % above the entry price — how much was there to take, regardless of the target. Filled by the evaluation workflow; "—" until later sessions exist.', render: (r) => changeCell(r.mfe_10d_pct) },
+  { key: 'mae_10d_pct', label: 'MAE 10d %', num: true, title: 'Maximum adverse excursion: the lowest low in the 10 sessions after the scan date as a % below the entry price — the worst drawdown a holder sat through.', render: (r) => changeCell(r.mae_10d_pct) },
+  { key: 'ret_10d_pct', label: 'Ret 10d %', num: true, title: 'Close-to-close return 10 sessions after the scan date versus the entry price.', render: (r) => changeCell(r.ret_10d_pct) },
   { key: 'next_day_high_estimate', label: 'Next Day High Est.', num: true, title: 'Estimated HIGH for the NEXT session after the scan date: close + 1x ATR14, the same band the Next Estimate tab tracks. Not a target — a volatility-based ceiling to judge whether Target 1 is reachable in one session. Hover the Next Estimate tab for this stock\'s historical accuracy.', render: (r) => fmt(r.next_day_high_estimate) },
   { key: 'next_day_high_estimate_pct', label: 'Next Day High Est. %', num: true, title: 'The estimated next-session HIGH as a gain % versus the scan-date close (the upside side of the close ± ATR14 band).', render: (r) => changeCell(r.next_day_high_estimate_pct) },
   { key: 'next_day_low_estimate_pct', label: 'Next Day Low Est. %', num: true, title: 'The estimated next-session LOW as a loss % versus the scan-date close (the downside side of the close ± ATR14 band).', render: (r) => changeCell(r.next_day_low_estimate_pct) },
@@ -523,6 +532,8 @@ const TOP_PICKS_COLUMNS = [
   { key: 'target2', label: 'TP2', num: true, render: (r) => fmt(r.target2) },
   { key: 'invalidation_price', label: 'Stop Loss', num: true, render: (r) => fmt(r.invalidation_price) },
   { key: 'target1_gain_pct', label: 'Profit Margin', num: true, title: 'Potential gain to Target 1 if reached — not a forecast. This table only includes picks with at least 5% potential gain to Target 1 that also pass the measured-probability gate (see the Similar Picks columns).', render: (r) => gainCell(r.target1_gain_pct) },
+  { key: 'entry_quality_score', label: 'Entry Q', num: true, title: 'Entry Quality (0–100): how good TODAY is as an entry, separate from the setup score. Extension from the 20-day EMA in ATRs (40 pts), close position in the day\'s range (30 pts), 3-session RSI slope (30 pts). A low value on a strong setup means: good pattern, poor moment — consider waiting for a pullback.', render: (r) => scoreCell(r.entry_quality_score) },
+  { key: 'similar_expected_value_pct', label: 'EV %', num: true, title: 'Expected value per trade = Similar Picks Hit % × Profit Margin − Similar Picks Stop % × risk to the stop. Uses the same size-adjusted similar-pick rates as the gate. Positive means the measured odds pay for the risk; base-rate arithmetic, not a forecast for this stock.', render: (r) => changeCell(r.similar_expected_value_pct) },
   { key: 'ai_target1_probability_pct', label: 'AI Profit Prob', num: true, title: 'AI Assessment: a language model\'s own probability estimate for reaching Target 1. A qualitative judgment call from limited technical data, not a guarantee. Picks assessed below 40% are excluded from this table. Hover for the model\'s stated reasoning.', render: (r) => aiProbCell(r.ai_target1_probability_pct, r.ai_reasoning) },
   { key: 'similar_target1_hit_pct', label: 'Similar Picks Hit %', num: true, title: 'Measured rate: % of past Top-10 picks in this market with the same setup type and a similar-size Target 1 (0.6x–1.5x this pick\'s gain) that reached Target 1 inside their own window. This is the gate: at least 50% on at least 20 picks. A base rate, not a forecast for this specific stock — hover for sample size.', render: (r) => probCell(r.similar_target1_hit_pct, r.similar_n, true) },
   { key: 'ai_stop_probability_pct', label: 'AI Stop Prob', num: true, title: 'AI Assessment: a language model\'s own probability estimate that the stop/invalidation is hit before Target 1. A qualitative judgment call from limited technical data, not a guarantee. Hover for the model\'s stated reasoning.', render: (r) => aiProbCell(r.ai_stop_probability_pct, r.ai_reasoning) },
@@ -609,6 +620,8 @@ const FULL_MARKET_COLUMNS = [
   { key: 'traded_value', label: 'Traded Value', num: true, render: (r) => fmtInt(r.traded_value), sortKey: 'tradedvalue' },
   { key: 'rvol20', label: 'RVOL20', num: true, render: (r) => fmtx(r.rvol20), sortKey: 'rvol' },
   { key: 'overall_score', label: 'Score', num: true, render: (r) => scoreCell(r.overall_score), sortKey: 'score' },
+  { key: 'entry_quality_score', label: 'Entry Q', num: true, title: 'Entry Quality (0–100): how good TODAY is as an entry, separate from the Score (how good the setup is). Extension from the 20-day EMA in ATRs (40 pts), close position in the day\'s range (30 pts), 3-session RSI slope (30 pts). Not a ranking factor.', render: (r) => scoreCell(r.entry_quality_score), sortKey: null },
+  { key: 'expected_value_pct', label: 'EV %', num: true, title: 'Expected value per trade = P(T1) × Gain % T1 − P(Stop) × risk to the stop, using the measured setup-wide rates. Base-rate arithmetic, not a forecast for this stock.', render: (r) => changeCell(r.expected_value_pct), sortKey: null },
   { key: 'setup_type', label: 'Setup', render: (r) => setupBadge(r.setup_type), sortKey: null },
   { key: 'target1_gain_pct', label: 'Gain % T1', num: true, title: 'Potential gain if Target 1 is reached — not a forecast', render: (r) => gainCell(r.target1_gain_pct) },
   { key: 'target1_estimated_days', label: 'Est. Days T1', num: true, title: 'Rough ATR-based projection, not a historical statistic or guarantee', render: (r) => fmtDays(r.target1_estimated_days) },
@@ -697,6 +710,13 @@ const FULL_MARKET_EXPORT_COLUMNS = [
   { key: 'dividend_yield_pct', label: 'Div Yield %' },
   { key: 'dividend_years_paid_5y', label: 'Div Years Paid (5y)' },
   { key: 'dividend_growth_pct', label: 'Div Growth %' },
+  { key: 'relative_strength_20d', label: 'RS vs Market (pp)' },
+  { key: 'entry_quality_score', label: 'Entry Quality' },
+  { key: 'extension_atr', label: 'Extension (ATR)' },
+  { key: 'close_position_pct', label: 'Close Position %' },
+  { key: 'rsi_slope3', label: 'RSI Slope 3d' },
+  { key: 'risk_pct', label: 'Risk to Stop %' },
+  { key: 'expected_value_pct', label: 'Expected Value %' },
 ];
 
 function esc(s) { return (s ?? '').toString().replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -986,7 +1006,10 @@ async function initDateFilter() {
 // support/resistance stay one click away in the Columns menu. Exceptions:
 // the Top Relative Volume tab keeps RVOL20 (it is what the tab ranks by) and
 // Track Record keeps Setup (it is the row grouping, not a technical column).
-const DEFAULT_HIDDEN_COLUMN_KEYS = ['rvol20', 'rvol50', 'rsi14', 'setup_type', 'support1', 'resistance1', 'est_2w_pct', 'est_1m_pct', 'est_3m_pct', 'est_1y_pct'];
+const DEFAULT_HIDDEN_COLUMN_KEYS = ['rvol20', 'rvol50', 'rsi14', 'setup_type', 'support1', 'resistance1', 'est_2w_pct', 'est_1m_pct', 'est_3m_pct', 'est_1y_pct',
+  // Entry Quality components and the multi-horizon labels are diagnostic
+  // detail behind the visible Entry Q / EV % columns — opt in via Columns.
+  'relative_strength_20d', 'extension_atr', 'close_position_pct', 'rsi_slope3', 'mfe_10d_pct', 'mae_10d_pct', 'ret_10d_pct'];
 function defaultHiddenForTab() {
   const keys = new Set(DEFAULT_HIDDEN_COLUMN_KEYS);
   if (state.tab === 'rvol' || state.tab === 'volume') keys.delete('rvol20');
