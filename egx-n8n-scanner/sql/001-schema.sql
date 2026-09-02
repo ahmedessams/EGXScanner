@@ -540,6 +540,35 @@ COMMENT ON TABLE target_window_evaluation IS 'Per-pick outcome walking forward u
 COMMENT ON COLUMN target_window_evaluation.outcome IS 'TARGET1_HIT: high touched target1 before invalidation, within the window. STOP_HIT: invalidation touched first (or same day as target1 — ambiguous intraday order, treated conservatively as a stop, matching prediction_evaluation.success convention). EXPIRED_NO_HIT: neither triggered by the time target1_estimated_days sessions had elapsed.';
 COMMENT ON COLUMN target_window_evaluation.resolved_day_number IS 'Which trading day (1-indexed from the scan date) the outcome resolved on; NULL for EXPIRED_NO_HIT.';
 
+-- Invalidate a stale evaluation when its pick is re-written (2026-09-02).
+-- scanner_runs is UNIQUE (trading_date, run_type, market) and workflow 11
+-- upserts scanner_results in place, so a replayed BACKTEST day (or a LIVE
+-- catch-up run) rewrites entry/stop/target/window under an evaluation that
+-- workflow 16 never revisits — it only evaluates rows with no evaluation.
+-- Found on 2026-09-02: 5,974 BACKTEST evaluations (EGX 2,931, US 3,043)
+-- still described the 08-23 calibrated targets after the rollback replay,
+-- inflating probability_stats (EGX eligible hit 44.6% stored vs 28.7%
+-- recomputed). Deleting the row hands it back to workflow 16, which
+-- re-evaluates and refills the multi-horizon labels on its next run.
+CREATE OR REPLACE FUNCTION trg_scanner_results_invalidate_evaluation() RETURNS TRIGGER AS $$
+BEGIN
+  DELETE FROM target_window_evaluation WHERE scanner_result_id = NEW.id;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS scanner_results_invalidate_evaluation ON scanner_results;
+CREATE TRIGGER scanner_results_invalidate_evaluation
+    AFTER UPDATE OF entry_price, invalidation_price, target1, target1_estimated_days, eligible
+    ON scanner_results
+    FOR EACH ROW
+    WHEN (OLD.entry_price IS DISTINCT FROM NEW.entry_price
+       OR OLD.invalidation_price IS DISTINCT FROM NEW.invalidation_price
+       OR OLD.target1 IS DISTINCT FROM NEW.target1
+       OR OLD.target1_estimated_days IS DISTINCT FROM NEW.target1_estimated_days
+       OR OLD.eligible IS DISTINCT FROM NEW.eligible)
+    EXECUTE FUNCTION trg_scanner_results_invalidate_evaluation();
+
 -- Multi-horizon labels (2026-09-02). The single TARGET1_HIT/STOP_HIT/EXPIRED
 -- outcome depends on the pick's own target and window, so it cannot tell a
 -- "went +4% then faded" pick from one that never moved. These fixed-horizon

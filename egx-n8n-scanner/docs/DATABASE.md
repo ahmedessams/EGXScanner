@@ -61,6 +61,19 @@ existed when last labelled — a horizon stays NULL until it can close) and
 views derive them from the pick's stored gain/stop and the current
 `probability_stats` base rates.
 
+An evaluation is only valid for the pick it was computed from. Because
+`scanner_runs` is unique per `(trading_date, run_type, market)` and `11`
+upserts `scanner_results` in place, a replayed `BACKTEST` day (or a `LIVE`
+catch-up) rewrites the entry/stop/target/window under the existing
+evaluation, and `16` never revisits rows that already have one. The trigger
+`scanner_results_invalidate_evaluation` (in `001-schema.sql`) therefore
+deletes the `target_window_evaluation` row whenever `entry_price`,
+`invalidation_price`, `target1`, `target1_estimated_days` or `eligible`
+changes; `16` re-evaluates and re-labels it on its next run (3,000 rows per
+run — after a large replay, run `16` until `totalEvaluatedRows` stops
+growing). Added 2026-09-02 after ~6,000 `BACKTEST` evaluations were found
+still describing the rolled-back 08-24 targets.
+
 ## Views
 
 - `v_latest_scanner_run` — the most recent completed `LIVE` run.
