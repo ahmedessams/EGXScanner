@@ -595,6 +595,49 @@ COMMENT ON COLUMN target_window_evaluation.mae_10d_pct IS 'Maximum adverse excur
 COMMENT ON COLUMN target_window_evaluation.ret_10d_pct IS 'Close on the 10th session after the scan date vs entry_price, in %. ret_5d_pct likewise.';
 COMMENT ON COLUMN target_window_evaluation.horizon_bars IS 'How many forward sessions (capped at 10) existed when the labels were last computed; horizons beyond it are still NULL and get filled on a later run.';
 
+-- Invalidate evaluations when a forward candle is REVISED (2026-09-03).
+-- 03-egx-daily-market-update upserts a rolling window of recent sessions on
+-- every run, and a US candle is first written at 20:01Z — one minute after
+-- the close — with preliminary prints that the provider corrects over the
+-- following sessions (each candle is rewritten ~5 times). Workflow 16 only
+-- evaluates rows with no evaluation, so an outcome computed against the
+-- preliminary candle was never revisited: on 2026-09-03, 12 US LIVE picks
+-- from 08-25..08-27 had been judged on the preliminary 08-28 candle and the
+-- final one flipped 8 outcomes (a low revised through the stop, a high
+-- revised back under target1). daily_prices.updated_at is bumped on every
+-- rewrite, so it cannot identify a real revision — this trigger fires only
+-- when OHLC actually changes and drops every evaluation whose window (or
+-- 10-session label horizon) covers the revised session, handing those rows
+-- back to workflow 16 exactly like the scanner_results trigger above.
+CREATE OR REPLACE FUNCTION trg_daily_prices_invalidate_evaluation() RETURNS TRIGGER AS $$
+BEGIN
+  DELETE FROM target_window_evaluation twe
+  USING scanner_results sr
+  JOIN scanner_runs r ON r.id = sr.scanner_run_id
+  WHERE twe.scanner_result_id = sr.id
+    AND sr.stock_id = NEW.stock_id
+    AND r.trading_date < NEW.trading_date
+    AND r.trading_date >= NEW.trading_date - 120
+    AND (SELECT COUNT(*) FROM daily_prices dp
+          WHERE dp.stock_id = NEW.stock_id
+            AND dp.trading_date > r.trading_date
+            AND dp.trading_date <= NEW.trading_date)
+        <= GREATEST(COALESCE(twe.resolved_day_number, twe.target1_estimated_days), 10);
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS daily_prices_invalidate_evaluation ON daily_prices;
+CREATE TRIGGER daily_prices_invalidate_evaluation
+    AFTER UPDATE OF open, high, low, close
+    ON daily_prices
+    FOR EACH ROW
+    WHEN (OLD.open IS DISTINCT FROM NEW.open
+       OR OLD.high IS DISTINCT FROM NEW.high
+       OR OLD.low IS DISTINCT FROM NEW.low
+       OR OLD.close IS DISTINCT FROM NEW.close)
+    EXECUTE FUNCTION trg_daily_prices_invalidate_evaluation();
+
 CREATE TABLE IF NOT EXISTS probability_stats (
     setup_type          VARCHAR(20) NOT NULL,
     market              VARCHAR(16) NOT NULL DEFAULT 'EGX',
