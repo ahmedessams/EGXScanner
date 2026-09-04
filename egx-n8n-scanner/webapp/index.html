@@ -513,14 +513,16 @@ const RANKED_COLUMNS = [
 ];
 
 // Top 3 Trade Ideas: a curated subset of the eligible Top 10, filtered
-// server-side (see /top-picks in 13-egx-report-api) to picks that pass all
-// three gates: >= 5% potential gain to Target 1; a measured >= 50% Target-1
-// hit rate on >= 20 past Top-10 picks of the same setup type with a
-// similar-size target (0.6x-1.5x); and AI P(Target 1) >= 40% when assessed.
-// A day with nothing that clears the bar legitimately returns fewer than 3
-// rows, down to zero — not padded with weak setups. The two "Similar Picks"
-// columns show the size-adjusted rates the gate actually used, not the
-// setup-wide Hist. rates of the other tabs (which blend 3% and 22% targets).
+// server-side (see /top-picks in 13-egx-report-api) to picks whose Target 1
+// is structurally within reach: setup ACCUMULATION or MOMENTUM, Est. Days T1
+// <= 5 and R:R T1 < 1.5 (full-history lab 2026-09-04: better hit rate, mean
+// realized and expectancy than the ungated Top 3 in both markets, BACKTEST
+// and LIVE — see docs/SCORING.md "Top 3 Trade Ideas"). A day with nothing
+// that clears the bar legitimately returns fewer than 3 rows, down to zero —
+// not padded with weak setups. The "Similar Picks" columns show size-adjusted
+// measured rates (not the setup-wide Hist. rates of the other tabs, which
+// blend 3% and 22% targets) and the AI columns show the model's read; since
+// 2026-09-04 both are context, not filters.
 const TOP_PICKS_COLUMNS = [
   DETAIL_BUTTON_COLUMN,
   { key: 'overall_rank', label: '#', render: (r) => rankBadge(r.overall_rank) },
@@ -531,11 +533,13 @@ const TOP_PICKS_COLUMNS = [
   { key: 'target1', label: 'TP1', num: true, render: (r) => fmt(r.target1) },
   { key: 'target2', label: 'TP2', num: true, render: (r) => fmt(r.target2) },
   { key: 'invalidation_price', label: 'Stop Loss', num: true, render: (r) => fmt(r.invalidation_price) },
-  { key: 'target1_gain_pct', label: 'Profit Margin', num: true, title: 'Potential gain to Target 1 if reached — not a forecast. This table only includes picks with at least 5% potential gain to Target 1 that also pass the measured-probability gate (see the Similar Picks columns).', render: (r) => gainCell(r.target1_gain_pct) },
+  { key: 'target1_gain_pct', label: 'Profit Margin', num: true, title: 'Potential gain to Target 1 if reached — not a forecast. This table keeps the picks whose Target 1 is structurally within reach (ACCUMULATION / MOMENTUM setup, Est. Days T1 ≤ 5, R:R T1 < 1.5); the market\'s minimum target gain still applies.', render: (r) => gainCell(r.target1_gain_pct) },
+  { key: 'target1_estimated_days', label: 'Est. Days T1', num: true, title: 'Rough ATR-based projection, not a historical statistic or guarantee. Gate: ≤ 5 — targets further out were reached far less often (EGX 16% vs 42%, US 10% vs 30% of past Top-10 picks).', render: (r) => fmtDays(r.target1_estimated_days) },
+  { key: 'risk_reward_t1', label: 'R:R T1', num: true, title: 'Reward to Target 1 divided by risk to the stop. Gate: < 1.5 — a stop that is tiny next to the target was hit first 20–50% of the time in every measured slice.', render: (r) => fmt(r.risk_reward_t1, 2) },
   { key: 'entry_quality_score', label: 'Entry Q', num: true, title: 'Entry Quality (0–100): how good TODAY is as an entry, separate from the setup score. Extension from the 20-day EMA in ATRs (40 pts), close position in the day\'s range (30 pts), 3-session RSI slope (30 pts). A low value on a strong setup means: good pattern, poor moment — consider waiting for a pullback.', render: (r) => scoreCell(r.entry_quality_score) },
-  { key: 'similar_expected_value_pct', label: 'EV %', num: true, title: 'Expected value per trade = Similar Picks Hit % × Profit Margin − Similar Picks Stop % × risk to the stop. Uses the same size-adjusted similar-pick rates as the gate. Positive means the measured odds pay for the risk; base-rate arithmetic, not a forecast for this stock.', render: (r) => changeCell(r.similar_expected_value_pct) },
-  { key: 'ai_target1_probability_pct', label: 'AI Profit Prob', num: true, title: 'AI Assessment: a language model\'s own probability estimate for reaching Target 1. A qualitative judgment call from limited technical data, not a guarantee. Picks assessed below 40% are excluded from this table. Hover for the model\'s stated reasoning.', render: (r) => aiProbCell(r.ai_target1_probability_pct, r.ai_reasoning) },
-  { key: 'similar_target1_hit_pct', label: 'Similar Picks Hit %', num: true, title: 'Measured rate: % of past Top-10 picks in this market with the same setup type and a similar-size Target 1 (0.6x–1.5x this pick\'s gain) that reached Target 1 inside their own window. This is the gate: at least 50% on at least 20 picks. A base rate, not a forecast for this specific stock — hover for sample size.', render: (r) => probCell(r.similar_target1_hit_pct, r.similar_n, true) },
+  { key: 'similar_expected_value_pct', label: 'EV %', num: true, title: 'Expected value per trade = Similar Picks Hit % × Profit Margin − Similar Picks Stop % × risk to the stop, using the size-adjusted similar-pick rates. Positive means the measured odds paid for the risk in the past; base-rate arithmetic, not a forecast for this stock.', render: (r) => changeCell(r.similar_expected_value_pct) },
+  { key: 'ai_target1_probability_pct', label: 'AI Profit Prob', num: true, title: 'AI Assessment: a language model\'s own probability estimate for reaching Target 1. A qualitative judgment call from limited technical data, not a guarantee and not a filter for this table. Hover for the model\'s stated reasoning.', render: (r) => aiProbCell(r.ai_target1_probability_pct, r.ai_reasoning) },
+  { key: 'similar_target1_hit_pct', label: 'Similar Picks Hit %', num: true, title: 'Measured rate: % of past Top-10 picks in this market with the same setup type and a similar-size Target 1 (0.6x–1.5x this pick\'s gain) that reached Target 1 inside their own window. Context, not a filter: walk-forward it did not separate winners from losers. A base rate, not a forecast for this specific stock — hover for sample size.', render: (r) => probCell(r.similar_target1_hit_pct, r.similar_n, true) },
   { key: 'ai_stop_probability_pct', label: 'AI Stop Prob', num: true, title: 'AI Assessment: a language model\'s own probability estimate that the stop/invalidation is hit before Target 1. A qualitative judgment call from limited technical data, not a guarantee. Hover for the model\'s stated reasoning.', render: (r) => aiProbCell(r.ai_stop_probability_pct, r.ai_reasoning) },
   { key: 'similar_stop_hit_pct', label: 'Similar Picks Stop %', num: true, title: 'Measured rate: % of those same similar past picks that hit the stop/invalidation level first, within that same window. Hover for sample size.', render: (r) => probCell(r.similar_stop_hit_pct, r.similar_n, false) },
 ];

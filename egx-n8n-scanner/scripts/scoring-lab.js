@@ -182,7 +182,8 @@ function emptyStructure() {
 //   atrMultiples     ATR fallback target rungs (production [1.5, 2.5, 3.5])
 //   stopAtrMult      ATR stop multiple for MOMENTUM/default (production 1.5)
 //   accumOverext     apply momentum-style overextension/overbought penalty to accumulation sub-score
-//   excludeSetups    setup types excluded from the Top-N entirely
+//   excludeSetups    setup types excluded from the Top-N entirely (unset = production
+//                    PRODUCTION_EXCLUDED_SETUPS; [] re-admits everything)
 //   requireTarget    exclude picks with no T1 (untradeable) from the Top-N
 //   weights          partial override of DEFAULT_WEIGHTS
 //   usRsiPenalty / estDaysPenalty / probBlend   the three candidate corrections, individually
@@ -198,6 +199,10 @@ function emptyStructure() {
 //                    variants on realized return per DAY as well as per pick —
 //                    a gate that only drops days trades fewer opportunities.
 //   stopAtrMult      defaults to cfg.atrStopMult (production, per market) when unset
+//   rsVsIndex        relative_strength factor from the 20d return MINUS the market
+//                    index's 20d return (rows must carry `idx_return20d`, run-level)
+const PRODUCTION_EXCLUDED_SETUPS = ["BREAKOUT"];
+
 const VARIANTS = [
   { key: "V0_default", profile: "default" },
   { key: "V1_candidate", profile: "candidate" },
@@ -207,7 +212,9 @@ const VARIANTS = [
   { key: "V5_rrWeight15", profile: "default", requireTarget: true, rrWeight: 15 },
   { key: "V6_atr2-3-4", profile: "default", requireTarget: true, atrMultiples: [2.0, 3.0, 4.0] },
   { key: "V7_accumOverext", profile: "default", requireTarget: true, accumOverext: true },
-  { key: "V8_noBreakout", profile: "default", requireTarget: true, excludeSetups: ["BREAKOUT"] },
+  // V8 SHIPPED 2026-09-04 (BREAKOUT unranked in wf11, see docs/SCORING.md) and is
+  // now V0; V8 re-admits BREAKOUT so the decision stays re-checkable.
+  { key: "V8_allowBreakout", profile: "default", excludeSetups: [] },
   { key: "V9_cand_minRR1", profile: "candidate", requireTarget: true, minRR: 1.0 },
   // Tier 1 (2026-09-02): market-relative RS and Entry Quality as ranking inputs.
   // Verdict (both markets, BACKTEST+LIVE, see docs/SCORING.md): V10-V12 neutral
@@ -227,6 +234,19 @@ const VARIANTS = [
   // refreshes BACKTEST rows — re-run these then, per market.
   { key: "V16_mktScore50", profile: "default", minMarketScore: 50 },
   { key: "V17_mktScore60", profile: "default", minMarketScore: 60 },
+  // 2026-09-04 full-history lab (10 months BACKTEST + LIVE, per-pick rows
+  // written to the scratch table lab_picks by the ZZ Scoring Lab v2 helper):
+  // index-based RS (index_prices now has history), setup exclusions driven by
+  // the full-history per-setup base rates, and a softer regime band.
+  { key: "V18_rsVsIndex", profile: "default", rsVsIndex: true },
+  { key: "V19_rsVsIndex_w10", profile: "default", rsVsIndex: true, weights: { relative_strength: 10 } },
+  // 2026-09-04 verdict: REVERSAL rarely ranks, excluding it ~= V0 — not shipped.
+  { key: "V20_noReversal", profile: "default", excludeSetups: ["BREAKOUT", "REVERSAL"] },
+  { key: "V22_mktScore40", profile: "default", minMarketScore: 40 },
+  // Fixed stop multiples: 2.0 re-tests the shipped EGX value on US, 1.5 checks
+  // the EGX decision holds on the full history (each equals V0 on the other market).
+  { key: "V23_stop2.0", profile: "default", stopAtrMult: 2.0 },
+  { key: "V24_stop1.5", profile: "default", stopAtrMult: 1.5 },
 ];
 
 // Entry Quality — same arithmetic as code/entryQuality.js (extension 40 /
@@ -267,7 +287,10 @@ function scoreRow(row, cfg, v, probs, ctx = {}) {
   // Production: ABSOLUTE 20d return. rsVsMarket: minus the same-day median
   // 20d return of the market's universe (ctx.marketReturn20d, what workflow
   // 11 now stores as relative_strength_20d). rsSlope: points per pp (prod 3).
-  const rsInput = v.rsVsMarket && isNumber(return20d) && isNumber(ctx.marketReturn20d) ? return20d - ctx.marketReturn20d : return20d;
+  // rsVsIndex: minus the market index's 20d return (row.idx_return20d, run-level,
+  // from index_prices). Either benchmark falls back to the absolute return when missing.
+  const bench = v.rsVsIndex ? row.idx_return20d : (v.rsVsMarket ? ctx.marketReturn20d : null);
+  const rsInput = isNumber(return20d) && isNumber(bench) ? return20d - bench : return20d;
   const rsSlope = isNumber(v.rsSlope) ? v.rsSlope : 3;
   const relativeStrengthFactor = isNumber(rsInput) ? clamp(50 + rsInput * rsSlope, 0, 100) : 50;
 
@@ -336,7 +359,10 @@ function scoreRow(row, cfg, v, probs, ctx = {}) {
   let rankable = eligible;
   if (v.requireTarget && !isNumber(structure.target1)) rankable = false;
   if (isNumber(v.minRR) && (!isNumber(structure.riskRewardT1) || structure.riskRewardT1 < v.minRR)) rankable = false;
-  if (Array.isArray(v.excludeSetups) && v.excludeSetups.includes(setupType)) rankable = false;
+  // Production (wf11 "Assign Overall Rank", since 2026-09-04) never ranks
+  // BREAKOUT; a variant re-admits it with excludeSetups: [] and can add more.
+  const excluded = Array.isArray(v.excludeSetups) ? v.excludeSetups : PRODUCTION_EXCLUDED_SETUPS;
+  if (excluded.includes(setupType)) rankable = false;
   return { eligible, rankable, setupType, setupConfidence, score: overallScore, structure };
 }
 
@@ -391,13 +417,18 @@ function summarize(picks) {
 }
 
 // ---------------------------------------------------------------- runner
-function runLab(rows, candles, { market, cfg, topN = 10, variants = VARIANTS, probMinSample = 30, probLagDays = 12 }) {
+// Options: variantKeys — run only these VARIANTS keys; emitPicks — also return
+// one compact record per Top-N pick (report.variants[key].picks) so chunked
+// runs can be written to a table and sliced in SQL instead of summarised here.
+function runLab(rows, candles, { market, cfg, topN = 10, variants = VARIANTS, variantKeys = null, emitPicks = false,
+  probMinSample = 30, probLagDays = 12 }) {
+  if (Array.isArray(variantKeys) && variantKeys.length) variants = variants.filter((v) => variantKeys.includes(v.key));
   // Normalise numerics (n8n's Postgres node returns NUMERIC as strings).
   const numCols = ["close", "avg_volume20", "avg_traded_value20", "active_days20", "close20d_ago", "atr14", "data_confidence",
     "macd_histogram", "relative_volume20", "rsi14", "ema20", "resistance1", "resistance2", "resistance3", "support1", "support2",
     "support3", "nearest_resistance_distance_pct", "nearest_support_distance_pct", "accumulation_score", "breakout_score",
     "momentum_score", "pullback_score", "reversal_score", "stored_score", "stored_rank", "high", "low", "rsi14_3d_ago",
-    "market_score"];
+    "market_score", "idx_return20d"];
   for (const r of rows) for (const c of numCols) r[c] = num(r[c]);
 
   // Same-day market benchmark for rsVsMarket: median 20d return across every
@@ -484,6 +515,13 @@ function runLab(rows, candles, { market, cfg, topN = 10, variants = VARIANTS, pr
     for (const k of Object.keys(bySetup)) vr.bySetup[k] = summarize(bySetup[k]);
     vr.setupMix = Object.fromEntries(Object.entries(bySetup).map(([k, a]) => [k, a.length]));
     if (v.key === "V0_default") vr.liveScoreMatch = { compared: liveMatch.n, exact: liveMatch.exact, meanAbsDiff: liveMatch.n ? round(liveMatch.absDiffSum / liveMatch.n, 3) : null };
+    if (emitPicks) vr.picks = picks.map((p) => ({
+      market, variant: v.key, d: p.d, run_type: p.run_type, stock_id: p.stock_id, symbol: p.symbol, rank: p.rank,
+      setup: p.setupType, score: p.score, gain_t1: round(p.structure.target1GainPct, 4), rr: p.structure.riskRewardT1,
+      est_days: p.structure.target1EstimatedDays, outcome: p.ev.outcome, resolved_day: p.ev.resolvedDay,
+      realized_pct: round(p.ev.realizedPct, 4), realized_r: round(p.ev.realizedR, 4), fwd5: round(p.ev.fwd5, 4), fwd10: round(p.ev.fwd10, 4),
+      market_score: p.row.market_score, idx_ret20: p.row.idx_return20d,
+    }));
     report.variants[v.key] = vr;
   }
   return report;

@@ -242,6 +242,36 @@ winning score's absolute strength AND its margin over the runner-up — a
 breakout scoring 90 with the next-highest sub-score at 30 is a much more
 confident call than one scoring 90 with reversal also at 85.
 
+**BREAKOUT is scored but not ranked (since 2026-09-04).** Workflow 11's
+`Assign Overall Rank` gives `overall_rank` only to rows that are eligible
+AND not `BREAKOUT`; BREAKOUT rows keep their scores, targets, `setup_type`
+and a NULL rank (sorted after the ranked rows on `/top`, `/stocks` and the
+dashboard, exactly like ineligible rows), and `16` still evaluates them so
+their base rate in `probability_stats` keeps updating. Evidence: the
+full-history scoring lab of 2026-09-04 (`scripts/scoring-lab.js` replayed
+through n8n over EGX 2025-11-12 → 2026-09-03 and US 2025-08-04 → 2026-09-02,
+BACKTEST + LIVE, ~51k Top-10 picks across 11 variants) found BREAKOUT to be
+the only setup with negative expectancy in all four market × slice
+cells — EGX BACKTEST n=216 hit 30.1% / stop 27.3% / −0.008 R, US BACKTEST
+n=552 hit 20.5% / stop 33.7% / −0.126 R, and both LIVE slices worse (US LIVE
+stop rate 70% on n=10) — while ACCUMULATION and MOMENTUM were positive in
+all four. The structural reason is in `buildTradeStructure`: a BREAKOUT
+entry sits just above resistance-1 while its stop sits at support-1, so
+the risk is the whole prior range and the entry only fills after the move
+has started. Removing it from the rankable set (`V8_noBreakout`) raised the
+Top-10 hit rate EGX BACKTEST 38.9 → 40.1% / LIVE 50.0 → 52.6% (mean realized
++1.01 → +1.14% / +1.72 → +2.43%) and US BACKTEST 27.1 → 28.2% (+0.10 →
++0.20%); US LIVE (n≈88) was neutral (stop rate 26.4 → 20.2%, mean realized
+−0.23 → −0.20%, hit 26.4 → 23.6% ≈ 2 picks). Month by month it helped in
+10/11 EGX months and 9/14 US months on hit rate, 10/11 and 12/14 on mean
+realized — not a single-regime effect. Lab `V0_default` now mirrors this;
+`V8_allowBreakout` is the variant that re-admits BREAKOUT for future checks.
+The same lab **rejected** `minRR 1.0` (raises target size, lowers hit rate
+6–15 pt), `rsVsIndex` weighting (±0.5 pt, sign flips on US LIVE), a
+market-score regime gate (no monotonic band edge on either market) and
+`stop 1.5` on EGX / `stop 2.0` on US (confirming the per-market multiples
+below).
+
 ## Risk/reward (`code/riskReward.js`)
 
 Entry/invalidation/targets are ALWAYS derived from real support/resistance
@@ -385,6 +415,61 @@ and not a guarantee. Treat disagreement between `ai_rank` and
 the `historical_target1_hit_pct` it was anchored on, as exactly that —
 the model's case-specific adjustment away from the base rate, not a sign
 either signal is "right."
+
+## Top 3 Trade Ideas (`/top-picks`, since 2026-09-04)
+
+The eligible Top 10 of the day — never a lower rank — kept only where the
+Target 1 is structurally within reach, then the first 3 by `overall_rank`.
+Two gates, both must pass, both from `scanner_results` columns the reader
+already sees:
+
+1. `setup_type IN ('ACCUMULATION', 'MOMENTUM')` — PULLBACK and REVERSAL
+   Top-10 picks had negative expectancy in both markets; BREAKOUT is no
+   longer ranked at all (above);
+2. `target1_estimated_days <= 5 AND risk_reward_t1 < 1.5` (NULL fails) —
+   a Target 1 more than ~5 ATR-sessions away is rarely reached inside its
+   own window (est. days > 5: EGX 15.9% hit vs 42.0%; US 10.5% / 0% vs
+   29.9% / 26.6%, BACKTEST / LIVE), and an R:R ≥ 1.5 here means a stop
+   that is tiny next to the target (20–50% stop-outs in every slice).
+
+Full-history scoring lab 2026-09-04 (51k replayed Top-10 picks, both
+markets, BACKTEST and LIVE), Top-3-by-rank of the gated set vs the ungated
+Top 3:
+
+| slice | gated: hit / mean realized / expectancy | ungated Top 3 |
+|---|---|---|
+| EGX BACKTEST n=545 | 44.0% / +1.01% / +0.126R | 41.2% / +0.96% / +0.125R |
+| EGX LIVE n=33 | 51.5% / +2.33% / +0.169R | 50.0% / +2.13% / +0.165R |
+| US BACKTEST n=783 | 31.7% / +0.27% / +0.043R | 30.3% / +0.24% / +0.039R |
+| US LIVE n=32 | 46.9% / +1.65% / +0.292R | 34.4% / +0.20% / +0.020R |
+
+Better on all three measures in all four slices, with picks on every day;
+the BACKTEST differences are small, the LIVE ones rest on ~11 days each.
+Not a "closer target" effect: `markets.min_target_gain_pct` still applies
+and mean realized rises with the hit rate.
+
+Three gates that were in `/top-picks` before were removed on the same
+data, each for its own reason:
+
+- the **≥ 5% gain to Target 1** floor lowers the EGX hit rate to 37–42%
+  (bigger targets) while raising mean realized — a product trade-off, but
+  "accuracy" is the stated goal and the trivially-close-target loophole is
+  already closed by `min_target_gain_pct`;
+- the **similar-size cohort ≥ 50% hit on ≥ 20 picks** gate: walk-forward
+  over 10 months it passed 1 EGX BACKTEST pick, and at any threshold
+  (40/45/50, base+5, EV > 0, cohort mean ≥ 1%) the picks it kept did no
+  better than the ones it dropped — the 2026-09-02 US result was a
+  regime artefact;
+- the **AI P(Target 1) ≥ 40%** gate was never validated (EGX LIVE
+  evaluated rows: P<40 55.6% hit on 9, 40–49 44.0% on 25, ≥50 60.4% on
+  48; US has 13 scored rows) and blanked the US table on days the model
+  scored every pick in the 30s. Re-test once ~200 evaluated rows per
+  market carry an AI score.
+
+The `similar_*` cohort rates and the AI columns are still returned on each
+row as measured / model context, not as filters. A day with nothing that
+clears the bar returns fewer than 3 rows, down to zero — accuracy over
+filling slots.
 
 ## Liquidity filter (spec section 19)
 
