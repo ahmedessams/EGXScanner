@@ -38,7 +38,14 @@ appear in:
 | `01-egx-stock-universe` | `Fetch EGX Universe (CONFIGURE ENDPOINT)` | Your provider's "list exchange constituents" endpoint |
 | `02-egx-historical-import` | `Fetch Historical OHLCV (CONFIGURE ENDPOINT)` | Your provider's EOD/historical candles endpoint |
 | `03-egx-daily-market-update` | `Fetch Recent OHLCV (CONFIGURE ENDPOINT)` | Same endpoint as above, called with a short lookback |
-| `03-egx-daily-market-update` | `Fetch EGX30 Index (OPTIONAL, CONFIGURE ENDPOINT)` | Optional — your provider's index-history endpoint |
+| `03-egx-daily-market-update` | `Fetch Market Index (OPTIONAL, CONFIGURE ENDPOINT)` | Optional — your provider's index-history endpoint for `markets.index_code` |
+
+The live deployment's configured URLs (EODHD, multi-market: the exchange
+suffix is the per-run `market` field, not `EGX_EXCHANGE_CODE`) are recorded
+in `scripts/fix-endpoint-urls.py`, which can re-apply them if a re-sync ever
+reverts a node to its placeholder. `scripts/n8n-export.py` and
+`scripts/render-n8n-setup.py` both preserve live URLs over repo placeholders,
+so the repo JSON intentionally keeps the `CONFIGURE-...` text.
 
 ## Example shapes (verify against current provider docs before use)
 

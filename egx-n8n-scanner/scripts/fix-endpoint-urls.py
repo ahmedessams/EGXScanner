@@ -22,18 +22,27 @@ import urllib.request
 
 # Verified against the real EODHD API (https://eodhd.com/api) — these match
 # their documented "Get List of Tickers" and "EOD Historical Data" endpoints.
+#
+# Multi-market (2026-08-20+): the exchange suffix comes from the per-run
+# `market` item field (EGX / US), NOT from $env.EGX_EXCHANGE_CODE — the older
+# EGX-only URLs would silently route every US symbol to EGX. Keep these in
+# sync with the live nodes (verified 2026-09-05 via the n8n API).
 FIXES = {
     "01 - EGX Stock Universe": {
         "Fetch EGX Universe (CONFIGURE ENDPOINT)":
-            "={{ $env.MARKET_API_BASE_URL }}/exchange-symbol-list/{{ $env.EGX_EXCHANGE_CODE }}",
+            "={{ $env.MARKET_API_BASE_URL }}/exchange-symbol-list/{{ $('Attach Market').first().json.market }}",
     },
     "02 - EGX Historical Import": {
         "Fetch Historical OHLCV (CONFIGURE ENDPOINT)":
-            "={{ $env.MARKET_API_BASE_URL }}/eod/{{ $json.symbol }}.{{ $env.EGX_EXCHANGE_CODE }}",
+            "={{ $env.MARKET_API_BASE_URL }}/eod/{{ $json.symbol }}.{{ $json.market }}",
     },
     "03 - EGX Daily Market Update": {
         "Fetch Recent OHLCV (CONFIGURE ENDPOINT)":
-            "={{ $env.MARKET_API_BASE_URL }}/eod/{{ $json.symbol }}.{{ $env.EGX_EXCHANGE_CODE }}",
+            "={{ $env.MARKET_API_BASE_URL }}/eod/{{ $json.symbol }}.{{ $json.market }}",
+        # Index candles (markets.index_code, e.g. EGX30 / GSPC) feed the
+        # market-regime step; EODHD serves indices under the .INDX suffix.
+        "Fetch Market Index (OPTIONAL, CONFIGURE ENDPOINT)":
+            "={{ $env.MARKET_API_BASE_URL }}/eod/{{ $('Load Active Stocks').first().json.index_code }}.INDX",
     },
 }
 
