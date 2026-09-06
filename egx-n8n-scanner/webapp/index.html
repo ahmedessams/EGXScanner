@@ -510,6 +510,8 @@ const RANKED_COLUMNS = [
   { key: 'est_1y_pct', label: 'Est. 1y %', num: true, title: 'Drift projection over the next 252 trading days, from this stock\'s own measured daily drift. At a 1-year horizon the uncertainty band is very wide — treat as context, never a forecast.', render: (r) => changeCell(r.est_1y_pct) },
   { key: 'long_term_score', label: 'LT Score', num: true, title: 'Long-term technical quality (0–100): price-only durable-uptrend heuristic — SMA200 position and slope, consistency above SMA200, drawdown vs the 52-week high, 6/12-month returns, volatility discipline. An untuned screening aid for long holding horizons, not a forecast.', render: (r) => scoreCell(r.long_term_score) },
   { key: 'dividend_yield_pct', label: 'Div Yield %', num: true, title: 'Trailing-12-month dividends per share divided by this date\'s close (from the weekly dividend import). "—" when the stock paid nothing in the last year.', render: (r) => (r.dividend_yield_pct === null || r.dividend_yield_pct === undefined) ? '—' : fmt(r.dividend_yield_pct, 2) + '%' },
+  { key: 'ichimoku_signal', label: 'Ichimoku', title: 'Ichimoku cloud read (9/26/52) on the scan date: BULLISH/BEARISH = close above/below the cloud, STRONG when the Tenkan is also on the same side of the Kijun and the close beats the close 26 sessions earlier; NEUTRAL inside the cloud or with under 78 sessions of history. Context only — not a ranking input.', render: (r) => ichimokuCell(r.ichimoku_signal) },
+  { key: 'ichimoku_cloud_dist_pct', label: 'Cloud Dist %', num: true, title: 'Distance from the close to the nearest edge of the Ichimoku cloud as a % of the close: positive = above the cloud, negative = below it, 0 = inside. Context only — not a ranking input.', render: (r) => changeCell(r.ichimoku_cloud_dist_pct) },
 ];
 
 // Top 3 Trade Ideas: a curated subset of the eligible Top 10, filtered
@@ -637,6 +639,8 @@ const FULL_MARKET_COLUMNS = [
   { key: 'est_1y_pct', label: 'Est. 1y %', num: true, title: 'Drift projection over the next 252 trading days, from this stock\'s own measured daily drift. At a 1-year horizon the uncertainty band is very wide — treat as context, never a forecast.', render: (r) => changeCell(r.est_1y_pct), sortKey: null },
   { key: 'long_term_score', label: 'LT Score', num: true, title: 'Long-term technical quality (0–100): price-only durable-uptrend heuristic — SMA200 position and slope, consistency above SMA200, drawdown vs the 52-week high, 6/12-month returns, volatility discipline. An untuned screening aid for long holding horizons, not a forecast.', render: (r) => scoreCell(r.long_term_score), sortKey: null },
   { key: 'dividend_yield_pct', label: 'Div Yield %', num: true, title: 'Trailing-12-month dividends per share divided by this date\'s close (from the weekly dividend import). "—" when the stock paid nothing in the last year.', render: (r) => (r.dividend_yield_pct === null || r.dividend_yield_pct === undefined) ? '—' : fmt(r.dividend_yield_pct, 2) + '%', sortKey: null },
+  { key: 'ichimoku_signal', label: 'Ichimoku', title: 'Ichimoku cloud read (9/26/52) on the scan date: BULLISH/BEARISH = close above/below the cloud, STRONG when the Tenkan is also on the same side of the Kijun and the close beats the close 26 sessions earlier; NEUTRAL inside the cloud or with under 78 sessions of history. Context only — not a ranking input.', render: (r) => ichimokuCell(r.ichimoku_signal), sortKey: null },
+  { key: 'ichimoku_cloud_dist_pct', label: 'Cloud Dist %', num: true, title: 'Distance from the close to the nearest edge of the Ichimoku cloud as a % of the close: positive = above the cloud, negative = below it, 0 = inside. Context only — not a ranking input.', render: (r) => changeCell(r.ichimoku_cloud_dist_pct), sortKey: null },
   { key: 'eligible', label: 'Eligible', render: (r) => r.eligible ? '✓' : '—', sortKey: null },
 ];
 
@@ -710,6 +714,12 @@ const FULL_MARKET_EXPORT_COLUMNS = [
   { key: 'drift_annual_pct', label: 'Drift (ann.) %' },
   { key: 'volatility_annual_pct', label: 'Volatility (ann.) %' },
   { key: 'long_term_score', label: 'LT Score' },
+  { key: 'ichimoku_tenkan', label: 'Ichimoku Tenkan' },
+  { key: 'ichimoku_kijun', label: 'Ichimoku Kijun' },
+  { key: 'ichimoku_senkou_a', label: 'Ichimoku Span A' },
+  { key: 'ichimoku_senkou_b', label: 'Ichimoku Span B' },
+  { key: 'ichimoku_cloud_dist_pct', label: 'Ichimoku Cloud Dist %' },
+  { key: 'ichimoku_signal', label: 'Ichimoku Signal' },
   { key: 'dividend_ttm', label: 'Div TTM' },
   { key: 'dividend_yield_pct', label: 'Div Yield %' },
   { key: 'dividend_years_paid_5y', label: 'Div Years Paid (5y)' },
@@ -817,6 +827,11 @@ function rankBadge(n) {
   return `<span class="rank-badge ${n <= 3 ? 'top3' : ''}">${n}</span>`;
 }
 function regimeLabel(r) { return (r || 'UNKNOWN').replace(/_/g, ' '); }
+// Ichimoku signal reuses the regime pill colours (same five-state vocabulary).
+function ichimokuCell(s) {
+  if (!s) return '—';
+  return `<span class="pill regime-${esc(s)}">${esc(regimeLabel(s))}</span>`;
+}
 
 function authHeaders() {
   return state.token ? { Authorization: 'Bearer ' + state.token } : {};
@@ -1013,7 +1028,8 @@ async function initDateFilter() {
 const DEFAULT_HIDDEN_COLUMN_KEYS = ['rvol20', 'rvol50', 'rsi14', 'setup_type', 'support1', 'resistance1', 'est_2w_pct', 'est_1m_pct', 'est_3m_pct', 'est_1y_pct',
   // Entry Quality components and the multi-horizon labels are diagnostic
   // detail behind the visible Entry Q / EV % columns — opt in via Columns.
-  'relative_strength_20d', 'extension_atr', 'close_position_pct', 'rsi_slope3', 'mfe_10d_pct', 'mae_10d_pct', 'ret_10d_pct'];
+  'relative_strength_20d', 'extension_atr', 'close_position_pct', 'rsi_slope3', 'mfe_10d_pct', 'mae_10d_pct', 'ret_10d_pct',
+  'ichimoku_signal', 'ichimoku_cloud_dist_pct'];
 function defaultHiddenForTab() {
   const keys = new Set(DEFAULT_HIDDEN_COLUMN_KEYS);
   if (state.tab === 'rvol' || state.tab === 'volume') keys.delete('rvol20');
@@ -1398,6 +1414,25 @@ async function openDetail(symbol) {
           drawdown vs 52-week high, 6/12-month returns, volatility) — untuned and not backtested.
           Dividend figures come from the weekly dividend import (trailing 12 months vs this date's
           close). Screening aids for a long holding horizon — not forecasts, not investment advice.
+        </div>
+      ` : ''}
+
+      ${data.ichimoku && data.ichimoku.tenkan !== null && data.ichimoku.tenkan !== undefined ? `
+        <div class="section-title">Ichimoku Cloud</div>
+        <div class="kv-grid">
+          <div class="kv"><div class="label">Signal</div><div class="value">${ichimokuCell(data.ichimoku.signal)}</div></div>
+          <div class="kv"><div class="label">Cloud Distance</div><div class="value">${changeCell(data.ichimoku.cloudDistPct)}</div></div>
+          <div class="kv"><div class="label">Tenkan (9)</div><div class="value">${fmt(data.ichimoku.tenkan)}</div></div>
+          <div class="kv"><div class="label">Kijun (26)</div><div class="value">${fmt(data.ichimoku.kijun)}</div></div>
+          <div class="kv"><div class="label">Span A</div><div class="value">${fmt(data.ichimoku.senkouA)}</div></div>
+          <div class="kv"><div class="label">Span B</div><div class="value">${fmt(data.ichimoku.senkouB)}</div></div>
+        </div>
+        <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">
+          Standard 9/26/52 settings; Span A/B are the cloud values in force on this date (plotted
+          26 sessions earlier, so nothing here looks ahead). Signal: above/below the cloud = BULLISH/BEARISH,
+          STRONG when the Tenkan also leads the Kijun and the close beats the close 26 sessions back;
+          NEUTRAL inside the cloud or with under 78 sessions of history. Context only — it does not
+          feed the score, rank or targets.
         </div>
       ` : ''}
 

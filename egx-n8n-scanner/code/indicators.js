@@ -10,6 +10,7 @@
  */
 
 const { isNumber, safeDivide, round, clamp } = require("./helpers");
+const { ichimoku } = require("./ichimoku");
 
 /** Simple Moving Average over `period` closes. */
 function sma(values, period) {
@@ -365,6 +366,7 @@ function calculateAllIndicators(candles) {
 
   const horizons = horizonEstimates(closes);
   const ltScore = longTermTechScore(closes, sma200, high252, horizons.volatilityAnnualPct);
+  const ichi = ichimoku(candles); // context only — never a ranking input
 
   return candles.map((c, i) => {
     const distance52wHigh = isNumber(high252[i]) ? ((c.close - high252[i]) / high252[i]) * 100 : null;
@@ -391,55 +393,49 @@ function calculateAllIndicators(candles) {
       mediumTermTrend: trend.mediumTerm,
       longTermTrend: trend.longTerm,
       dataConfidence,
-
       sma20: round(sma20[i], 6),
       sma50: round(sma50[i], 6),
       sma100: round(sma100[i], 6),
       sma200: round(sma200[i], 6),
-
       ema9: round(ema9[i], 6),
       ema20: round(ema20[i], 6),
       ema50: round(ema50[i], 6),
       ema100: round(ema100[i], 6),
       ema200: round(ema200[i], 6),
-
       rsi14: round(rsi14[i], 4),
-
       macd: round(macdLine[i], 6),
       macdSignal: round(signalLine[i], 6),
       macdHistogram: round(histogram[i], 6),
-
       atr14: round(atr14[i], 6),
       obv: obvSeries[i],
-
       volumeSma20: round(volumeSma20[i], 4),
       volumeSma50: round(volumeSma50[i], 4),
-
       relativeVolume20: round(rvol20[i], 4),
       relativeVolume50: round(rvol50[i], 4),
-
       roc5: round(roc5[i], 4),
       roc10: round(roc10[i], 4),
       roc20: round(roc20[i], 4),
-
       high20: high20[i],
       high50: high50[i],
       high252: high252[i],
       low20: low20[i],
       low50: low50[i],
       low252: low252[i],
-
       distance52wHigh: round(distance52wHigh, 4),
       distance52wLow: round(distance52wLow, 4),
-
       driftAnnualPct: round(horizons.driftAnnualPct[i], 4),
       volatilityAnnualPct: round(horizons.volatilityAnnualPct[i], 4),
       est2wPct: round(horizons.est2wPct[i], 4),
       est1mPct: round(horizons.est1mPct[i], 4),
       est3mPct: round(horizons.est3mPct[i], 4),
       est1yPct: round(horizons.est1yPct[i], 4),
-
       longTermScore: ltScore[i],
+      ichimokuTenkan: ichi.tenkan[i],
+      ichimokuKijun: ichi.kijun[i],
+      ichimokuSenkouA: ichi.senkouA[i],
+      ichimokuSenkouB: ichi.senkouB[i],
+      ichimokuCloudDistPct: ichi.cloudDistPct[i],
+      ichimokuSignal: ichi.signal[i],
     };
   });
 }

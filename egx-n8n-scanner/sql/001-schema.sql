@@ -700,6 +700,23 @@ ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS est_1y_pct            NU
 -- ---------------------------------------------------------------------
 ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS long_term_score NUMERIC(6,2);
 
+-- ---------------------------------------------------------------------
+-- Ichimoku Kinko Hyo (2026-09-06): 9/26/52 lines with the standard 26-bar
+-- displacement (code/ichimoku.js). senkou_a/senkou_b are the cloud values
+-- IN FORCE on trading_date (computed 26 bars earlier — no look-ahead).
+-- cloud_dist_pct = signed % distance of close from the nearest cloud edge
+-- (+ above, - below, 0 inside). signal in STRONG_BULLISH / BULLISH /
+-- NEUTRAL / BEARISH / STRONG_BEARISH. Display/context only — NOT a ranking
+-- or scoring input (any such use must first pass the two-slice
+-- walk-forward rule in docs/SCORING.md). NULL until 78 bars of history.
+-- ---------------------------------------------------------------------
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS ichimoku_tenkan         NUMERIC(18,6);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS ichimoku_kijun          NUMERIC(18,6);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS ichimoku_senkou_a       NUMERIC(18,6);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS ichimoku_senkou_b       NUMERIC(18,6);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS ichimoku_cloud_dist_pct NUMERIC(12,4);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS ichimoku_signal         VARCHAR(20);
+
 CREATE TABLE IF NOT EXISTS dividends (
     id               BIGSERIAL PRIMARY KEY,
     stock_id         BIGINT NOT NULL REFERENCES stocks(id) ON DELETE CASCADE,

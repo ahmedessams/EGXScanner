@@ -59,6 +59,24 @@ full marks at ≤30% annualized, zero at 90%+). Null until SMA200 exists.
 The weights and thresholds are an UNTUNED, non-backtested heuristic — a
 screening aid, not a forecast, and not investment advice.
 
+**Ichimoku Kinko Hyo** (`code/ichimoku.js`, `ichimoku_*` columns, since
+2026-09-06): standard 9/26/52 settings with displacement 26. Stored per bar:
+`ichimoku_tenkan` (9-bar midpoint), `ichimoku_kijun` (26-bar midpoint),
+`ichimoku_senkou_a` / `ichimoku_senkou_b` (the cloud values IN FORCE at that
+bar — i.e. computed 26 bars earlier and plotted forward, so nothing looks
+ahead), `ichimoku_cloud_dist_pct` (signed distance from the close to the
+nearest cloud edge, % of close: + above, − below, 0 inside) and
+`ichimoku_signal` (STRONG_BULLISH / BULLISH / NEUTRAL / BEARISH /
+STRONG_BEARISH — price vs cloud decides the side; STRONG additionally needs
+the Tenkan on the same side of the Kijun and the close beyond the close 26
+bars back, a chikou-span proxy; inside the cloud is NEUTRAL). The cloud needs
+52 + 26 = 78 sessions, so a thin history reads NEUTRAL with null spans.
+Rows written before 2026-09-06 stay NULL until a `backfillAll` replay of
+`04 - EGX Technical Analysis`. **Context/display only**: it is not an input to
+any scanner score, the overall score, ranking, targets or the Top 3 gate, and
+it must not become one without passing the two-slice walk-forward rule
+(BACKTEST + LIVE, both markets) that every ranking-factor change is held to.
+
 **Dividend signals** (`dividends` table, weekly import from the provider's
 `/div` endpoint by `20 - EGX Dividend Import`): trailing-12-month dividend
 sum and yield vs the row's close (`dividend_yield_pct`), distinct calendar

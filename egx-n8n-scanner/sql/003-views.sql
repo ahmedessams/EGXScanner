@@ -216,7 +216,14 @@ SELECT
           THEN (res.entry_price - res.invalidation_price) / res.entry_price * 100 END)::float8 AS risk_pct,
     (CASE WHEN ps.sample_size > 0 AND res.entry_price > 0 AND res.invalidation_price > 0 AND res.invalidation_price < res.entry_price
           THEN ps.target1_hit_pct / 100 * res.target1_gain_pct
-             - ps.stop_hit_pct / 100 * ((res.entry_price - res.invalidation_price) / res.entry_price * 100) END)::float8 AS expected_value_pct
+             - ps.stop_hit_pct / 100 * ((res.entry_price - res.invalidation_price) / res.entry_price * 100) END)::float8 AS expected_value_pct,
+    -- Ichimoku (2026-09-06, context only — not a ranking input)
+    ta.ichimoku_tenkan::float8 AS ichimoku_tenkan,
+    ta.ichimoku_kijun::float8 AS ichimoku_kijun,
+    ta.ichimoku_senkou_a::float8 AS ichimoku_senkou_a,
+    ta.ichimoku_senkou_b::float8 AS ichimoku_senkou_b,
+    ta.ichimoku_cloud_dist_pct::float8 AS ichimoku_cloud_dist_pct,
+    ta.ichimoku_signal AS ichimoku_signal
 
 FROM stocks s
 LEFT JOIN v_latest_prices lp ON lp.stock_id = s.id
@@ -358,7 +365,14 @@ RETURNS SETOF v_full_market AS $$
             THEN (res.entry_price - res.invalidation_price) / res.entry_price * 100 END)::float8 AS risk_pct,
       (CASE WHEN ps.sample_size > 0 AND res.entry_price > 0 AND res.invalidation_price > 0 AND res.invalidation_price < res.entry_price
             THEN ps.target1_hit_pct / 100 * res.target1_gain_pct
-               - ps.stop_hit_pct / 100 * ((res.entry_price - res.invalidation_price) / res.entry_price * 100) END)::float8 AS expected_value_pct
+               - ps.stop_hit_pct / 100 * ((res.entry_price - res.invalidation_price) / res.entry_price * 100) END)::float8 AS expected_value_pct,
+      -- Ichimoku (2026-09-06, context only — not a ranking input)
+      ta.ichimoku_tenkan::float8 AS ichimoku_tenkan,
+      ta.ichimoku_kijun::float8 AS ichimoku_kijun,
+      ta.ichimoku_senkou_a::float8 AS ichimoku_senkou_a,
+      ta.ichimoku_senkou_b::float8 AS ichimoku_senkou_b,
+      ta.ichimoku_cloud_dist_pct::float8 AS ichimoku_cloud_dist_pct,
+      ta.ichimoku_signal AS ichimoku_signal
 
   FROM stocks s
   CROSS JOIN anchor a
@@ -508,7 +522,14 @@ SELECT
     -- forward sessions exist); the 10-session pair is what the webapp shows.
     twe.mfe_10d_pct::float8 AS mfe_10d_pct,
     twe.mae_10d_pct::float8 AS mae_10d_pct,
-    twe.ret_10d_pct::float8 AS ret_10d_pct
+    twe.ret_10d_pct::float8 AS ret_10d_pct,
+    -- Ichimoku (2026-09-06, context only — not a ranking input)
+    ta.ichimoku_tenkan::float8 AS ichimoku_tenkan,
+    ta.ichimoku_kijun::float8 AS ichimoku_kijun,
+    ta.ichimoku_senkou_a::float8 AS ichimoku_senkou_a,
+    ta.ichimoku_senkou_b::float8 AS ichimoku_senkou_b,
+    ta.ichimoku_cloud_dist_pct::float8 AS ichimoku_cloud_dist_pct,
+    ta.ichimoku_signal AS ichimoku_signal
 FROM scanner_results res
 JOIN scanner_runs run ON run.id = res.scanner_run_id
 JOIN stocks s ON s.id = res.stock_id
