@@ -223,7 +223,26 @@ SELECT
     ta.ichimoku_senkou_a::float8 AS ichimoku_senkou_a,
     ta.ichimoku_senkou_b::float8 AS ichimoku_senkou_b,
     ta.ichimoku_cloud_dist_pct::float8 AS ichimoku_cloud_dist_pct,
-    ta.ichimoku_signal AS ichimoku_signal
+    ta.ichimoku_signal AS ichimoku_signal,
+    -- Price-discontinuity flag + Smart Money Concepts (2026-09-06, context only)
+    ta.price_discontinuity_count,
+    ta.last_discontinuity_date,
+    ta.last_discontinuity_pct::float8 AS last_discontinuity_pct,
+    ta.smc_structure,
+    ta.smc_last_event,
+    ta.smc_event_bars_ago,
+    ta.smc_bull_ob_low::float8 AS smc_bull_ob_low,
+    ta.smc_bull_ob_high::float8 AS smc_bull_ob_high,
+    ta.smc_bear_ob_low::float8 AS smc_bear_ob_low,
+    ta.smc_bear_ob_high::float8 AS smc_bear_ob_high,
+    ta.smc_fvg_bull_low::float8 AS smc_fvg_bull_low,
+    ta.smc_fvg_bull_high::float8 AS smc_fvg_bull_high,
+    ta.smc_fvg_bear_low::float8 AS smc_fvg_bear_low,
+    ta.smc_fvg_bear_high::float8 AS smc_fvg_bear_high,
+    ta.smc_sweep,
+    ta.smc_sweep_bars_ago,
+    ta.smc_range_pos_pct::float8 AS smc_range_pos_pct,
+    ta.smc_bias
 
 FROM stocks s
 LEFT JOIN v_latest_prices lp ON lp.stock_id = s.id
@@ -372,7 +391,26 @@ RETURNS SETOF v_full_market AS $$
       ta.ichimoku_senkou_a::float8 AS ichimoku_senkou_a,
       ta.ichimoku_senkou_b::float8 AS ichimoku_senkou_b,
       ta.ichimoku_cloud_dist_pct::float8 AS ichimoku_cloud_dist_pct,
-      ta.ichimoku_signal AS ichimoku_signal
+      ta.ichimoku_signal AS ichimoku_signal,
+      -- Price-discontinuity flag + Smart Money Concepts (2026-09-06, context only)
+      ta.price_discontinuity_count,
+      ta.last_discontinuity_date,
+      ta.last_discontinuity_pct::float8 AS last_discontinuity_pct,
+      ta.smc_structure,
+      ta.smc_last_event,
+      ta.smc_event_bars_ago,
+      ta.smc_bull_ob_low::float8 AS smc_bull_ob_low,
+      ta.smc_bull_ob_high::float8 AS smc_bull_ob_high,
+      ta.smc_bear_ob_low::float8 AS smc_bear_ob_low,
+      ta.smc_bear_ob_high::float8 AS smc_bear_ob_high,
+      ta.smc_fvg_bull_low::float8 AS smc_fvg_bull_low,
+      ta.smc_fvg_bull_high::float8 AS smc_fvg_bull_high,
+      ta.smc_fvg_bear_low::float8 AS smc_fvg_bear_low,
+      ta.smc_fvg_bear_high::float8 AS smc_fvg_bear_high,
+      ta.smc_sweep,
+      ta.smc_sweep_bars_ago,
+      ta.smc_range_pos_pct::float8 AS smc_range_pos_pct,
+      ta.smc_bias
 
   FROM stocks s
   CROSS JOIN anchor a
@@ -533,7 +571,26 @@ SELECT
     -- Gap-through flag from workflow 16 (2026-09-06): did the resolving
     -- session open already beyond the level? See target_window_evaluation.
     twe.gapped_through,
-    twe.gap_pct::float8 AS gap_pct
+    twe.gap_pct::float8 AS gap_pct,
+    -- Price-discontinuity flag + Smart Money Concepts (2026-09-06, context only)
+    ta.price_discontinuity_count,
+    ta.last_discontinuity_date,
+    ta.last_discontinuity_pct::float8 AS last_discontinuity_pct,
+    ta.smc_structure,
+    ta.smc_last_event,
+    ta.smc_event_bars_ago,
+    ta.smc_bull_ob_low::float8 AS smc_bull_ob_low,
+    ta.smc_bull_ob_high::float8 AS smc_bull_ob_high,
+    ta.smc_bear_ob_low::float8 AS smc_bear_ob_low,
+    ta.smc_bear_ob_high::float8 AS smc_bear_ob_high,
+    ta.smc_fvg_bull_low::float8 AS smc_fvg_bull_low,
+    ta.smc_fvg_bull_high::float8 AS smc_fvg_bull_high,
+    ta.smc_fvg_bear_low::float8 AS smc_fvg_bear_low,
+    ta.smc_fvg_bear_high::float8 AS smc_fvg_bear_high,
+    ta.smc_sweep,
+    ta.smc_sweep_bars_ago,
+    ta.smc_range_pos_pct::float8 AS smc_range_pos_pct,
+    ta.smc_bias
 FROM scanner_results res
 JOIN scanner_runs run ON run.id = res.scanner_run_id
 JOIN stocks s ON s.id = res.stock_id

@@ -71,11 +71,43 @@ STRONG_BEARISH — price vs cloud decides the side; STRONG additionally needs
 the Tenkan on the same side of the Kijun and the close beyond the close 26
 bars back, a chikou-span proxy; inside the cloud is NEUTRAL). The cloud needs
 52 + 26 = 78 sessions, so a thin history reads NEUTRAL with null spans.
-Rows written before 2026-09-06 stay NULL until a `backfillAll` replay of
-`04 - EGX Technical Analysis`. **Context/display only**: it is not an input to
+Historical rows were filled by a `backfillAll` replay of `04 - EGX Technical
+Analysis` on 2026-09-06 (every stock, both markets). **Context/display only**: it is not an input to
 any scanner score, the overall score, ranking, targets or the Top 3 gate, and
 it must not become one without passing the two-slice walk-forward rule
 (BACKTEST + LIVE, both markets) that every ranking-factor change is held to.
+
+**Price-discontinuity flag** (`code/priceQuality.js`, since 2026-09-06):
+`price_discontinuity_count` is the number of close-to-close jumps of ≥3× or
+≤⅓ in the trailing 252 sessions; `last_discontinuity_date` /
+`last_discontinuity_pct` describe the most recent one. A bad print counts
+twice (the jump and the return), an unadjusted split once. It exists because
+every rolling indicator, S/R level and score computed across such a bar is
+suspect — e.g. SEIGA's EGX history. Deliberately NOT folded into
+`data_confidence` or any score: it is a warning the webapp shows next to the
+symbol (⚠) and in the detail drawer, so the reader can discount the row.
+
+**Smart Money Concepts** (`code/smartMoney.js`, `smc_*` columns, since
+2026-09-06): a deterministic, look-back-only reading of the ICT/SMC
+vocabulary on daily bars. Swings are 3-bar fractals confirmed one bar later
+(registered at j+1, never earlier). `smc_structure` is BULLISH after a close
+above the last unbroken swing high / BEARISH after a close below the last
+unbroken swing low; `smc_last_event` is BOS when that break continued the
+prevailing structure and CHOCH when it reversed it, with
+`smc_event_bars_ago`. An order block is the last opposite-colour candle in
+the 20 bars before the break (`smc_bull_ob_*` / `smc_bear_ob_*`), dropped
+once a close passes through it. Fair value gaps are 3-candle imbalances
+(`smc_fvg_bull_*` / `smc_fvg_bear_*` = the nearest still-unfilled one, max
+age 250 bars). `smc_sweep` (BULLISH/BEARISH, `smc_sweep_bars_ago`, memory
+20 bars) marks a wick through a swing that closed back inside — the classic
+liquidity grab. `smc_range_pos_pct` is the close between the last swing low
+(0) and swing high (100); `smc_bias` combines structure with that position:
+BULLISH_DISCOUNT / BULLISH_PREMIUM / BEARISH_PREMIUM / BEARISH_DISCOUNT
+(≤50 = discount). All of it is **context/display only** — the same rule as
+Ichimoku: not a score, rank, target or Top 3 input, and it must earn its way
+in through the two-slice walk-forward test before it ever becomes one.
+Historical rows (and the discontinuity columns) were populated by the same
+2026-09-06 `backfillAll` replay: 237/237 EGX and 503/503 US stocks.
 
 **Dividend signals** (`dividends` table, weekly import from the provider's
 `/div` endpoint by `20 - EGX Dividend Import`): trailing-12-month dividend

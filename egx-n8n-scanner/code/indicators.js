@@ -10,7 +10,7 @@
  */
 
 const { isNumber, safeDivide, round, clamp } = require("./helpers");
-const { ichimoku } = require("./ichimoku");
+const { contextIndicators } = require("./contextIndicators");
 
 /** Simple Moving Average over `period` closes. */
 function sma(values, period) {
@@ -366,7 +366,7 @@ function calculateAllIndicators(candles) {
 
   const horizons = horizonEstimates(closes);
   const ltScore = longTermTechScore(closes, sma200, high252, horizons.volatilityAnnualPct);
-  const ichi = ichimoku(candles); // context only — never a ranking input
+  const ctx = contextIndicators(candles); // Ichimoku / discontinuity / SMC — context only, never a ranking input
 
   return candles.map((c, i) => {
     const distance52wHigh = isNumber(high252[i]) ? ((c.close - high252[i]) / high252[i]) * 100 : null;
@@ -430,12 +430,7 @@ function calculateAllIndicators(candles) {
       est3mPct: round(horizons.est3mPct[i], 4),
       est1yPct: round(horizons.est1yPct[i], 4),
       longTermScore: ltScore[i],
-      ichimokuTenkan: ichi.tenkan[i],
-      ichimokuKijun: ichi.kijun[i],
-      ichimokuSenkouA: ichi.senkouA[i],
-      ichimokuSenkouB: ichi.senkouB[i],
-      ichimokuCloudDistPct: ichi.cloudDistPct[i],
-      ichimokuSignal: ichi.signal[i],
+      ...ctx[i],
     };
   });
 }

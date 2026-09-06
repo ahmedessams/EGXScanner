@@ -115,6 +115,7 @@
   .pill.regime-STRONG_BULLISH, .pill.regime-BULLISH { background: var(--green-weak); color: var(--green); border-color: transparent; }
   .pill.regime-STRONG_BEARISH, .pill.regime-BEARISH { background: var(--red-weak); color: var(--red); border-color: transparent; }
   .pill.regime-NEUTRAL { background: var(--amber-weak); color: var(--amber); border-color: transparent; }
+  .discontinuity-flag { color: var(--amber); cursor: help; font-size: 12px; }
 
   button, .btn {
     font: inherit; cursor: pointer;
@@ -470,7 +471,7 @@ const TABS = [
 const RANKED_COLUMNS = [
   DETAIL_BUTTON_COLUMN,
   { key: 'overall_rank', label: '#', render: (r) => rankBadge(r.overall_rank) },
-  { key: 'symbol', label: 'Symbol', render: (r) => `<strong>${esc(r.symbol)}</strong>` },
+  { key: 'symbol', label: 'Symbol', render: (r) => symbolCell(r) },
   { key: 'name', label: 'Name', render: (r) => `<span style="color:var(--text-muted)">${esc(r.name || '')}</span>` },
   { key: 'close', label: 'Close', num: true, render: (r) => fmt(r.close) },
   { key: 'change_pct', label: 'Chg %', num: true, render: (r) => changeCell(r.change_pct) },
@@ -512,6 +513,9 @@ const RANKED_COLUMNS = [
   { key: 'dividend_yield_pct', label: 'Div Yield %', num: true, title: 'Trailing-12-month dividends per share divided by this date\'s close (from the weekly dividend import). "—" when the stock paid nothing in the last year.', render: (r) => (r.dividend_yield_pct === null || r.dividend_yield_pct === undefined) ? '—' : fmt(r.dividend_yield_pct, 2) + '%' },
   { key: 'ichimoku_signal', label: 'Ichimoku', title: 'Ichimoku cloud read (9/26/52) on the scan date: BULLISH/BEARISH = close above/below the cloud, STRONG when the Tenkan is also on the same side of the Kijun and the close beats the close 26 sessions earlier; NEUTRAL inside the cloud or with under 78 sessions of history. Context only — not a ranking input.', render: (r) => ichimokuCell(r.ichimoku_signal) },
   { key: 'ichimoku_cloud_dist_pct', label: 'Cloud Dist %', num: true, title: 'Distance from the close to the nearest edge of the Ichimoku cloud as a % of the close: positive = above the cloud, negative = below it, 0 = inside. Context only — not a ranking input.', render: (r) => changeCell(r.ichimoku_cloud_dist_pct) },
+  { key: 'smc_bias', label: 'SMC Bias', title: 'Smart Money Concepts read on the scan date: market structure (BULLISH after a higher-high break / BEARISH after a lower-low break) plus where the close sits in the current dealing range — DISCOUNT (lower half, where structure-following buyers look for entries) or PREMIUM (upper half). Context only — not a ranking input.', render: (r) => smcCell(r.smc_bias) },
+  { key: 'smc_last_event', label: 'SMC Event', title: 'Most recent structure event: BOS = break of structure in the prevailing direction (continuation); CHOCH = change of character, the first break against the prevailing direction (possible reversal). Hover the detail drawer for how many sessions ago.', render: (r) => r.smc_last_event ? `${esc(r.smc_last_event)}${r.smc_event_bars_ago !== null && r.smc_event_bars_ago !== undefined ? ` <span style="color:var(--text-faint)">${r.smc_event_bars_ago}d</span>` : ''}` : '—' },
+  { key: 'smc_range_pos_pct', label: 'Range Pos %', num: true, title: 'Where the close sits between the last confirmed swing low (0%) and swing high (100%). Below 50% = discount, above = premium. Context only.', render: (r) => (r.smc_range_pos_pct === null || r.smc_range_pos_pct === undefined) ? '—' : fmt(r.smc_range_pos_pct, 0) + '%' },
 ];
 
 // Top 3 Trade Ideas: a curated subset of the eligible Top 10, filtered
@@ -528,7 +532,7 @@ const RANKED_COLUMNS = [
 const TOP_PICKS_COLUMNS = [
   DETAIL_BUTTON_COLUMN,
   { key: 'overall_rank', label: '#', render: (r) => rankBadge(r.overall_rank) },
-  { key: 'symbol', label: 'Symbol', render: (r) => `<strong>${esc(r.symbol)}</strong>` },
+  { key: 'symbol', label: 'Symbol', render: (r) => symbolCell(r) },
   { key: 'name', label: 'Name', render: (r) => `<span style="color:var(--text-muted)">${esc(r.name || '')}</span>` },
   { key: 'setup_type', label: 'Setup', render: (r) => setupBadge(r.setup_type) },
   { key: 'entry_price', label: 'Entry', num: true, render: (r) => fmt(r.entry_price) },
@@ -566,7 +570,7 @@ function horizonBand(close, pct, volAnnualPct, hDays) {
 
 const RANGE_FORECAST_COLUMNS = [
   DETAIL_BUTTON_COLUMN,
-  { key: 'symbol', label: 'Symbol', render: (r) => `<strong>${esc(r.symbol)}</strong>` },
+  { key: 'symbol', label: 'Symbol', render: (r) => symbolCell(r) },
   { key: 'name', label: 'Name', render: (r) => `<span style="color:var(--text-muted)">${esc(r.name || '')}</span>` },
   { key: 'close', label: 'Close', num: true, render: (r) => fmt(r.close) },
   { key: 'next_high_estimate', label: 'Next Est. High', num: true, title: 'Next-session High estimate: close + 1x ATR14 — a simple volatility-based projection, not a guarantee.', render: (r) => fmt(r.next_high_estimate) },
@@ -606,7 +610,7 @@ const OUTCOME_COLUMNS = [
 
 const VOLUME_COLUMNS = [
   DETAIL_BUTTON_COLUMN,
-  { key: 'symbol', label: 'Symbol', render: (r) => `<strong>${esc(r.symbol)}</strong>` },
+  { key: 'symbol', label: 'Symbol', render: (r) => symbolCell(r) },
   { key: 'name', label: 'Name', render: (r) => `<span style="color:var(--text-muted)">${esc(r.name || '')}</span>` },
   { key: 'close', label: 'Close', num: true, render: (r) => fmt(r.close) },
   { key: 'volume', label: 'Volume', num: true, render: (r) => fmtInt(r.volume) },
@@ -622,7 +626,7 @@ const VOLUME_COLUMNS = [
 
 const FULL_MARKET_COLUMNS = [
   DETAIL_BUTTON_COLUMN,
-  { key: 'symbol', label: 'Symbol', render: (r) => `<strong>${esc(r.symbol)}</strong>`, sortKey: null },
+  { key: 'symbol', label: 'Symbol', render: (r) => symbolCell(r), sortKey: null },
   { key: 'name', label: 'Name', render: (r) => `<span style="color:var(--text-muted)">${esc(r.name || '')}</span>`, sortKey: null },
   { key: 'close', label: 'Close', num: true, render: (r) => fmt(r.close), sortKey: null },
   { key: 'change_pct', label: 'Chg %', num: true, render: (r) => changeCell(r.change_pct), sortKey: 'change' },
@@ -645,6 +649,9 @@ const FULL_MARKET_COLUMNS = [
   { key: 'dividend_yield_pct', label: 'Div Yield %', num: true, title: 'Trailing-12-month dividends per share divided by this date\'s close (from the weekly dividend import). "—" when the stock paid nothing in the last year.', render: (r) => (r.dividend_yield_pct === null || r.dividend_yield_pct === undefined) ? '—' : fmt(r.dividend_yield_pct, 2) + '%', sortKey: null },
   { key: 'ichimoku_signal', label: 'Ichimoku', title: 'Ichimoku cloud read (9/26/52) on the scan date: BULLISH/BEARISH = close above/below the cloud, STRONG when the Tenkan is also on the same side of the Kijun and the close beats the close 26 sessions earlier; NEUTRAL inside the cloud or with under 78 sessions of history. Context only — not a ranking input.', render: (r) => ichimokuCell(r.ichimoku_signal), sortKey: null },
   { key: 'ichimoku_cloud_dist_pct', label: 'Cloud Dist %', num: true, title: 'Distance from the close to the nearest edge of the Ichimoku cloud as a % of the close: positive = above the cloud, negative = below it, 0 = inside. Context only — not a ranking input.', render: (r) => changeCell(r.ichimoku_cloud_dist_pct), sortKey: null },
+  { key: 'smc_bias', label: 'SMC Bias', title: 'Smart Money Concepts read on the scan date: market structure (BULLISH after a higher-high break / BEARISH after a lower-low break) plus where the close sits in the current dealing range — DISCOUNT (lower half) or PREMIUM (upper half). Context only — not a ranking input.', render: (r) => smcCell(r.smc_bias), sortKey: null },
+  { key: 'smc_last_event', label: 'SMC Event', title: 'Most recent structure event: BOS = break of structure in the prevailing direction (continuation); CHOCH = change of character, the first break against the prevailing direction (possible reversal). Sessions ago shown after it.', render: (r) => r.smc_last_event ? `${esc(r.smc_last_event)}${r.smc_event_bars_ago !== null && r.smc_event_bars_ago !== undefined ? ` <span style="color:var(--text-faint)">${r.smc_event_bars_ago}d</span>` : ''}` : '—', sortKey: null },
+  { key: 'smc_range_pos_pct', label: 'Range Pos %', num: true, title: 'Where the close sits between the last confirmed swing low (0%) and swing high (100%). Below 50% = discount, above = premium. Context only.', render: (r) => (r.smc_range_pos_pct === null || r.smc_range_pos_pct === undefined) ? '—' : fmt(r.smc_range_pos_pct, 0) + '%', sortKey: null },
   { key: 'eligible', label: 'Eligible', render: (r) => r.eligible ? '✓' : '—', sortKey: null },
 ];
 
@@ -724,6 +731,24 @@ const FULL_MARKET_EXPORT_COLUMNS = [
   { key: 'ichimoku_senkou_b', label: 'Ichimoku Span B' },
   { key: 'ichimoku_cloud_dist_pct', label: 'Ichimoku Cloud Dist %' },
   { key: 'ichimoku_signal', label: 'Ichimoku Signal' },
+  { key: 'price_discontinuity_count', label: 'Price Discontinuities (252d)' },
+  { key: 'last_discontinuity_date', label: 'Last Discontinuity Date' },
+  { key: 'last_discontinuity_pct', label: 'Last Discontinuity %' },
+  { key: 'smc_structure', label: 'SMC Structure' },
+  { key: 'smc_last_event', label: 'SMC Last Event' },
+  { key: 'smc_event_bars_ago', label: 'SMC Event Bars Ago' },
+  { key: 'smc_bull_ob_low', label: 'SMC Bull OB Low' },
+  { key: 'smc_bull_ob_high', label: 'SMC Bull OB High' },
+  { key: 'smc_bear_ob_low', label: 'SMC Bear OB Low' },
+  { key: 'smc_bear_ob_high', label: 'SMC Bear OB High' },
+  { key: 'smc_fvg_bull_low', label: 'SMC Bull FVG Low' },
+  { key: 'smc_fvg_bull_high', label: 'SMC Bull FVG High' },
+  { key: 'smc_fvg_bear_low', label: 'SMC Bear FVG Low' },
+  { key: 'smc_fvg_bear_high', label: 'SMC Bear FVG High' },
+  { key: 'smc_sweep', label: 'SMC Liquidity Sweep' },
+  { key: 'smc_sweep_bars_ago', label: 'SMC Sweep Bars Ago' },
+  { key: 'smc_range_pos_pct', label: 'SMC Range Pos %' },
+  { key: 'smc_bias', label: 'SMC Bias' },
   { key: 'dividend_ttm', label: 'Div TTM' },
   { key: 'dividend_yield_pct', label: 'Div Yield %' },
   { key: 'dividend_years_paid_5y', label: 'Div Years Paid (5y)' },
@@ -840,6 +865,29 @@ function regimeLabel(r) { return (r || 'UNKNOWN').replace(/_/g, ' '); }
 function ichimokuCell(s) {
   if (!s) return '—';
   return `<span class="pill regime-${esc(s)}">${esc(regimeLabel(s))}</span>`;
+}
+// Smart Money bias: BULLISH_DISCOUNT / BULLISH_PREMIUM / BEARISH_PREMIUM /
+// BEARISH_DISCOUNT. Structure sets the colour, range position the suffix.
+function smcCell(bias) {
+  if (!bias) return '—';
+  const side = bias.startsWith('BULLISH') ? 'BULLISH' : bias.startsWith('BEARISH') ? 'BEARISH' : 'NEUTRAL';
+  return `<span class="pill regime-${side}">${esc(regimeLabel(bias))}</span>`;
+}
+function fmtRange(low, high) {
+  if (low === null || low === undefined || high === null || high === undefined) return '—';
+  return `${fmt(low)} – ${fmt(high)}`;
+}
+// Symbol with a ⚠ marker when the trailing-252-session price series contains a
+// discontinuity (close/close >= 3x or <= 1/3 — usually a bad print or an
+// unadjusted split). Rolling indicators computed across it are suspect.
+function symbolCell(r) {
+  const n = r.price_discontinuity_count;
+  const sym = `<strong>${esc(r.symbol)}</strong>`;
+  if (!(n > 0)) return sym;
+  const last = r.last_discontinuity_date ? ` (last ${esc(String(r.last_discontinuity_date).slice(0, 10))}` +
+    (r.last_discontinuity_pct === null || r.last_discontinuity_pct === undefined ? ')' : `, ${r.last_discontinuity_pct > 0 ? '+' : ''}${fmt(r.last_discontinuity_pct, 0)}%)`) : '';
+  const title = `${n} price discontinuit${n === 1 ? 'y' : 'ies'} in the last 252 sessions${last} — a likely feed glitch or unadjusted split; indicators computed across it are suspect.`;
+  return `${sym} <span class="discontinuity-flag" title="${esc(title)}">⚠</span>`;
 }
 
 function authHeaders() {
@@ -1038,7 +1086,7 @@ const DEFAULT_HIDDEN_COLUMN_KEYS = ['rvol20', 'rvol50', 'rsi14', 'setup_type', '
   // Entry Quality components and the multi-horizon labels are diagnostic
   // detail behind the visible Entry Q / EV % columns — opt in via Columns.
   'relative_strength_20d', 'extension_atr', 'close_position_pct', 'rsi_slope3', 'mfe_10d_pct', 'mae_10d_pct', 'ret_10d_pct',
-  'ichimoku_signal', 'ichimoku_cloud_dist_pct'];
+  'ichimoku_signal', 'ichimoku_cloud_dist_pct', 'smc_bias', 'smc_last_event', 'smc_range_pos_pct'];
 function defaultHiddenForTab() {
   const keys = new Set(DEFAULT_HIDDEN_COLUMN_KEYS);
   if (state.tab === 'rvol' || state.tab === 'volume') keys.delete('rvol20');
@@ -1442,6 +1490,38 @@ async function openDetail(symbol) {
           STRONG when the Tenkan also leads the Kijun and the close beats the close 26 sessions back;
           NEUTRAL inside the cloud or with under 78 sessions of history. Context only — it does not
           feed the score, rank or targets.
+        </div>
+      ` : ''}
+
+      ${data.smartMoney && data.smartMoney.structure ? `
+        <div class="section-title">Smart Money Concepts</div>
+        <div class="kv-grid">
+          <div class="kv"><div class="label">Bias</div><div class="value">${smcCell(data.smartMoney.bias)}</div></div>
+          <div class="kv"><div class="label">Structure</div><div class="value">${esc(regimeLabel(data.smartMoney.structure))}</div></div>
+          <div class="kv"><div class="label">Last Event</div><div class="value">${data.smartMoney.lastEvent ? `${esc(data.smartMoney.lastEvent)}${data.smartMoney.eventBarsAgo !== null && data.smartMoney.eventBarsAgo !== undefined ? ` <span style="color:var(--text-faint)">${data.smartMoney.eventBarsAgo} sessions ago</span>` : ''}` : '—'}</div></div>
+          <div class="kv"><div class="label">Range Position</div><div class="value">${data.smartMoney.rangePosPct === null || data.smartMoney.rangePosPct === undefined ? '—' : fmt(data.smartMoney.rangePosPct, 0) + '%' + (data.smartMoney.rangePosPct <= 50 ? ' (discount)' : ' (premium)')}</div></div>
+          <div class="kv"><div class="label">Bull Order Block</div><div class="value">${fmtRange(data.smartMoney.bullOrderBlock.low, data.smartMoney.bullOrderBlock.high)}</div></div>
+          <div class="kv"><div class="label">Bear Order Block</div><div class="value">${fmtRange(data.smartMoney.bearOrderBlock.low, data.smartMoney.bearOrderBlock.high)}</div></div>
+          <div class="kv"><div class="label">Bull FVG (unfilled)</div><div class="value">${fmtRange(data.smartMoney.bullFvg.low, data.smartMoney.bullFvg.high)}</div></div>
+          <div class="kv"><div class="label">Bear FVG (unfilled)</div><div class="value">${fmtRange(data.smartMoney.bearFvg.low, data.smartMoney.bearFvg.high)}</div></div>
+          <div class="kv"><div class="label">Liquidity Sweep</div><div class="value">${data.smartMoney.sweep ? `${esc(regimeLabel(data.smartMoney.sweep))}${data.smartMoney.sweepBarsAgo !== null && data.smartMoney.sweepBarsAgo !== undefined ? ` <span style="color:var(--text-faint)">${data.smartMoney.sweepBarsAgo} sessions ago</span>` : ''}` : '—'}</div></div>
+        </div>
+        <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">
+          Structure from 3-bar fractal swings: BOS = break in the prevailing direction, CHoCH = first
+          break against it. Order blocks are the last opposite-colour candle before the break (still
+          unmitigated); FVGs are 3-candle imbalances price has not yet filled; a sweep is a wick
+          through a swing that closed back inside. Range position is the close between the last swing
+          low (0%) and high (100%). Context only — none of this feeds the score, rank or targets.
+        </div>
+      ` : ''}
+
+      ${data.priceQuality && data.priceQuality.discontinuityCount > 0 ? `
+        <div class="section-title">Price Data Warning</div>
+        <div style="font-size:12px;color:var(--amber);">
+          ⚠ ${data.priceQuality.discontinuityCount} close-to-close jump${data.priceQuality.discontinuityCount === 1 ? '' : 's'} of ≥3× or ≤⅓ in the last
+          252 sessions${data.priceQuality.lastDiscontinuityDate ? ` (last ${esc(String(data.priceQuality.lastDiscontinuityDate).slice(0, 10))}${data.priceQuality.lastDiscontinuityPct !== null && data.priceQuality.lastDiscontinuityPct !== undefined ? `, ${data.priceQuality.lastDiscontinuityPct > 0 ? '+' : ''}${fmt(data.priceQuality.lastDiscontinuityPct, 0)}%` : ''})` : ''}.
+          Usually a bad print or an unadjusted split — every rolling indicator, S/R level and score
+          computed across it is suspect. Shown as context; not folded into the score or data confidence.
         </div>
       ` : ''}
 

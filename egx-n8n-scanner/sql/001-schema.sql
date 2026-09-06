@@ -732,6 +732,51 @@ ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS ichimoku_senkou_b       
 ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS ichimoku_cloud_dist_pct NUMERIC(12,4);
 ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS ichimoku_signal         VARCHAR(20);
 
+-- ---------------------------------------------------------------------
+-- Price-discontinuity flag (2026-09-06, code/priceQuality.js): a DATA
+-- QUALITY tell for provider glitches of the SEIGA type (0.95 ↔ 228.51
+-- prints) and unadjusted splits. A bar is a discontinuity when
+-- close/prev_close is ≥ 3× or ≤ 1/3; a single bad print therefore counts
+-- twice (jump + return). count = discontinuities in the trailing 252
+-- sessions; date/pct describe the most recent one inside that window.
+-- Every rolling indicator (high252, ATR, Ichimoku, drift/vol, S/R) computed
+-- across such a print is unreliable until it leaves the window. Display
+-- only — deliberately NOT folded into data_confidence, which is a scoring
+-- input (two-slice walk-forward rule, docs/SCORING.md).
+-- ---------------------------------------------------------------------
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS price_discontinuity_count INTEGER;
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS last_discontinuity_date   DATE;
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS last_discontinuity_pct    NUMERIC(14,2);
+
+-- ---------------------------------------------------------------------
+-- Smart Money Concepts (2026-09-06, code/smartMoney.js). Per-bar,
+-- no-look-ahead read of market structure: swing points are 3-bar fractals
+-- registered only once confirmed; structure flips on a CLOSE through the
+-- last unbroken swing (BOS = continuation, CHOCH = reversal); order blocks
+-- are the last opposite-colour candle before the breaking move and stay
+-- until price closes through them; fair value gaps are 3-candle imbalances
+-- kept until fully traded through; a sweep is a wick beyond the swing that
+-- closes back inside it. range_pos_pct places the close inside [last swing
+-- low, last swing high] (≤50 = discount, >50 = premium). bias in
+-- BULLISH_DISCOUNT / BULLISH_PREMIUM / BEARISH_PREMIUM / BEARISH_DISCOUNT.
+-- Display/context only — NOT a ranking or scoring input.
+-- ---------------------------------------------------------------------
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS smc_structure      VARCHAR(10);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS smc_last_event     VARCHAR(12);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS smc_event_bars_ago INTEGER;
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS smc_bull_ob_low    NUMERIC(18,6);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS smc_bull_ob_high   NUMERIC(18,6);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS smc_bear_ob_low    NUMERIC(18,6);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS smc_bear_ob_high   NUMERIC(18,6);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS smc_fvg_bull_low   NUMERIC(18,6);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS smc_fvg_bull_high  NUMERIC(18,6);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS smc_fvg_bear_low   NUMERIC(18,6);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS smc_fvg_bear_high  NUMERIC(18,6);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS smc_sweep          VARCHAR(12);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS smc_sweep_bars_ago INTEGER;
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS smc_range_pos_pct  NUMERIC(10,2);
+ALTER TABLE technical_analysis ADD COLUMN IF NOT EXISTS smc_bias           VARCHAR(20);
+
 CREATE TABLE IF NOT EXISTS dividends (
     id               BIGSERIAL PRIMARY KEY,
     stock_id         BIGINT NOT NULL REFERENCES stocks(id) ON DELETE CASCADE,
