@@ -529,7 +529,11 @@ SELECT
     ta.ichimoku_senkou_a::float8 AS ichimoku_senkou_a,
     ta.ichimoku_senkou_b::float8 AS ichimoku_senkou_b,
     ta.ichimoku_cloud_dist_pct::float8 AS ichimoku_cloud_dist_pct,
-    ta.ichimoku_signal AS ichimoku_signal
+    ta.ichimoku_signal AS ichimoku_signal,
+    -- Gap-through flag from workflow 16 (2026-09-06): did the resolving
+    -- session open already beyond the level? See target_window_evaluation.
+    twe.gapped_through,
+    twe.gap_pct::float8 AS gap_pct
 FROM scanner_results res
 JOIN scanner_runs run ON run.id = res.scanner_run_id
 JOIN stocks s ON s.id = res.stock_id

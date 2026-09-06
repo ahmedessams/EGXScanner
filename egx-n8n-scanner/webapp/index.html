@@ -497,7 +497,7 @@ const RANKED_COLUMNS = [
   { key: 'ai_target1_probability_pct', label: 'AI Prob % T1', num: true, title: 'AI Assessment: a language model\'s own probability estimate for reaching Target 1 within its estimated-days window. A qualitative judgment call from limited technical data — NOT the measured P(T1) % above, and NOT a guarantee. Hover for the model\'s stated reasoning.', render: (r) => aiProbCell(r.ai_target1_probability_pct, r.ai_reasoning) },
   { key: 'actual_window_high', label: 'Actual High (T1 win.)', num: true, title: 'The ACTUAL highest price reached during this pick\'s own Est. Days T1 window (the sessions after the scan date). "—" until at least one later session exists.', render: (r) => fmt(r.actual_window_high) },
   { key: 'actual_window_low', label: 'Actual Low (T1 win.)', num: true, title: 'The ACTUAL lowest price reached during this pick\'s own Est. Days T1 window.', render: (r) => fmt(r.actual_window_low) },
-  { key: 'window_outcome', label: 'Outcome', title: 'Evaluated result of this recommendation: did price touch Target 1 or the stop first within the Est. Days T1 window? Evaluated by the weekly target-window evaluation; Pending until the window has fully elapsed and been evaluated.', render: (r) => windowOutcomeCell(r.window_outcome, r.resolved_day_number, r.window_sessions_elapsed, r.target1_estimated_days) },
+  { key: 'window_outcome', label: 'Outcome', title: 'Evaluated result of this recommendation: did price touch Target 1 or the stop first within the Est. Days T1 window? Evaluated by the weekly target-window evaluation; Pending until the window has fully elapsed and been evaluated.', render: (r) => windowOutcomeCell(r.window_outcome, r.resolved_day_number, r.window_sessions_elapsed, r.target1_estimated_days, r.gapped_through, r.gap_pct) },
   { key: 'mfe_10d_pct', label: 'MFE 10d %', num: true, title: 'Maximum favourable excursion: the highest high in the 10 sessions after the scan date as a % above the entry price — how much was there to take, regardless of the target. Filled by the evaluation workflow; "—" until later sessions exist.', render: (r) => changeCell(r.mfe_10d_pct) },
   { key: 'mae_10d_pct', label: 'MAE 10d %', num: true, title: 'Maximum adverse excursion: the lowest low in the 10 sessions after the scan date as a % below the entry price — the worst drawdown a holder sat through.', render: (r) => changeCell(r.mae_10d_pct) },
   { key: 'ret_10d_pct', label: 'Ret 10d %', num: true, title: 'Close-to-close return 10 sessions after the scan date versus the entry price.', render: (r) => changeCell(r.ret_10d_pct) },
@@ -598,6 +598,10 @@ const OUTCOME_COLUMNS = [
   { key: 'failure_rate_pct', label: 'Failure %', num: true, title: '% of EVALUATED picks that hit the stop/invalidation first', render: (r) => pctRateCell(r.failure_rate_pct, false) },
   { key: 'expired_rate_pct', label: 'Expired %', num: true, title: '% of EVALUATED picks that expired with neither level touched', render: (r) => (r.expired_rate_pct === null || r.expired_rate_pct === undefined) ? '—' : Number(r.expired_rate_pct).toFixed(1) + '%' },
   { key: 'avg_days_to_target', label: 'Avg Days to Target', num: true, title: 'Average sessions until Target 1 was touched, among winning picks', render: (r) => fmt(r.avg_days_to_target, 1) },
+  { key: 'gapped_target', label: 'Gapped Target', num: true, title: 'Target hits where the resolving session already OPENED above Target 1 — the fill was better than the target', render: (r) => fmtInt(r.gapped_target) },
+  { key: 'gapped_stop', label: 'Gapped Stop', num: true, title: 'Stop hits where the resolving session already OPENED below the stop — the loss was worse than the planned risk', render: (r) => fmtInt(r.gapped_stop) },
+  { key: 'gapped_stop_rate_pct', label: 'Gapped Stop %', num: true, title: '% of stop hits that gapped through the stop (the planned risk could not be honoured)', render: (r) => (r.gapped_stop_rate_pct === null || r.gapped_stop_rate_pct === undefined) ? '—' : Number(r.gapped_stop_rate_pct).toFixed(1) + '%' },
+  { key: 'avg_stop_gap_pct', label: 'Avg Stop Gap %', num: true, title: 'Average open-vs-stop distance on gapped stops — the average extra loss beyond the planned risk (negative = below the stop)', render: (r) => (r.avg_stop_gap_pct === null || r.avg_stop_gap_pct === undefined) ? '—' : Number(r.avg_stop_gap_pct).toFixed(2) + '%' },
 ];
 
 const VOLUME_COLUMNS = [
@@ -763,12 +767,17 @@ function aiProbCell(v, reasoning) {
   const title = reasoning ? `AI reasoning: ${reasoning}` : 'AI Assessment';
   return `<span class="ai-badge" title="${esc(title)}">${n.toFixed(0)}%</span>`;
 }
-function windowOutcomeCell(outcome, resolvedDay, sessionsElapsed, estDays) {
+function windowOutcomeCell(outcome, resolvedDay, sessionsElapsed, estDays, gapped, gapPct) {
+  // Gap marker: the resolving session OPENED beyond the level, so the level
+  // itself was never tradeable. Same outcome, different realized fill.
+  const gapNum = Number(gapPct);
+  const gapNote = gapped ? ` — the session opened beyond the level (gap ${Number.isFinite(gapNum) ? gapNum.toFixed(2) + '%' : '?'})` : '';
+  const gapMark = gapped ? ' <span title="Gapped through the level">⚡</span>' : '';
   if (outcome === 'TARGET1_HIT') {
-    return `<span class="change-pos" title="Target 1 was reached on day ${resolvedDay ?? '?'} of the estimated window">Target Hit ✓${resolvedDay ? ` (d${resolvedDay})` : ''}</span>`;
+    return `<span class="change-pos" title="Target 1 was reached on day ${resolvedDay ?? '?'} of the estimated window${gapNote}">Target Hit ✓${resolvedDay ? ` (d${resolvedDay})` : ''}</span>${gapMark}`;
   }
   if (outcome === 'STOP_HIT') {
-    return `<span class="change-neg" title="The stop/invalidation level was touched first${resolvedDay ? `, on day ${resolvedDay}` : ''}">Stop Hit ✗${resolvedDay ? ` (d${resolvedDay})` : ''}</span>`;
+    return `<span class="change-neg" title="The stop/invalidation level was touched first${resolvedDay ? `, on day ${resolvedDay}` : ''}${gapNote}">Stop Hit ✗${resolvedDay ? ` (d${resolvedDay})` : ''}</span>${gapMark}`;
   }
   if (outcome === 'EXPIRED_NO_HIT') {
     return '<span style="color:var(--text-muted)" title="The estimated window fully elapsed without touching Target 1 or the stop">Expired —</span>';

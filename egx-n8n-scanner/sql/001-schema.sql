@@ -595,6 +595,21 @@ COMMENT ON COLUMN target_window_evaluation.mae_10d_pct IS 'Maximum adverse excur
 COMMENT ON COLUMN target_window_evaluation.ret_10d_pct IS 'Close on the 10th session after the scan date vs entry_price, in %. ret_5d_pct likewise.';
 COMMENT ON COLUMN target_window_evaluation.horizon_bars IS 'How many forward sessions (capped at 10) existed when the labels were last computed; horizons beyond it are still NULL and get filled on a later run.';
 
+-- Gap-through flag (2026-09-06). A daily bar only says the level was
+-- touched; it cannot say whether the session OPENED already beyond it. A
+-- target reached on a gap-up open is still a hit (the fill is better than
+-- the target), and a stop blown through on a gap-down open is still a stop
+-- — but the realized loss is worse than the planned risk. Kept as a flag
+-- rather than a fourth outcome so every hit rate (probability_stats, the
+-- Track Record, P(T1)/P(Stop)) stays comparable across the whole history.
+ALTER TABLE target_window_evaluation ADD COLUMN IF NOT EXISTS gapped_through BOOLEAN;
+ALTER TABLE target_window_evaluation ADD COLUMN IF NOT EXISTS resolved_open  NUMERIC(18,6);
+ALTER TABLE target_window_evaluation ADD COLUMN IF NOT EXISTS gap_pct        NUMERIC(12,4);
+
+COMMENT ON COLUMN target_window_evaluation.gapped_through IS 'TRUE when the resolving session opened already beyond the level (open >= target1 on TARGET1_HIT, open <= invalidation on STOP_HIT), so the level itself was never tradeable; FALSE when it was crossed intraday; NULL for EXPIRED_NO_HIT or when the open is unknown.';
+COMMENT ON COLUMN target_window_evaluation.resolved_open IS 'Open of the session the outcome resolved on — the realistic fill when gapped_through is TRUE.';
+COMMENT ON COLUMN target_window_evaluation.gap_pct IS '(resolved_open - level) / level * 100 for the level that resolved the outcome: positive on a target gap (extra gain), negative on a stop gap (slippage beyond the planned risk); 0 when not gapped.';
+
 -- Invalidate evaluations when a forward candle is REVISED (2026-09-03).
 -- 03-egx-daily-market-update upserts a rolling window of recent sessions on
 -- every run, and a US candle is first written at 20:01Z — one minute after

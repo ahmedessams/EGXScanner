@@ -384,6 +384,21 @@ Not updated in real time (the pipeline schedules `16` weekly, since the
 underlying sample only grows slowly) — check `probability_stats.updated_at`
 if you need to know how fresh it is.
 
+**Gap-through flag** (`gapped_through` / `resolved_open` / `gap_pct`, added
+2026-09-06): a daily bar only says a level was touched, not whether the
+session *opened* already beyond it. `16` now records that too — TRUE when
+the resolving session's open was at/above target1 (TARGET1_HIT) or at/below
+the invalidation (STOP_HIT), FALSE when the level was crossed intraday, NULL
+for EXPIRED_NO_HIT. `gap_pct` is `(open − level) / level × 100`: positive
+on a target gap (the fill was better than the target), negative on a stop
+gap (the loss was worse than the planned risk — the stop could not be
+honoured). It is deliberately a flag, not a fourth outcome: a gapped
+target is still a hit and a gapped stop is still a stop, so every hit rate
+above stays comparable across the whole history. The dashboard marks
+gapped rows with ⚡ and the Track Record shows gapped counts, the gapped
+stop rate and the average stop gap per scope/setup. Rows evaluated before
+this date were backfilled from `daily_prices` in one pass.
+
 ## AI Assessment (`17-egx-ai-assessment`)
 
 A third, deliberately distinct signal, alongside the ATR estimate above and
