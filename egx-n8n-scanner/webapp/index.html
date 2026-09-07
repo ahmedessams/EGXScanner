@@ -1074,7 +1074,9 @@ async function initDateFilter() {
     // Non-fatal: the dropdown just stays at "Latest" if /dates can't be reached.
   }
   dateSel.value = state.filterDate;
-  dateSel.addEventListener('change', () => { state.filterDate = dateSel.value; loadTab(); });
+  // onchange (not addEventListener): initDateFilter re-runs on market switch
+  // and when a new run is detected, and must not stack duplicate handlers.
+  dateSel.onchange = () => { state.filterDate = dateSel.value; loadTab(); };
 }
 
 // Technical / indicator columns are hidden by default (user request): the
@@ -1665,6 +1667,38 @@ loadMarkets();
 
 renderTabs();
 refreshAll();
+
+// A dashboard tab left open for days keeps showing the run it loaded with
+// (observed 2026-09-07: a tab opened on 09-01 still said 09-01 while the API
+// already served 09-07, which read as "the scanner stopped running"). Poll
+// /market cheaply and, when a newer run appears while the Date filter is on
+// "Latest", reload the date list and the current tab. Also re-check whenever
+// the tab comes back into view.
+const NEW_RUN_POLL_MS = 10 * 60 * 1000;
+let newRunCheckRunning = false;
+async function checkForNewRun() {
+  if (newRunCheckRunning || state.loading || document.hidden) return;
+  newRunCheckRunning = true;
+  try {
+    const m = await apiGet('/market' + marketQS(state, '?'));
+    const shown = state.market && state.market.tradingDate;
+    if (m && m.tradingDate && shown && m.tradingDate !== shown) {
+      if (state.filterDate === 'latest') {
+        await initDateFilter();
+        await refreshAll();
+      } else {
+        state.market = m;
+        renderMarketStrip();
+      }
+    }
+  } catch (e) {
+    // Non-fatal: the next poll / focus will try again.
+  } finally {
+    newRunCheckRunning = false;
+  }
+}
+setInterval(checkForNewRun, NEW_RUN_POLL_MS);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForNewRun(); });
 </script>
 </body>
 </html>
