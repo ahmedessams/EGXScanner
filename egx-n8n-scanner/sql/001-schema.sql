@@ -692,6 +692,37 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------
+-- Conditional base rates (2026-09-08): outcome counts of evaluated Top-10
+-- picks per market x extension bucket x relative-volume bucket x market-
+-- score band, refreshed by workflow 16 next to probability_stats. Read
+-- through context_probability() (sql/003-views.sql), which shrinks each
+-- level toward its parent (k = 20 pseudo-picks): ALL -> ER -> ERM.
+-- Why: walk-forward on every evaluated Top-10 pick (Brier, lower = better)
+-- EGX BACKTEST n=1.6k: setup-type rate 0.2395 vs this 0.2354; EGX LIVE
+-- n=100: 0.2712 vs 0.2507 (the LLM assessment scored 0.2582 on the same
+-- rows); reliability monotonic in both slices where the setup-type rate is
+-- not (its 40-50% bucket hit 29.6% on 135 picks). US: all models within
+-- +/-0.001, i.e. a wash. Bucket edges live in prob_context_buckets().
+-- level = 'ALL' (market only, buckets '*'), 'ER' (ext x rvol, ms '*'),
+-- 'ERM' (all three). 'na' bucket = input NULL on that pick.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS probability_context_stats (
+    market          VARCHAR(16) NOT NULL,
+    level           VARCHAR(4)  NOT NULL,
+    ext_bucket      VARCHAR(4)  NOT NULL DEFAULT '*',
+    rvol_bucket     VARCHAR(4)  NOT NULL DEFAULT '*',
+    ms_bucket       VARCHAR(4)  NOT NULL DEFAULT '*',
+    sample_size     INTEGER NOT NULL,
+    target1_hits    INTEGER NOT NULL,
+    stop_hits       INTEGER NOT NULL,
+    expired         INTEGER NOT NULL,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT pk_probability_context_stats PRIMARY KEY (market, level, ext_bucket, rvol_bucket, ms_bucket)
+);
+
+COMMENT ON TABLE probability_context_stats IS 'Outcome counts of evaluated Top-10 picks (LIVE + BACKTEST, gain >= markets.min_target_gain_pct) per market x extension-from-EMA20-in-ATR bucket x relative-volume bucket x market-score band. A measured track record, not a forecast; read via context_probability(), which shrinks sparse cells toward their parent level. Refreshed by workflow 16.';
+
+-- ---------------------------------------------------------------------
 -- Horizon estimates (2026-09-01): drift + volatility projection per
 -- stock/date (the standard "expected move" framework: mu/sigma of daily
 -- log returns over the trailing 252 sessions, >=60 returns required).

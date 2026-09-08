@@ -454,6 +454,67 @@ $$ LANGUAGE SQL STABLE;
 COMMENT ON FUNCTION market_snapshot IS 'Same row shape as v_full_market, parameterized to any historical date (on-or-before semantics; NULL = always latest, identical to v_full_market for p_market=EGX) and any market (default EGX, for backward-compatible single-arg callers). Backs GET /webhook/egx/stocks(/volume|/relative-volume)''s optional ?date=/?market= filters.';
 
 -- ---------------------------------------------------------------------
+-- Conditional base rates (2026-09-08). prob_context_buckets() is the ONE
+-- place the bucket edges live: workflow 16's refresh and every lookup go
+-- through it, so a cell is always keyed the same way it was counted.
+--   ext  = (entry - EMA20) / ATR14 : e1 <1, e2 1-2, e3 2-3, e4 3-4, e5 >=4
+--   rvol = relative_volume20      : r1 <1, r2 1-1.5, r3 1.5-2.5, r4 >=2.5
+--   ms   = scanner_runs.market_score : m1 <40, m2 40-60, m3 >=60
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION prob_context_buckets(p_ext FLOAT8, p_rvol FLOAT8, p_ms FLOAT8)
+RETURNS TABLE (ext_bucket VARCHAR, rvol_bucket VARCHAR, ms_bucket VARCHAR) AS $$
+  SELECT
+    (CASE WHEN p_ext IS NULL THEN 'na' WHEN p_ext < 1 THEN 'e1' WHEN p_ext < 2 THEN 'e2'
+          WHEN p_ext < 3 THEN 'e3' WHEN p_ext < 4 THEN 'e4' ELSE 'e5' END)::varchar,
+    (CASE WHEN p_rvol IS NULL THEN 'na' WHEN p_rvol < 1 THEN 'r1' WHEN p_rvol < 1.5 THEN 'r2'
+          WHEN p_rvol < 2.5 THEN 'r3' ELSE 'r4' END)::varchar,
+    (CASE WHEN p_ms IS NULL THEN 'na' WHEN p_ms < 40 THEN 'm1' WHEN p_ms < 60 THEN 'm2' ELSE 'm3' END)::varchar;
+$$ LANGUAGE SQL IMMUTABLE;
+
+-- P(T1) / P(stop) for one pick's context, from probability_context_stats.
+-- Hierarchical shrinkage with k = 20 pseudo-picks per level:
+--   p_all = market-wide rate
+--   p_er  = (hits_er  + 20 * p_all) / (n_er  + 20)
+--   p_erm = (hits_erm + 20 * p_er ) / (n_erm + 20)   <- returned
+-- so an empty cell returns its parent and a 200-pick cell is ~90% its own
+-- rate. sample_size is the most specific (ERM) cell's own count. NULL when
+-- the market has no ALL row yet (fresh install) — callers fall back to
+-- probability_stats. Measured base rates, not a forecast for the stock.
+CREATE OR REPLACE FUNCTION context_probability(p_market VARCHAR, p_ext FLOAT8, p_rvol FLOAT8, p_ms FLOAT8)
+RETURNS TABLE (target1_hit_pct FLOAT8, stop_hit_pct FLOAT8, sample_size INT, parent_sample_size INT, cell TEXT) AS $$
+  WITH b AS (SELECT * FROM prob_context_buckets(p_ext, p_rvol, p_ms)),
+  a AS (SELECT s.sample_size AS n, s.target1_hits AS h, s.stop_hits AS st
+        FROM probability_context_stats s WHERE s.market = p_market AND s.level = 'ALL'),
+  er AS (SELECT s.sample_size AS n, s.target1_hits AS h, s.stop_hits AS st
+         FROM probability_context_stats s, b
+         WHERE s.market = p_market AND s.level = 'ER'
+           AND s.ext_bucket = b.ext_bucket AND s.rvol_bucket = b.rvol_bucket),
+  erm AS (SELECT s.sample_size AS n, s.target1_hits AS h, s.stop_hits AS st
+          FROM probability_context_stats s, b
+          WHERE s.market = p_market AND s.level = 'ERM'
+            AND s.ext_bucket = b.ext_bucket AND s.rvol_bucket = b.rvol_bucket AND s.ms_bucket = b.ms_bucket),
+  p0 AS (SELECT a.h::float8 / NULLIF(a.n, 0) AS ph, a.st::float8 / NULLIF(a.n, 0) AS ps FROM a),
+  p1 AS (SELECT (COALESCE(er.h, 0) + 20 * p0.ph) / (COALESCE(er.n, 0) + 20) AS ph,
+                (COALESCE(er.st, 0) + 20 * p0.ps) / (COALESCE(er.n, 0) + 20) AS ps,
+                COALESCE(er.n, 0) AS n_er
+         FROM p0 LEFT JOIN er ON TRUE),
+  p2 AS (SELECT (COALESCE(erm.h, 0) + 20 * p1.ph) / (COALESCE(erm.n, 0) + 20) AS ph,
+                (COALESCE(erm.st, 0) + 20 * p1.ps) / (COALESCE(erm.n, 0) + 20) AS ps,
+                COALESCE(erm.n, 0) AS n_erm, p1.n_er
+         FROM p1 LEFT JOIN erm ON TRUE)
+  SELECT ROUND((100 * p2.ph)::numeric, 1)::float8,
+         ROUND((100 * p2.ps)::numeric, 1)::float8,
+         p2.n_erm::int, p2.n_er::int,
+         'ext ' || CASE b.ext_bucket WHEN 'e1' THEN '<1' WHEN 'e2' THEN '1-2' WHEN 'e3' THEN '2-3' WHEN 'e4' THEN '3-4' WHEN 'e5' THEN '>=4' ELSE '?' END
+         || ' ATR | RVOL ' || CASE b.rvol_bucket WHEN 'r1' THEN '<1' WHEN 'r2' THEN '1-1.5' WHEN 'r3' THEN '1.5-2.5' WHEN 'r4' THEN '>=2.5' ELSE '?' END
+         || ' | market ' || CASE b.ms_bucket WHEN 'm1' THEN '<40' WHEN 'm2' THEN '40-60' WHEN 'm3' THEN '>=60' ELSE '?' END
+  FROM p2, b
+  WHERE p2.ph IS NOT NULL;
+$$ LANGUAGE SQL STABLE;
+
+COMMENT ON FUNCTION context_probability IS 'Measured P(T1)/P(stop) for a pick''s context (market, extension-in-ATR, relative volume, market score) from probability_context_stats with hierarchical shrinkage (k=20) toward the parent level. Walk-forward it is better calibrated than the per-setup rate on EGX (Brier 0.2354 vs 0.2395 BACKTEST, 0.2507 vs 0.2712 LIVE) and neutral on US. Base rates, not a forecast.';
+
+-- ---------------------------------------------------------------------
 -- v_scanner_top: latest run results joined with stock + price info, ranked
 -- ---------------------------------------------------------------------
 CREATE OR REPLACE VIEW v_scanner_top AS
@@ -551,10 +612,15 @@ SELECT
     -- number that says so.
     (CASE WHEN res.entry_price > 0 AND res.invalidation_price > 0 AND res.invalidation_price < res.entry_price
           THEN (res.entry_price - res.invalidation_price) / res.entry_price * 100 END)::float8 AS risk_pct,
-    (CASE WHEN ps.sample_size > 0 AND res.entry_price > 0 AND res.invalidation_price > 0
+    -- 2026-09-08: P(T1)/P(stop) come from the conditional context rate
+    -- (context_probability(): extension x relative volume x market score,
+    -- shrunk toward the market-wide rate) when the market has one, else the
+    -- per-setup probability_stats rate as before. See probability_source.
+    (CASE WHEN res.entry_price > 0 AND res.invalidation_price > 0
                AND res.invalidation_price < res.entry_price AND res.target1_gain_pct IS NOT NULL
-          THEN ps.target1_hit_pct / 100 * res.target1_gain_pct
-             - ps.stop_hit_pct / 100 * ((res.entry_price - res.invalidation_price) / res.entry_price * 100) END)::float8
+               AND (ctx.target1_hit_pct IS NOT NULL OR ps.sample_size > 0)
+          THEN COALESCE(ctx.target1_hit_pct, ps.target1_hit_pct::float8) / 100 * res.target1_gain_pct
+             - COALESCE(ctx.stop_hit_pct, ps.stop_hit_pct::float8) / 100 * ((res.entry_price - res.invalidation_price) / res.entry_price * 100) END)::float8
         AS expected_value_pct,
     -- Target-free multi-horizon labels from workflow 16 (NULL until enough
     -- forward sessions exist); the 10-session pair is what the webapp shows.
@@ -590,7 +656,20 @@ SELECT
     ta.smc_sweep,
     ta.smc_sweep_bars_ago,
     ta.smc_range_pos_pct::float8 AS smc_range_pos_pct,
-    ta.smc_bias
+    ta.smc_bias,
+    -- Conditional base rates (2026-09-08, append-only as above): the
+    -- context_probability() cell this pick falls in — measured P(T1) and
+    -- P(stop) of past Top-10 picks with the same extension x relative
+    -- volume x market-score context, shrunk toward the market-wide rate.
+    -- These now drive expected_value_pct (probability_source says which
+    -- rate did). historical_* (per-setup) columns are kept as they were.
+    ctx.target1_hit_pct AS context_target1_hit_pct,
+    ctx.stop_hit_pct AS context_stop_hit_pct,
+    ctx.sample_size AS context_sample_size,
+    ctx.parent_sample_size AS context_parent_sample_size,
+    ctx.cell AS context_cell,
+    (CASE WHEN ctx.target1_hit_pct IS NOT NULL THEN 'context'
+          WHEN ps.sample_size > 0 THEN 'setup' END)::text AS probability_source
 FROM scanner_results res
 JOIN scanner_runs run ON run.id = res.scanner_run_id
 JOIN stocks s ON s.id = res.stock_id
@@ -630,6 +709,11 @@ LEFT JOIN LATERAL (
     WHERE d.stock_id = s.id AND d.ex_date <= run.trading_date
 ) dv ON TRUE
 LEFT JOIN probability_stats ps ON ps.setup_type = res.setup_type AND ps.market = run.market
+-- Same ext / rvol / market_score inputs as workflow 16's refresh of
+-- probability_context_stats, so the lookup lands in the cell it was counted in.
+LEFT JOIN LATERAL context_probability(run.market,
+    ((res.entry_price - ta.ema20) / NULLIF(ta.atr14, 0))::float8,
+    ta.relative_volume20::float8, run.market_score::float8) ctx ON TRUE
 LEFT JOIN target_window_evaluation twe ON twe.scanner_result_id = res.id
 LEFT JOIN range_forecast rf ON rf.stock_id = res.stock_id AND rf.trading_date = run.trading_date
 LEFT JOIN LATERAL (

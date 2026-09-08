@@ -207,6 +207,23 @@
       "id": "e7b651f6-2d41-4ac8-90b3-0050099cbb54"
     },
     {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Conditional base rates (2026-09-08): outcome counts per market x extension\n-- bucket x relative-volume bucket x market-score band, at three levels\n-- (ALL / ER / ERM) so context_probability() can shrink sparse cells toward\n-- their parent. Same population as the lab that validated it: evaluated\n-- Top-10 eligible picks, LIVE + BACKTEST, gain >= markets.min_target_gain_pct.\n-- Bucket edges come from prob_context_buckets() — the same function the\n-- v_scanner_top / workflow 17 lookups use, so counting and lookup agree.\nINSERT INTO probability_context_stats (\n  market, level, ext_bucket, rvol_bucket, ms_bucket,\n  sample_size, target1_hits, stop_hits, expired, updated_at\n)\nWITH base AS (\n  SELECT run.market, b.ext_bucket, b.rvol_bucket, b.ms_bucket,\n         (twe.outcome = 'TARGET1_HIT')::int AS hit,\n         (twe.outcome = 'STOP_HIT')::int AS stop,\n         (twe.outcome = 'EXPIRED_NO_HIT')::int AS expired\n  FROM target_window_evaluation twe\n  JOIN scanner_results r ON r.id = twe.scanner_result_id\n  JOIN scanner_runs run ON run.id = r.scanner_run_id\n  JOIN markets m ON m.code = run.market\n  LEFT JOIN technical_analysis ta ON ta.stock_id = r.stock_id AND ta.trading_date = run.trading_date\n  CROSS JOIN LATERAL prob_context_buckets(\n    ((r.entry_price - ta.ema20) / NULLIF(ta.atr14, 0))::float8,\n    ta.relative_volume20::float8, run.market_score::float8) b\n  WHERE run.run_type IN ('LIVE', 'BACKTEST')\n    AND r.eligible = TRUE AND r.overall_rank <= 10\n    AND r.entry_price > 0 AND r.target1 IS NOT NULL\n    AND (r.target1 - r.entry_price) / r.entry_price * 100 >= m.min_target_gain_pct\n)\nSELECT market, 'ALL', '*', '*', '*',\n       COUNT(*)::int, SUM(hit)::int, SUM(stop)::int, SUM(expired)::int, now()\nFROM base GROUP BY market\nUNION ALL\nSELECT market, 'ER', ext_bucket, rvol_bucket, '*',\n       COUNT(*)::int, SUM(hit)::int, SUM(stop)::int, SUM(expired)::int, now()\nFROM base GROUP BY market, ext_bucket, rvol_bucket\nUNION ALL\nSELECT market, 'ERM', ext_bucket, rvol_bucket, ms_bucket,\n       COUNT(*)::int, SUM(hit)::int, SUM(stop)::int, SUM(expired)::int, now()\nFROM base GROUP BY market, ext_bucket, rvol_bucket, ms_bucket\nON CONFLICT (market, level, ext_bucket, rvol_bucket, ms_bucket) DO UPDATE SET\n  sample_size = EXCLUDED.sample_size,\n  target1_hits = EXCLUDED.target1_hits,\n  stop_hits = EXCLUDED.stop_hits,\n  expired = EXCLUDED.expired,\n  updated_at = now();\n",
+        "options": {}
+      },
+      "name": "Refresh Probability Context Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "executeOnce": true,
+      "position": [
+        2730,
+        0
+      ],
+      "id": "d7b8a813-faca-50ce-8d6a-3f7ed119d3eb",
+      "credentials": null
+    },
+    {
       "name": "Count Evaluated Rows",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
@@ -217,7 +234,7 @@
       },
       "executeOnce": true,
       "position": [
-        2860,
+        3120,
         0
       ],
       "id": "763bd8b3-442e-4d9c-b229-844f98f8ead9"
@@ -232,7 +249,7 @@
         "jsCode": "const count = $input.first().json.evaluated_count;\nlet labels = {};\ntry { labels = $('Fill Multi-Horizon Labels').first().json || {}; } catch (e) {}\nreturn [{ json: {\n  workflow: '16-egx-target-window-evaluation',\n  finishedAt: new Date().toISOString(),\n  totalEvaluatedRows: count,\n  horizonLabelsFilled: labels.labelled_rows ?? null,\n  horizonLabelsCompleted: labels.completed_rows ?? null,\n} }];"
       },
       "position": [
-        0,
+        260,
         200
       ],
       "id": "be3b4ffe-8b54-4ac5-938b-c7e1e397dc7f"
@@ -349,7 +366,7 @@
       "main": [
         [
           {
-            "node": "Count Evaluated Rows",
+            "node": "Refresh Probability Context Stats",
             "type": "main",
             "index": 0
           }
@@ -372,6 +389,17 @@
         [
           {
             "node": "Refresh Probability Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refresh Probability Context Stats": {
+      "main": [
+        [
+          {
+            "node": "Count Evaluated Rows",
             "type": "main",
             "index": 0
           }

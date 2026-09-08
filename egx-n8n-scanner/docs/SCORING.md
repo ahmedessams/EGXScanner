@@ -270,12 +270,17 @@ what it was designed to be.
 ## Expected value (`expected_value_pct`)
 
 `EV = P(T1) × gain_to_T1 − P(stop) × risk_to_stop`, all in % of entry,
-where P(T1)/P(stop) are the MEASURED per-setup-per-market base rates from
-`probability_stats` (the same numbers shown as "P(T1) %" / "P(Stop) %") and
+where P(T1)/P(stop) are MEASURED base rates and
 `risk_to_stop = (entry − invalidation) / entry × 100` (also exposed as
-`risk_pct`). Computed in `v_scanner_top` / `market_snapshot()` / the
-`/top-picks` query — never stored — so it always reflects the current base
-rates. `NULL` when there is no probability sample or no valid stop. The
+`risk_pct`). Since 2026-09-08 `v_scanner_top` (the `/top` and `/top-picks`
+rows) takes P(T1)/P(stop) from the **conditional context rate**
+(`context_target1_hit_pct` / `context_stop_hit_pct`, see "Conditional base
+rates" below) and falls back to the per-setup-per-market
+`probability_stats` rate only when the market has no context row yet;
+`probability_source` on each row says which one was used.
+`market_snapshot()` (the full-market table) still uses the per-setup rate.
+Computed in the views — never stored — so it always reflects the current
+base rates. `NULL` when there is no probability sample or no valid stop. The
 `/top-picks` row adds `similar_expected_value_pct`, the same formula using
 that pick's similar-target cohort instead of the whole setup type. It is a
 base-rate arithmetic, not a forecast: a 55% hit rate on a +6% target with a
@@ -430,6 +435,57 @@ above stays comparable across the whole history. The dashboard marks
 gapped rows with ⚡ and the Track Record shows gapped counts, the gapped
 stop rate and the average stop gap per scope/setup. Rows evaluated before
 this date were backfilled from `daily_prices` in one pass.
+
+## Conditional base rates (`probability_context_stats`, since 2026-09-08)
+
+The per-setup rate above turned out to carry no information beyond the
+market-wide rate. Walk-forward over every evaluated Top-10 pick (each
+pick's estimate uses only picks dated ≥ 15 days earlier, so no outcome
+leaks in), scored by Brier (lower is better):
+
+| model | EGX BACKTEST n=1.6k | EGX LIVE n=100 | US BACKTEST n=2.5k | US LIVE n=72 |
+|---|---|---|---|---|
+| market-wide rate | 0.2395 | 0.2697 | 0.1979 | 0.2006 |
+| per-setup rate (`probability_stats`) | 0.2395 | 0.2712 | 0.1971 | 0.2017 |
+| market_score band only | 0.2411 | 0.2690 | 0.1980 | 0.1980 |
+| extension × RVOL | 0.2353 | 0.2575 | 0.1969 | 0.1963 |
+| **extension × RVOL × market_score** | **0.2354** | **0.2507** | 0.1975 | 0.1976 |
+| setup × extension × RVOL × market_score | 0.2374 | 0.2464 | 0.1972 | 0.1948 |
+| AI assessment (LLM, where present) | — | 0.2582 (n=88) | — | 0.2151 (n=48) |
+
+Reliability of the shipped model in EGX is monotonic in both slices
+(BACKTEST predicted 25 → hit 32%, 35 → 38, 44 → 45, 53 → 55; LIVE 27 → 36,
+37 → 47, 42 → 58, 54 → 59, 63 → 83) where the per-setup rate is not (its
+40–50% bucket hit 29.6% on 135 BACKTEST picks). The AI number is flat
+(36 → 50, 45 → 48, 52 → 51). On US every model is within ±0.001 of the
+others — a wash, so one code path serves both markets.
+
+**Method.** `16` refreshes `probability_context_stats` next to
+`probability_stats`: outcome counts of evaluated Top-10 eligible picks
+(LIVE + BACKTEST, gain ≥ `min_target_gain_pct`) per market at three
+levels — `ALL` (market only), `ER` (extension bucket × relative-volume
+bucket) and `ERM` (× market-score band). Buckets come from
+`prob_context_buckets()` (extension = (entry − EMA20) / ATR14: <1, 1–2,
+2–3, 3–4, ≥4; RVOL20: <1, 1–1.5, 1.5–2.5, ≥2.5; `market_score`: <40,
+40–60, ≥60) so counting and lookup can never disagree.
+`context_probability(market, ext, rvol, ms)` returns the `ERM` cell rate
+shrunk toward its parents with k = 20 pseudo-picks at each level —
+`p_er = (hits_er + 20·p_all) / (n_er + 20)`, `p_erm = (hits_erm + 20·p_er)
+/ (n_erm + 20)` — so an empty cell returns its parent and a 200-pick cell
+is ~90% its own rate. Exposed on `v_scanner_top` as
+`context_target1_hit_pct`, `context_stop_hit_pct`, `context_sample_size`
+(the exact cell), `context_parent_sample_size` (the extension × volume
+cell) and `context_cell` (a label), and given to `17` as the AI's primary
+anchor. Not a ranking input: scoring and gates are unchanged.
+
+**Why these three inputs.** The 2026-09-07 bucket cut and its robustness
+checks (episode dedup, chronological terciles, market-score bands, same-run
+pairing, strata by momentum / gain / est. days / setup) found that in EGX
+extension does not hurt once relative volume is high (ext ≥ 3 ATR × RVOL ≥
+2.5: 55% hit / +2.7% BACKTEST, ~63% LIVE) but the edge vanishes in weak
+regimes (Feb–May 2026, market_score < 40), and that US shows nothing.
+A hand-built penalty or bonus was rejected; this table lets the measured
+rates carry that information instead.
 
 ## AI Assessment (`17-egx-ai-assessment`)
 

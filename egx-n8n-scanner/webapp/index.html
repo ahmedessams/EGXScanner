@@ -477,7 +477,7 @@ const RANKED_COLUMNS = [
   { key: 'change_pct', label: 'Chg %', num: true, render: (r) => changeCell(r.change_pct) },
   { key: 'overall_score', label: 'Score', num: true, render: (r) => scoreCell(r.overall_score) },
   { key: 'entry_quality_score', label: 'Entry Q', num: true, title: 'Entry Quality (0–100): how good TODAY is as an entry, separate from the Score (how good the setup is). Extension from the 20-day EMA in ATRs (40 pts — best on or just above the trend, 0 when 3 ATR above it), where the close sat in the day\'s range (30 pts), and the 3-session RSI slope (30 pts). Not a ranking factor.', render: (r) => scoreCell(r.entry_quality_score) },
-  { key: 'expected_value_pct', label: 'EV %', num: true, title: 'Expected value per trade = P(T1) × Gain % T1 − P(Stop) × risk to the stop, using the measured setup-wide rates in the P(T1)/P(Stop) columns. Positive means the historical odds pay for the risk; a base-rate arithmetic, not a forecast for this stock.', render: (r) => changeCell(r.expected_value_pct) },
+  { key: 'expected_value_pct', label: 'EV %', num: true, title: 'Expected value per trade = P(T1) × Gain % T1 − P(Stop) × risk to the stop, using the conditional context rates in the P(T1) ctx / P(Stop) ctx columns (the setup-type rates when no context rate exists). Positive means the historical odds pay for the risk; a base-rate arithmetic, not a forecast for this stock.', render: (r) => changeCell(r.expected_value_pct) },
   { key: 'setup_type', label: 'Setup', render: (r) => setupBadge(r.setup_type) },
   { key: 'rvol20', label: 'RVOL20', num: true, render: (r) => fmtx(r.rvol20) },
   { key: 'rsi14', label: 'RSI14', num: true, render: (r) => fmt(r.rsi14, 1) },
@@ -494,6 +494,8 @@ const RANKED_COLUMNS = [
   { key: 'target1_estimated_days', label: 'Est. Days T1', num: true, title: 'Rough ATR-based projection, not a historical statistic or guarantee', render: (r) => fmtDays(r.target1_estimated_days) },
   { key: 'historical_target1_hit_pct', label: 'P(T1) %', num: true, title: 'Historical rate: % of past eligible picks with this setup type that reached Target 1 within their own estimated-days window. Not a forecast for this specific stock — hover the value for sample size.', render: (r) => probCell(r.historical_target1_hit_pct, r.historical_sample_size, true) },
   { key: 'historical_stop_hit_pct', label: 'P(Stop) %', num: true, title: 'Historical rate: % of past eligible picks with this setup type that hit the stop/invalidation level first, within that same window. Hover the value for sample size.', render: (r) => probCell(r.historical_stop_hit_pct, r.historical_sample_size, false) },
+  { key: 'context_target1_hit_pct', label: 'P(T1) ctx %', num: true, title: 'Conditional base rate: % of past Top-10 picks in this market with the same context — extension from the 20-day EMA (in ATRs) × relative volume × market regime score — that reached Target 1 inside their own window, shrunk toward the market-wide rate when the cell is thin. Walk-forward this is better calibrated than the setup-type P(T1) on EGX and neutral on US; it now drives EV %. Hover for the cell and sample size. A measured base rate, not a forecast for this stock.', render: (r) => ctxProbCell(r.context_target1_hit_pct, r, true) },
+  { key: 'context_stop_hit_pct', label: 'P(Stop) ctx %', num: true, title: 'Conditional base rate: % of those same-context past picks that hit the stop/invalidation first. Hover for the cell and sample size.', render: (r) => ctxProbCell(r.context_stop_hit_pct, r, false) },
   { key: 'ai_rank', label: 'AI Rank', num: true, title: 'AI Assessment: a language model\'s own re-ranking of that day\'s Top 10, from the same technical data — a second opinion shown alongside Overall Rank, not a replacement for it. Only computed for the Top 10, not the full market.', render: (r) => aiRankCell(r.ai_rank) },
   { key: 'ai_target1_probability_pct', label: 'AI Prob % T1', num: true, title: 'AI Assessment: a language model\'s own probability estimate for reaching Target 1 within its estimated-days window. A qualitative judgment call from limited technical data — NOT the measured P(T1) % above, and NOT a guarantee. Hover for the model\'s stated reasoning.', render: (r) => aiProbCell(r.ai_target1_probability_pct, r.ai_reasoning) },
   { key: 'actual_window_high', label: 'Actual High (T1 win.)', num: true, title: 'The ACTUAL highest price reached during this pick\'s own Est. Days T1 window (the sessions after the scan date). "—" until at least one later session exists.', render: (r) => fmt(r.actual_window_high) },
@@ -548,6 +550,8 @@ const TOP_PICKS_COLUMNS = [
   { key: 'similar_target1_hit_pct', label: 'Similar Picks Hit %', num: true, title: 'Measured rate: % of past Top-10 picks in this market with the same setup type and a similar-size Target 1 (0.6x–1.5x this pick\'s gain) that reached Target 1 inside their own window. Context, not a filter: walk-forward it did not separate winners from losers. A base rate, not a forecast for this specific stock — hover for sample size.', render: (r) => probCell(r.similar_target1_hit_pct, r.similar_n, true) },
   { key: 'ai_stop_probability_pct', label: 'AI Stop Prob', num: true, title: 'AI Assessment: a language model\'s own probability estimate that the stop/invalidation is hit before Target 1. A qualitative judgment call from limited technical data, not a guarantee. Hover for the model\'s stated reasoning.', render: (r) => aiProbCell(r.ai_stop_probability_pct, r.ai_reasoning) },
   { key: 'similar_stop_hit_pct', label: 'Similar Picks Stop %', num: true, title: 'Measured rate: % of those same similar past picks that hit the stop/invalidation level first, within that same window. Hover for sample size.', render: (r) => probCell(r.similar_stop_hit_pct, r.similar_n, false) },
+  { key: 'context_target1_hit_pct', label: 'P(T1) ctx %', num: true, title: 'Conditional base rate: % of past Top-10 picks in this market with the same context — extension from the 20-day EMA (in ATRs) × relative volume × market regime score — that reached Target 1 inside their own window, shrunk toward the market-wide rate when the cell is thin. Walk-forward this is better calibrated than the setup-type P(T1) on EGX and neutral on US; it now drives EV %. Hover for the cell and sample size. A measured base rate, not a forecast for this stock.', render: (r) => ctxProbCell(r.context_target1_hit_pct, r, true) },
+  { key: 'context_stop_hit_pct', label: 'P(Stop) ctx %', num: true, title: 'Conditional base rate: % of those same-context past picks that hit the stop/invalidation first. Hover for the cell and sample size.', render: (r) => ctxProbCell(r.context_stop_hit_pct, r, false) },
 ];
 
 // Gain/loss % of an estimate versus a reference close (null-safe).
@@ -781,6 +785,18 @@ function probCell(v, sampleSize, positive) {
   const style = lowConfidence ? 'opacity:0.6;font-style:italic;' : '';
   const note = lowConfidence ? ' — small sample, treat with caution' : '';
   return `<span class="${cls}" style="${style}" title="Sample size: n=${size}${note}">${n.toFixed(1)}%</span>`;
+}
+function ctxProbCell(v, r, positive) {
+  if (v === null || v === undefined || v === '') return '—';
+  const n = Number(v);
+  const size = Number(r.context_sample_size) || 0;
+  const parent = Number(r.context_parent_sample_size) || 0;
+  const thin = size < 30;
+  const cls = positive ? 'change-pos' : 'change-neg';
+  const style = thin ? 'opacity:0.6;font-style:italic;' : '';
+  const note = thin ? ' — thin cell, mostly the parent rate' : '';
+  const cell = r.context_cell ? esc(r.context_cell) + ' · ' : '';
+  return `<span class="${cls}" style="${style}" title="${cell}cell n=${size}, ext×volume n=${parent}${note}">${n.toFixed(1)}%</span>`;
 }
 function aiRankCell(v) {
   if (v === null || v === undefined || v === '') return '—';
