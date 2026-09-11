@@ -328,6 +328,20 @@
   .slot-status-tp { color: var(--pos, #1a7f37); font-weight: 600; }
   .slot-status-sl { color: var(--neg, #b42318); font-weight: 600; }
   .slot-status-end { color: var(--accent); font-weight: 600; }
+
+  /* Chart tab (2026-09-11): candlestick chart with OHLC readout + period table. */
+  .chart-panel { padding: 12px 14px; margin-top: 8px; }
+  .chart-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .chart-controls input[type=text] { padding: 5px 8px; width: 140px; text-transform: uppercase; }
+  .chart-range button { padding: 4px 9px; font-size: 12px; margin-right: 2px; }
+  .chart-range button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #chartHost { width: 100%; height: 440px; }
+  .chart-readout { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; padding: 8px 0; color: var(--text-muted); min-height: 24px; }
+  .chart-readout b { color: var(--text); }
+  .chart-readout .pinned { color: var(--accent); font-weight: 600; }
+  .chart-table-wrap { max-height: 360px; overflow: auto; margin-top: 8px; }
+  .chart-table-wrap table { font-size: 12px; }
+  .chart-table-wrap tr.selected td { background: var(--accent-weak); }
 </style>
 </head>
 <body>
@@ -389,6 +403,19 @@
     </table>
     <div class="empty-state" id="emptyState" style="display:none;"></div>
   </div>
+  <div class="card chart-panel" id="chartPanel" style="display:none;">
+    <div class="chart-controls">
+      <label>Symbol <input type="text" id="chartSymbol" list="chartSymbolList" placeholder="e.g. COMI or EGX30" autocomplete="off"></label>
+      <datalist id="chartSymbolList"></datalist>
+      <button class="filter-reset" id="chartLoadBtn" type="button">Load</button>
+      <span class="chart-range" id="chartRange"></span>
+      <button class="filter-reset" id="chartExportBtn" type="button">Export period OHLC (CSV)</button>
+      <span class="filter-note" id="chartNote">Daily candles. Click a candle to pin its OHLC; the table lists every session in the selected period.</span>
+    </div>
+    <div id="chartHost"></div>
+    <div class="chart-readout" id="chartReadout"></div>
+    <div class="chart-table-wrap"><table id="chartTable"><thead><tr><th>Date</th><th class="num">Open</th><th class="num">High</th><th class="num">Low</th><th class="num">Close</th><th class="num">Chg %</th><th class="num">Volume</th><th class="num">Traded value</th></tr></thead><tbody id="chartTableBody"></tbody></table></div>
+  </div>
 </main>
 
 <footer>
@@ -398,6 +425,7 @@
   <code>13-egx-report-api</code>.
 </footer>
 
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script>
 // __N8N_BASE_URL__ is substituted at Render build time (render.yaml's
 // egx-webapp buildCommand) with the deployed n8n service's real webhook
@@ -504,6 +532,8 @@ const TABS = [
   { id: 'range-forecast', label: 'Next Estimate', endpoint: (s) => `/range-forecast${marketQS(s, '?')}${dateQS(s, '&')}` },
   // All-time aggregate — deliberately ignores the date filter server-side.
   { id: 'outcomes', label: 'Track Record', endpoint: (s) => `/outcomes${marketQS(s, '?')}` },
+  // Chart (2026-09-11): candlestick view fed by /candles; no table endpoint.
+  { id: 'chart', label: 'Chart', endpoint: null },
 ];
 
 const RANKED_COLUMNS = [
@@ -1360,6 +1390,16 @@ async function loadMarket() {
 
 async function loadTab() {
   renderTabs();
+  const tableCard = document.querySelector('.card.table-scroll');
+  const chartPanel = document.getElementById('chartPanel');
+  if (state.tab === 'chart') {
+    tableCard.style.display = 'none'; chartPanel.style.display = '';
+    document.getElementById('statRow').innerHTML = '';
+    showBanner('');
+    await loadChart();
+    return;
+  }
+  tableCard.style.display = ''; chartPanel.style.display = 'none';
   renderFilterBar();
   renderColumnsMenu();
   state.loading = true;
@@ -1758,6 +1798,123 @@ async function checkForNewRun() {
 }
 setInterval(checkForNewRun, NEW_RUN_POLL_MS);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForNewRun(); });
+
+// ---------------------------------------------------------------------
+// Chart tab (2026-09-11): TradingView Lightweight Charts over GET /candles.
+// Ranges are trading-day windows on daily candles (1D = the last session).
+const CHART_RANGES = [['1D', 1], ['1W', 7], ['30D', 30], ['3M', 91], ['6M', 182], ['1Y', 365], ['2Y', 730], ['ALL', null]];
+const INDEX_CODES = { EGX: 'EGX30', US: 'GSPC' };
+const chartState = { symbol: (() => { try { return localStorage.getItem('egx_chart_symbol') || ''; } catch (e) { return ''; } })(),
+  range: (() => { try { return localStorage.getItem('egx_chart_range') || '1Y'; } catch (e) { return '1Y'; } })(),
+  candles: [], chart: null, candleSeries: null, volumeSeries: null, pinned: null, symbolsFor: null, loading: false };
+function chartFromDate(range) {
+  const r = CHART_RANGES.find((x) => x[0] === range) || CHART_RANGES[5];
+  if (r[1] === null) return '2000-01-01';
+  const d = new Date(); d.setUTCDate(d.getUTCDate() - (r[0] === '1D' ? 10 : r[0] === '1W' ? 12 : r[1] + 3));
+  return d.toISOString().slice(0, 10);
+}
+function chartCssVar(name, fallback) { const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); return v || fallback; }
+function ensureChart() {
+  if (chartState.chart || typeof LightweightCharts === 'undefined') return;
+  const host = document.getElementById('chartHost');
+  const text = chartCssVar('--text-muted', '#6b7280');
+  chartState.chart = LightweightCharts.createChart(host, {
+    height: 440, layout: { background: { type: 'solid', color: 'transparent' }, textColor: text },
+    grid: { vertLines: { color: 'rgba(128,128,128,0.12)' }, horzLines: { color: 'rgba(128,128,128,0.12)' } },
+    rightPriceScale: { borderVisible: false }, timeScale: { borderVisible: false, timeVisible: false },
+    crosshair: { mode: 0 },
+  });
+  chartState.candleSeries = chartState.chart.addCandlestickSeries({ upColor: '#1a7f37', downColor: '#b42318', borderVisible: false, wickUpColor: '#1a7f37', wickDownColor: '#b42318' });
+  chartState.volumeSeries = chartState.chart.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: 'vol' });
+  chartState.chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+  chartState.chart.subscribeCrosshairMove((param) => { if (!chartState.pinned && param && param.time) renderChartReadout(chartCandleAt(param.time), false); });
+  chartState.chart.subscribeClick((param) => {
+    if (!param || !param.time) { chartState.pinned = null; renderChartReadout(null, false); highlightChartRow(null); return; }
+    const c = chartCandleAt(param.time); chartState.pinned = c; renderChartReadout(c, true); highlightChartRow(c);
+  });
+  new ResizeObserver(() => { if (chartState.chart) chartState.chart.applyOptions({ width: host.clientWidth }); }).observe(host);
+}
+function chartCandleAt(time) {
+  const key = typeof time === 'string' ? time : (time && time.year ? `${time.year}-${String(time.month).padStart(2, '0')}-${String(time.day).padStart(2, '0')}` : null);
+  return chartState.candles.find((c) => c.d === key) || null;
+}
+function chartChange(c) { const i = chartState.candles.indexOf(c); const p = i > 0 ? chartState.candles[i - 1] : null; return p && p.c ? (c.c / p.c - 1) * 100 : null; }
+function renderChartReadout(c, pinned) {
+  const el = document.getElementById('chartReadout');
+  if (!c) { el.innerHTML = chartState.candles.length ? '<span>Hover a candle for its OHLC, click to pin.</span>' : ''; return; }
+  const chg = chartChange(c);
+  el.innerHTML = `<span class="${pinned ? 'pinned' : ''}">${pinned ? '📌 ' : ''}${esc(c.d)}</span>
+    <span>O <b>${fmt(c.o)}</b></span><span>H <b>${fmt(c.h)}</b></span><span>L <b>${fmt(c.l)}</b></span><span>C <b>${fmt(c.c)}</b></span>
+    <span>Chg ${changeCell(chg)}</span><span>Vol <b>${fmtInt(c.v)}</b></span>${c.tv ? `<span>Value <b>${fmtInt(c.tv)}</b></span>` : ''}
+    ${pinned ? '<span class="muted">(click empty space to unpin)</span>' : ''}`;
+}
+function highlightChartRow(c) {
+  document.querySelectorAll('#chartTableBody tr').forEach((tr) => tr.classList.toggle('selected', !!c && tr.dataset.d === c.d));
+}
+function renderChartTable() {
+  const body = document.getElementById('chartTableBody');
+  const rows = chartState.candles.slice().reverse();
+  body.innerHTML = rows.map((c) => `<tr data-d="${esc(c.d)}"><td>${esc(c.d)}</td><td class="num">${fmt(c.o)}</td><td class="num">${fmt(c.h)}</td><td class="num">${fmt(c.l)}</td><td class="num">${fmt(c.c)}</td><td class="num">${changeCell(chartChange(c))}</td><td class="num">${fmtInt(c.v)}</td><td class="num">${c.tv ? fmtInt(c.tv) : '—'}</td></tr>`).join('');
+  body.querySelectorAll('tr').forEach((tr) => tr.addEventListener('click', () => { const c = chartState.candles.find((x) => x.d === tr.dataset.d); chartState.pinned = c; renderChartReadout(c, true); highlightChartRow(c); }));
+}
+function renderChartRange() {
+  document.getElementById('chartRange').innerHTML = CHART_RANGES.map(([k]) => `<button type="button" class="filter-reset ${k === chartState.range ? 'active' : ''}" data-range="${k}">${k}</button>`).join('');
+}
+async function loadChartSymbols() {
+  const market = state.marketCode;
+  if (chartState.symbolsFor === market) return;
+  try {
+    const data = await apiGet(`/stocks?sort=symbol${marketQS(state, '&')}`);
+    const list = document.getElementById('chartSymbolList');
+    const idx = INDEX_CODES[market];
+    list.innerHTML = (idx ? `<option value="${idx}">${idx} (index)</option>` : '') + (data.results || []).map((r) => `<option value="${esc(r.symbol)}">${esc(r.name || '')}</option>`).join('');
+    chartState.symbolsFor = market;
+  } catch (e) { /* datalist is a convenience only */ }
+}
+async function loadChart() {
+  ensureChart(); renderChartRange();
+  const input = document.getElementById('chartSymbol');
+  if (!chartState.symbol) chartState.symbol = INDEX_CODES[state.marketCode] || '';
+  input.value = chartState.symbol;
+  loadChartSymbols();
+  if (!chartState.symbol) return;
+  if (typeof LightweightCharts === 'undefined') { showBanner('Chart library failed to load (network blocked?). The OHLC table below still works.', true); }
+  chartState.loading = true; setTopProgress(true);
+  document.getElementById('chartNote').textContent = `Loading ${chartState.symbol}…`;
+  try {
+    const from = chartFromDate(chartState.range);
+    const data = await apiGet(`/candles?symbol=${encodeURIComponent(chartState.symbol)}${marketQS(state, '&')}&from=${from}`);
+    let candles = (data.candles || []).map((c) => ({ d: c.d, o: Number(c.o), h: Number(c.h), l: Number(c.l), c: Number(c.c), v: Number(c.v) || 0, tv: Number(c.tv) || null }));
+    const keep = CHART_RANGES.find((x) => x[0] === chartState.range);
+    if (chartState.range === '1D') candles = candles.slice(-1);
+    else if (chartState.range === '1W') candles = candles.slice(-5);
+    chartState.candles = candles; chartState.pinned = null;
+    if (chartState.candleSeries) {
+      chartState.candleSeries.setData(candles.map((c) => ({ time: c.d, open: c.o, high: c.h, low: c.l, close: c.c })));
+      chartState.volumeSeries.setData(candles.map((c) => ({ time: c.d, value: c.v, color: c.c >= c.o ? 'rgba(26,127,55,0.45)' : 'rgba(180,35,24,0.45)' })));
+      chartState.chart.timeScale().fitContent();
+    }
+    renderChartTable(); renderChartReadout(candles.length ? candles[candles.length - 1] : null, false);
+    const first = candles[0], last = candles[candles.length - 1];
+    document.getElementById('chartNote').textContent = candles.length
+      ? `${chartState.symbol}: ${candles.length} sessions, ${first.d} → ${last.d}, period change ${first.o ? ((last.c / first.o - 1) * 100).toFixed(2) : '?'}%. Click a candle to pin its OHLC.`
+      : `No candles for ${chartState.symbol} in this range.`;
+    try { localStorage.setItem('egx_chart_symbol', chartState.symbol); localStorage.setItem('egx_chart_range', chartState.range); } catch (e) {}
+  } catch (e) { showBanner('Chart load failed: ' + e.message, true); }
+  chartState.loading = false; setTopProgress(false);
+}
+function exportChartCsv() {
+  if (!chartState.candles.length) return;
+  const head = ['date', 'open', 'high', 'low', 'close', 'change_pct', 'volume', 'traded_value'];
+  const lines = [head.join(',')].concat(chartState.candles.map((c) => { const chg = chartChange(c); return [c.d, c.o, c.h, c.l, c.c, chg === null ? '' : chg.toFixed(4), c.v, c.tv ?? ''].join(','); }));
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${chartState.symbol}_${chartState.candles[0].d}_${chartState.candles[chartState.candles.length - 1].d}_ohlc.csv`; a.click(); URL.revokeObjectURL(a.href);
+}
+document.getElementById('chartRange').addEventListener('click', (ev) => { const b = ev.target.closest('button[data-range]'); if (!b) return; chartState.range = b.dataset.range; renderChartRange(); loadChart(); });
+document.getElementById('chartLoadBtn').addEventListener('click', () => { chartState.symbol = document.getElementById('chartSymbol').value.trim().toUpperCase(); loadChart(); });
+document.getElementById('chartSymbol').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { chartState.symbol = ev.target.value.trim().toUpperCase(); loadChart(); } });
+document.getElementById('chartSymbol').addEventListener('change', (ev) => { const v = ev.target.value.trim().toUpperCase(); if (v && v !== chartState.symbol) { chartState.symbol = v; loadChart(); } });
+document.getElementById('chartExportBtn').addEventListener('click', exportChartCsv);
 
 // ---------------------------------------------------------------------
 // My Slots — the per-position redeployment rule (2026-09-11). State lives in

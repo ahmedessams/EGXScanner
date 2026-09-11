@@ -2663,6 +2663,152 @@
         "options": {}
       },
       "id": "1b60e33f-65a2-4189-affa-ab215274cb43"
+    },
+    {
+      "name": "Webhook: candles",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        3300
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "egx/candles",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d0e190c7-2f0c-4f1e-b8bc-60a9348d80e5",
+      "webhookId": "4e579815-c193-444d-bf67-629fd1fb261d"
+    },
+    {
+      "name": "Check Auth: candles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        3300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const secret = $env.REPORT_WEBHOOK_SECRET;\nconst headers = $json.headers || {};\nconst authHeader = headers.authorization || headers.Authorization || '';\nlet authorized = true;\nif (secret && secret.length > 0) {\n  authorized = authHeader === ('Bearer ' + secret);\n}\nreturn [{ json: { ...$json, authorized } }];"
+      },
+      "id": "5439b3f9-846d-4cd1-9195-eed026dbac2c"
+    },
+    {
+      "name": "Authorized?: candles",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        520,
+        3300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "0b812d64-b98b-4c44-b708-780431f80e6e",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e48c1f80-8b81-47bc-997f-fa76ad9f1906"
+    },
+    {
+      "name": "Respond 401: candles",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        780,
+        3450
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Unauthorized. Provide Authorization: Bearer <REPORT_WEBHOOK_SECRET>.' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "dcb5900c-7b84-47e4-bed8-07a1b18a2192"
+    },
+    {
+      "name": "Build Query: candles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        3300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const q = $json.query || {};\nconst symbol = String(q.symbol || '').toUpperCase().replace(/[^A-Z0-9._-]/g, '');\nif (!symbol) throw new Error('symbol query parameter is required, e.g. ?symbol=COMI (or the market index code, e.g. EGX30)');\nconst marketParam = String(q.market || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'EGX';\nconst isoDate = (v) => (typeof v === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(v)) ? v : null;\nconst today = new Date().toISOString().slice(0, 10);\nlet to = isoDate(q.to) || today;\nlet from = isoDate(q.from);\nif (!from) { const d = new Date(to + 'T00:00:00Z'); d.setUTCFullYear(d.getUTCFullYear() - 2); from = d.toISOString().slice(0, 10); }\nif (from > to) { const t = from; from = to; to = t; }\n// Hard cap: 10 years of daily candles per request.\nconst minFrom = new Date(to + 'T00:00:00Z'); minFrom.setUTCFullYear(minFrom.getUTCFullYear() - 10);\nif (from < minFrom.toISOString().slice(0, 10)) from = minFrom.toISOString().slice(0, 10);\nreturn [{ json: { ...$json, symbol, marketParam, from, to } }];"
+      },
+      "id": "9ae2c9c9-46fe-4b9b-8789-5367c528f310"
+    },
+    {
+      "name": "Query: candles",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1040,
+        3300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Daily candles for one symbol (or the market's index code, e.g. EGX30) in a date range.\nSELECT dp.trading_date::text AS d, dp.open::float8 AS o, dp.high::float8 AS h, dp.low::float8 AS l, dp.close::float8 AS c,\n       dp.volume::float8 AS v, dp.traded_value::float8 AS tv\nFROM daily_prices dp JOIN stocks s ON s.id = dp.stock_id\nWHERE s.symbol = $1 AND s.exchange = $2 AND dp.trading_date BETWEEN $3::date AND $4::date\nUNION ALL\nSELECT ip.trading_date::text, ip.open::float8, ip.high::float8, ip.low::float8, ip.close::float8, ip.volume::float8, NULL\nFROM index_prices ip JOIN markets mk ON mk.index_code = ip.index_code\nWHERE ip.index_code = $1 AND mk.code = $2 AND ip.trading_date BETWEEN $3::date AND $4::date\nORDER BY 1;",
+        "options": {
+          "queryReplacement": "={{ [$json.symbol, $json.marketParam, $json.from, $json.to] }}"
+        }
+      },
+      "id": "7e21996d-6df0-451a-a67a-354cadfad6e3",
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "name": "Format: candles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        3300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const p = $('Build Query: candles').first().json;\nconst rows = $input.all().map((i) => i.json).filter((r) => r && r.d);\nreturn [{ json: { success: true, symbol: p.symbol, market: p.marketParam, from: p.from, to: p.to, count: rows.length, candles: rows } }];"
+      },
+      "id": "751ace20-8836-4185-9552-e3d2a61f7fd2"
+    },
+    {
+      "name": "Respond 200: candles",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1560,
+        3300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "55f58165-328b-4289-8617-3174d95e97ab"
     }
   ],
   "connections": {
@@ -3981,6 +4127,79 @@
         [
           {
             "node": "Respond 200: outcomes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: candles": {
+      "main": [
+        [
+          {
+            "node": "Check Auth: candles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Auth: candles": {
+      "main": [
+        [
+          {
+            "node": "Authorized?: candles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized?: candles": {
+      "main": [
+        [
+          {
+            "node": "Build Query: candles",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401: candles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query: candles": {
+      "main": [
+        [
+          {
+            "node": "Query: candles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query: candles": {
+      "main": [
+        [
+          {
+            "node": "Format: candles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: candles": {
+      "main": [
+        [
+          {
+            "node": "Respond 200: candles",
             "type": "main",
             "index": 0
           }

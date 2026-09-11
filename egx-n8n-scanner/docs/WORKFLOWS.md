@@ -163,6 +163,7 @@ carries `relative_strength_20d`, `entry_quality_score` (+ `extension_atr`,
 | `GET /webhook/egx/stock/support-resistance?symbol=SYMBOL` | Latest `support_resistance` row (not date-aware) |
 | `GET /webhook/egx/market` | Latest market regime/score |
 | `GET /webhook/egx/dates` | Distinct LIVE scan dates (newest first, max 90) — feeds the dashboard's date filter |
+| `GET /webhook/egx/candles?symbol=SYMBOL` | Daily OHLCV for one stock or an index (`EGX30`, `GSPC` read from `index_prices`). `?market=EGX\|US`, `?from=`, `?to=YYYY-MM-DD` (default: last 2 years, capped at 10). Feeds the dashboard's Chart tab (since 2026-09-11) |
 
 **`?date=YYYY-MM-DD` (spec: user-requested "date filter in each tab")**:
 every route above except `/stock/technicals`, `/stock/support-resistance`,
