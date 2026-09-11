@@ -81,7 +81,7 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT json_agg(t.* ORDER BY t.date ASC) AS candles\nFROM (\n  SELECT trading_date AS date, open, high, low, close, volume\n  FROM daily_prices\n  WHERE stock_id = $1 AND trading_date <= $2\n) t;",
+        "query": "-- Bounded to the last 520 sessions (~2 years, what the original 750-day import\n-- gave every stock). Since 2026-09-11 EGX candles go back to 2020, and an\n-- unbounded load tripled the per-stock payload (slow + Render memory risk)\n-- without changing any indicator that matters (EMA200 warm-up, high/low252).\nSELECT json_agg(t.* ORDER BY t.date ASC) AS candles\nFROM (\n  SELECT trading_date AS date, open, high, low, close, volume\n  FROM daily_prices\n  WHERE stock_id = $1 AND trading_date <= $2\n  ORDER BY trading_date DESC\n  LIMIT 520\n) t;",
         "options": {
           "queryReplacement": "={{ [$json.id, $json.asOfDate] }}"
         }
