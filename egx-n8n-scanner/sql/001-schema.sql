@@ -82,6 +82,23 @@ CREATE TABLE IF NOT EXISTS markets (
     atr_stop_mult         NUMERIC(4,2) NOT NULL DEFAULT 1.50
 );
 ALTER TABLE markets ADD COLUMN IF NOT EXISTS atr_stop_mult NUMERIC(4,2) NOT NULL DEFAULT 1.50;
+-- 2026-09-11: EGX 2.0 -> 2.5 (full-history lab, both slices: realized per pick
+-- 1.14 -> 1.35 BACKTEST, 1.26 -> 2.03 LIVE; stop rate 12.8 -> 7.8%). The
+-- multiple also sets the ATR target ladder (m, m+1, m+2). 3.0+ did not improve
+-- LIVE and pushes risk per position past 15%. US stays 1.5 (untested).
+-- Round-trip trading cost in % of position (commissions + fees + stamp duty,
+-- both legs), 2026-09-11. Display-only: v_scanner_top subtracts it from the
+-- measured EV (expected_value_net_pct) so the dashboard shows what a trade
+-- would keep. EGX ~0.40% (0.15-0.20% per leg incl. fees); US ~0.05%
+-- (commission-free brokers, spread only). Adjust to your broker.
+ALTER TABLE markets ADD COLUMN IF NOT EXISTS round_trip_cost_pct NUMERIC(5,3) NOT NULL DEFAULT 0;
+COMMENT ON COLUMN markets.round_trip_cost_pct IS 'Round-trip trading cost in % of position (both legs). Subtracted from expected_value_pct to give expected_value_net_pct in v_scanner_top. Display only; not a ranking input.';
+-- Momentum over-extension penalty switch (2026-09-11). code/momentumScore.js
+-- subtracts up to 20 pts when the close sits > 2.5 ATR above EMA20. The
+-- full-history EGX lab (both slices) showed those picks are the strongest
+-- momentum cohort when relative volume is high, so EGX runs with it OFF.
+ALTER TABLE markets ADD COLUMN IF NOT EXISTS momentum_overext_penalty BOOLEAN NOT NULL DEFAULT TRUE;
+COMMENT ON COLUMN markets.momentum_overext_penalty IS 'Apply momentumScore.js''s >2.5-ATR over-extension penalty in this market. FALSE for EGX since 2026-09-11 (lab V31/V35: +0.11/+0.34 realized per pick BACKTEST/LIVE). Read by workflow 08 via Load Active Stocks.';
 
 COMMENT ON TABLE markets IS 'Multi-market configuration: one row per market the pipeline can scan (currency, timezone, EODHD exchange code, per-market liquidity thresholds). Seeded in 004-seed-settings.sql.';
 COMMENT ON COLUMN markets.active IS 'Whether this market has an automatic daily Schedule Trigger in 12-egx-daily-master-workflow — not the same as "exists and is manually runnable", which any row here already is.';

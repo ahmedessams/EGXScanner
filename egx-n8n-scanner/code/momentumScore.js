@@ -27,6 +27,12 @@ function calculateMomentumScore(input) {
     relativeVolume20,
     higherHighs, higherLows,
     distance52wHigh,
+    // 2026-09-11: per-market switch (markets.momentum_overext_penalty). EGX
+    // runs with it OFF: the full-history lab showed picks > 2.5 ATR above
+    // EMA20 with high relative volume are the best momentum cohort there
+    // (walk-forward, BACKTEST + LIVE), so the penalty pointed the wrong way.
+    // US keeps it ON (not tested there). The warning is still emitted.
+    overextensionPenalty = true,
   } = input;
 
   const reasons = [];
@@ -115,8 +121,12 @@ function calculateMomentumScore(input) {
   if (isNumber(close) && isNumber(ema20) && isNumber(atr14) && atr14 > 0) {
     const atrDistance = (close - ema20) / atr14;
     if (atrDistance > 2.5) {
-      penalty = Math.min(20, (atrDistance - 2.5) * 8);
-      warnings.push(`Price is ${round(atrDistance, 2)} ATR above EMA20 — overextension penalty applied`);
+      if (overextensionPenalty !== false) {
+        penalty = Math.min(20, (atrDistance - 2.5) * 8);
+        warnings.push(`Price is ${round(atrDistance, 2)} ATR above EMA20 — overextension penalty applied`);
+      } else {
+        warnings.push(`Price is ${round(atrDistance, 2)} ATR above EMA20 — extended (no penalty in this market)`);
+      }
     }
   }
   if (isNumber(distance52wHigh) && distance52wHigh > -1 && distance52wHigh <= 0) {

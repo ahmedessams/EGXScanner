@@ -92,7 +92,7 @@ function calculateSetupConfidence(subScores) {
 // Parameterised copy of workflow 11's buildTradeStructure. Defaults are the
 // production values; variants override `atrMultiples` / `stopAtrMult`.
 function buildTradeStructure({ close, atr14, resistances = [], supports = [], setupType, minGainPct,
-  atrMultiples = [1.5, 2.5, 3.5], stopAtrMult = 1.5 }) {
+  atrMultiples = [1.5, 2.5, 3.5], stopAtrMult = 1.5, maxTargetGainPct = null }) {
   if (!isNumber(close)) return emptyStructure();
   const [r1, r2, r3] = resistances; const [s1] = supports;
   const atr = isNumber(atr14) ? atr14 : null;
@@ -119,6 +119,12 @@ function buildTradeStructure({ close, atr14, resistances = [], supports = [], se
       invalidation = atr ? close - atr * stopAtrMult : null;
   }
   const targets = deriveTargets({ entry: entry ?? close, atr, resistances: [r1, r2, r3], minGainPct, atrMultiples });
+  // maxTargetGainPct (lab variant): cap Target 1 at entry x (1 + cap/100). The
+  // gain floor still applies, so a cap can never manufacture a trivial target.
+  if (isNumber(maxTargetGainPct) && isNumber(targets[0]) && isNumber(entry) && entry > 0) {
+    const capLevel = entry * (1 + maxTargetGainPct / 100);
+    if (targets[0] > capLevel) targets[0] = capLevel;
+  }
   const risk = isNumber(entry) && isNumber(invalidation) ? entry - invalidation : null;
   const withRR = targets.map((t) => ({
     target: t,
@@ -201,6 +207,15 @@ function emptyStructure() {
 //   stopAtrMult      defaults to cfg.atrStopMult (production, per market) when unset
 //   rsVsIndex        relative_strength factor from the 20d return MINUS the market
 //                    index's 20d return (rows must carry `idx_return20d`, run-level)
+//   maxRiskPct       (2026-09-11) exclude picks whose risk to the stop exceeds this
+//                    % of entry from the Top-N — the 09-10 control found LIVE Top-10
+//                    picks carry 8.7% risk vs 6.8% for ranks 11-20 and earn less
+//   maxTargetGainPct (2026-09-11) cap Target 1 at entry x (1 + cap/100) when the
+//                    derived level is further; est. days recomputed. Score by
+//                    realized return, never hit rate (a cap shrinks targets)
+//   noOverextPenalty (2026-09-11) undo momentumScore.js's >2.5 ATR overextension
+//                    penalty (min(20, (ext-2.5)*8), re-added and clamped to 100):
+//                    ext>=4 x RVOL>=2.5 hit 61% in EGX, the penalty points the wrong way
 const PRODUCTION_EXCLUDED_SETUPS = ["BREAKOUT"];
 
 const VARIANTS = [
@@ -247,6 +262,28 @@ const VARIANTS = [
   // the EGX decision holds on the full history (each equals V0 on the other market).
   { key: "V23_stop2.0", profile: "default", stopAtrMult: 2.0 },
   { key: "V24_stop1.5", profile: "default", stopAtrMult: 1.5 },
+  // 2026-09-11 EGX batch (user: "Do all but number 6"): stop placement, risk
+  // cap, regime gate, target cap, overextension penalty, and their combinations.
+  { key: "V25_stop2.5", profile: "default", stopAtrMult: 2.5 },
+  { key: "V26_stop1.75", profile: "default", stopAtrMult: 1.75 },
+  { key: "V27_riskCap6", profile: "default", maxRiskPct: 6 },
+  { key: "V28_riskCap8", profile: "default", maxRiskPct: 8 },
+  { key: "V29_tcap12", profile: "default", maxTargetGainPct: 12 },
+  { key: "V30_tcap15", profile: "default", maxTargetGainPct: 15 },
+  { key: "V31_noOverext", profile: "default", noOverextPenalty: true },
+  { key: "V32_stop2.5_ms40", profile: "default", stopAtrMult: 2.5, minMarketScore: 40 },
+  { key: "V33_noOverext_ms40", profile: "default", noOverextPenalty: true, minMarketScore: 40 },
+  { key: "V34_riskCap8_ms40", profile: "default", maxRiskPct: 8, minMarketScore: 40 },
+  { key: "V35_stop2.5_noOverext", profile: "default", stopAtrMult: 2.5, noOverextPenalty: true },
+  { key: "V36_stop1.5_riskCap6", profile: "default", stopAtrMult: 1.5, maxRiskPct: 6 },
+  // Batch 2 (same day): neighbours of the 2.5 winner so the shipped value sits
+  // on a plateau, not an edge point. Note stopAtrMult also moves the ATR
+  // target ladder (m, m+1, m+2), exactly as markets.atr_stop_mult does.
+  { key: "V38_stop2.25", profile: "default", stopAtrMult: 2.25 },
+  { key: "V39_stop3.0", profile: "default", stopAtrMult: 3.0 },
+  { key: "V40_stop2.25_noOverext", profile: "default", stopAtrMult: 2.25, noOverextPenalty: true },
+  { key: "V41_stop3.0_noOverext", profile: "default", stopAtrMult: 3.0, noOverextPenalty: true },
+  { key: "V42_stop3.5_noOverext", profile: "default", stopAtrMult: 3.5, noOverextPenalty: true },
 ];
 
 // Entry Quality — same arithmetic as code/entryQuality.js (extension 40 /
@@ -280,7 +317,7 @@ function scoreRow(row, cfg, v, probs, ctx = {}) {
   const trendFactor = trendMap[row.medium_term_trend] ?? 50;
   const volumeFactor = isNumber(row.relative_volume20) ? clamp((row.relative_volume20 / 3) * 100, 0, 100) : 0;
   const macdFactor = isNumber(row.macd_histogram) ? clamp(50 + row.macd_histogram * 200, 0, 100) : 50;
-  const rsiFactor = isNumber(row.momentum_score) ? row.momentum_score : 50;
+  // rsiFactor uses the (possibly penalty-adjusted) momentum, assigned below.
   const priceStructureFactor = isNumber(row.nearest_resistance_distance_pct)
     ? clamp(100 - Math.min(100, row.nearest_resistance_distance_pct * 10), 0, 100) : 50;
   const return20d = isNumber(row.close20d_ago) && row.close20d_ago > 0 ? ((close - row.close20d_ago) / row.close20d_ago) * 100 : null;
@@ -302,8 +339,17 @@ function scoreRow(row, cfg, v, probs, ctx = {}) {
     }
     if (isNumber(row.rsi14) && row.rsi14 > 75) accumulation = clamp(accumulation - Math.min(15, (row.rsi14 - 75) * 1.5), 0, 100);
   }
+  // noOverextPenalty: momentum_score is stored AFTER momentumScore.js's
+  // overextension penalty (min(20, (ext - 2.5) * 8) for ext > 2.5 ATR above
+  // EMA20). Re-add it, clamped to 100 — an approximation where the pre-penalty
+  // score exceeded 100. Used as both the momentum sub-score and the rsi factor.
+  let momentum = row.momentum_score || 0;
+  if (v.noOverextPenalty && isNumber(row.ema20) && isNumber(row.atr14) && row.atr14 > 0) {
+    const ext = (close - row.ema20) / row.atr14;
+    if (ext > 2.5) momentum = clamp(momentum + Math.min(20, (ext - 2.5) * 8), 0, 100);
+  }
   const subScores = {
-    breakoutScore: row.breakout_score || 0, momentumScore: row.momentum_score || 0,
+    breakoutScore: row.breakout_score || 0, momentumScore: momentum,
     pullbackScore: row.pullback_score || 0, reversalScore: row.reversal_score || 0, accumulationScore: accumulation,
   };
   const setupType = classifySetupType(subScores, { eligible });
@@ -317,10 +363,12 @@ function scoreRow(row, cfg, v, probs, ctx = {}) {
     supports: [row.support1, row.support2, row.support3],
     setupType, minGainPct: cfg.minTargetGainPct,
     atrMultiples: v.atrMultiples || [stopAtrMult, stopAtrMult + 1, stopAtrMult + 2], stopAtrMult,
+    maxTargetGainPct: v.maxTargetGainPct,
   });
   const riskRewardFactor = isNumber(structure.riskRewardT1) ? clamp(structure.riskRewardT1 * 30, 0, 100) : 0;
   const weights = { ...DEFAULT_WEIGHTS, ...(v.weights || {}) };
   if (isNumber(v.rrWeight)) weights.risk_reward = v.rrWeight;
+  const rsiFactor = isNumber(row.momentum_score) ? subScores.momentumScore : 50;
   let { overallScore } = calculateOverallScore({
     trend: trendFactor, volume: volumeFactor, momentum: subScores.momentumScore, breakout: subScores.breakoutScore,
     priceStructure: priceStructureFactor, macd: macdFactor, rsi: rsiFactor, relativeStrength: relativeStrengthFactor,
@@ -359,6 +407,12 @@ function scoreRow(row, cfg, v, probs, ctx = {}) {
   let rankable = eligible;
   if (v.requireTarget && !isNumber(structure.target1)) rankable = false;
   if (isNumber(v.minRR) && (!isNumber(structure.riskRewardT1) || structure.riskRewardT1 < v.minRR)) rankable = false;
+  // maxRiskPct: a pick whose stop sits further than this (% of entry) is not ranked.
+  if (isNumber(v.maxRiskPct)) {
+    const riskPct = isNumber(structure.entry) && isNumber(structure.invalidation) && structure.entry > 0
+      ? ((structure.entry - structure.invalidation) / structure.entry) * 100 : null;
+    if (!isNumber(riskPct) || riskPct > v.maxRiskPct) rankable = false;
+  }
   // Production (wf11 "Assign Overall Rank", since 2026-09-04) never ranks
   // BREAKOUT; a variant re-admits it with excludeSetups: [] and can add more.
   const excluded = Array.isArray(v.excludeSetups) ? v.excludeSetups : PRODUCTION_EXCLUDED_SETUPS;
@@ -521,6 +575,7 @@ function runLab(rows, candles, { market, cfg, topN = 10, variants = VARIANTS, va
       est_days: p.structure.target1EstimatedDays, outcome: p.ev.outcome, resolved_day: p.ev.resolvedDay,
       realized_pct: round(p.ev.realizedPct, 4), realized_r: round(p.ev.realizedR, 4), fwd5: round(p.ev.fwd5, 4), fwd10: round(p.ev.fwd10, 4),
       market_score: p.row.market_score, idx_ret20: p.row.idx_return20d,
+      entry: p.structure.entry, stop: p.structure.invalidation, target1: p.structure.target1,
     }));
     report.variants[v.key] = vr;
   }

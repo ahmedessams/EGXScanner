@@ -279,6 +279,10 @@ rates" below) and falls back to the per-setup-per-market
 `probability_stats` rate only when the market has no context row yet;
 `probability_source` on each row says which one was used.
 `market_snapshot()` (the full-market table) still uses the per-setup rate.
+Since 2026-09-11 `v_scanner_top` also carries `expected_value_net_pct` =
+EV minus `markets.round_trip_cost_pct` (EGX 0.40%, US 0.05%; commissions,
+fees and stamp duty for both legs — adjust to your broker), shown as
+"EV net %" on the Top-10 and Top-3 tables. Display only.
 Computed in the views — never stored — so it always reflects the current
 base rates. `NULL` when there is no probability sample or no valid stop. The
 `/top-picks` row adds `similar_expected_value_pct`, the same formula using
@@ -340,7 +344,8 @@ invented lower rung). Any risk/reward calculation where `risk <= 0`
 (invalidation at or above entry) is rejected outright (`null`), never
 silently clamped to a fake positive number.
 
-**Per-market ATR stop (`markets.atr_stop_mult`, EGX 2.0 / US 1.5).** The
+**Per-market ATR stop (`markets.atr_stop_mult`, EGX 2.5 since 2026-09-11 (2.0
+from 2026-09-02) / US 1.5).** The
 ATR-based stop used by MOMENTUM / ACCUMULATION / default setups (and as the
 BREAKOUT fallback when no support exists) sits `m × ATR14` below entry, and
 the ATR target ladder is derived from the same multiple as `(m, m+1, m+2) ×
@@ -348,7 +353,11 @@ ATR`, so the fallback Target-1 R:R is exactly 1.0 by construction whatever
 `m` is. PULLBACK / REVERSAL stops (support × 0.985, or 1.2 × ATR) are not
 affected. Workflow 11 reads the value from `Load Market Config`.
 
-Why 2.0 for EGX and not US: the scoring-lab replay (`scripts/scoring-lab.js`,
+Why 2.5 for EGX (2026-09-11): see "EGX lab batch 2026-09-11" below — the
+full-history ladder 1.5 / 1.75 / 2.0 / 2.25 / 2.5 / 3.0 / 3.5 improves
+realized return per pick monotonically on BACKTEST, but LIVE plateaus at 2.5
+and risk per position passes 15% beyond it. Why 2.0 was chosen first, and
+not US: the scoring-lab replay (`scripts/scoring-lab.js`,
 run 2026-09-02 over 510 BACKTEST + 87 LIVE-era Top-10 picks for EGX and
 440 + 70 for US) compared a dozen candidate variants on gain-aware metrics
 (hit / stop-out / expired rates, median gain at T1, mean and median realized
@@ -487,6 +496,83 @@ regimes (Feb–May 2026, market_score < 40), and that US shows nothing.
 A hand-built penalty or bonus was rejected; this table lets the measured
 rates carry that information instead.
 
+## EGX lab batch 2026-09-11 (stop placement, regime, targets, over-extension)
+
+Full EGX history (2025-11-12 → 2026-09-10, 202 scan days, BACKTEST 1,811
+Top-10 picks + LIVE 147), replayed by `scripts/scoring-lab.js` through the
+ZZ Scoring Lab v3 helper (per-pick rows in the scratch table `lab_picks`).
+Realized = +gain on a hit, −risk on a stop, window-close return on expiry.
+Per-day figures count skipped days as 0 so a regime gate is charged for the
+days it sits out.
+
+| variant | BT hit / stop | BT realized per pick | BT per day (all days) | LIVE hit / stop | LIVE realized per pick |
+|---|---|---|---|---|---|
+| V0 production (stop 2.0 ATR) | 40.1 / 12.8 | +1.14 | +1.14 | 44.2 / 13.6 | +1.26 |
+| stop 1.5 ATR | 41.3 / 19.7 | +0.92 | +0.92 | 43.8 / 26.8 | +0.32 |
+| stop 1.75 ATR | 42.5 / 16.3 | +1.15 | +1.15 | 46.3 / 19.7 | +1.13 |
+| **stop 2.5 ATR** | 38.8 / 7.8 | **+1.35** | +1.34 | 45.8 / 7.7 | **+2.03** |
+| risk cap 6% | 36.4 / 19.5 | +0.74 | +0.74 | 41.1 / 15.6 | +0.95 |
+| risk cap 8% | 37.3 / 14.8 | +0.81 | +0.81 | 41.0 / 11.1 | +1.30 |
+| target cap 12% | 41.2 / 12.3 | +1.09 | +1.09 | 46.9 / 14.3 | +1.41 |
+| target cap 15% | 40.7 / 12.6 | +1.13 | +1.13 | 44.9 / 14.3 | +1.25 |
+| regime gate: skip day if market_score < 40 | 40.4 / 12.8 | +1.11 | +1.03 | (no LIVE day < 40) | +1.26 |
+| regime gate: skip if < 50 | 39.8 / 12.5 | +1.08 | +0.85 | 45.3 / 14.6 | +1.16 |
+| half size when < 40 | 40.1 / 12.8 | +1.09 | +1.09 | 44.2 / 13.6 | +1.26 |
+| **no over-extension penalty** | 40.9 / 13.0 | **+1.25** | +1.25 | 46.6 / 14.4 | **+1.60** |
+| **stop 2.5 + no penalty** | 39.7 / 7.9 | **+1.48** | +1.47 | 48.2 / 7.1 | **+2.42** |
+
+Verdicts (two-slice rule: must improve realized return in BACKTEST **and**
+LIVE):
+
+- **Stops: tighter is worse, wider is better, in both slices.** 1.5 ATR
+  (the pre-2026-09-02 value) loses a quarter of the edge and doubles the
+  stop rate; 2.5 ATR halves the stop rate (12.8 → 7.8%) and lifts realized
+  return per pick by 18% on the history and 60% live. Note `atr_stop_mult`
+  also moves the ATR target ladder (m, m+1, m+2), so median target distance
+  rises from 6.1% to 6.8%. Average risk to the stop rises from 7.8% to 9.7%.
+  The expected loss per pick (stop rate × risk) still falls, 1.00 → 0.76.
+- **Risk caps are rejected.** Refusing picks whose stop is more than 6% or
+  8% away removes the very picks that pay (−0.33 to −0.40 per pick on the
+  history). The 2026-09-10 control had suggested the opposite from the
+  LIVE Top-10 vs ranks 11–20 gap; on the full history that gap is noise.
+- **Target caps are neutral to slightly negative.** Not shipped.
+- **Regime gates are rejected in every form.** Skipping days below a market
+  score of 40 or 50, or halving size, loses money on the history: the
+  skipped days were on average *better* than the rest (+1.65% per day for
+  the 12 days under 40). The 2026-09-02 stored-data cut that motivated the
+  gate was computed on rows that predate the current scoring. The
+  extension × RVOL cell edge is still regime-dependent, but that is what
+  the context base rates already encode; a hard gate is not the tool.
+- **Removing the >2.5-ATR over-extension penalty from the momentum score
+  wins in both slices** (+0.11 / +0.34 per pick) and improves the
+  target-free 10-session return too (3.07 → 3.71% BT). Shipped for EGX via
+  `markets.momentum_overext_penalty = FALSE` (workflow 08 reads it in Load
+  Active Stocks; the warning text is still emitted). US keeps the penalty —
+  it was not tested there.
+- **The combination (stop 2.5 + no penalty) is the best variant in both
+  slices** and roughly additive.
+
+**Stop ladder (batch 2, same history), realized % per pick BACKTEST / LIVE,
+with the over-extension penalty on and off; avg risk to the stop in % of
+entry (BT / LIVE):**
+
+| ATR multiple | penalty on | penalty off | avg risk | BT hit / stop rate |
+|---|---|---|---|---|
+| 2.0 (was production) | 1.14 / 1.26 | 1.25 / 1.60 | 7.8 / 10.2 | 40.1 / 12.8 |
+| 2.25 | 1.29 / 1.58 | 1.42 / 1.91 | 8.8 / 11.5 | 40.4 / 10.3 |
+| **2.5 (shipped)** | 1.35 / 2.03 | **1.48 / 2.42** | 9.7 / 12.8 | 38.8 / 7.8 |
+| 3.0 | 1.42 / 1.81 | 1.66 / 2.40 | 11.7 / 15.4 | 36.5 / 5.5 |
+| 3.5 | — | 1.81 / 2.35 | 13.7 / 18.1 | 35.7 / 4.3 |
+
+BACKTEST keeps improving with a wider stop all the way to 3.5, but LIVE
+plateaus at 2.5 and every step beyond it adds 2–3 points of risk per
+position and a worse worst-case pick (−18% at 2.5, −22% at 3.0, −27% at
+3.5). 2.5 is the widest value that improves both slices over its lower
+neighbour, so `markets.atr_stop_mult` for EGX is 2.5 from 2026-09-11.
+Holds lengthen slightly (average estimated window 4.0 → 4.4 sessions) and
+the median Target 1 rises from 6.1% to 6.8%, because the multiple also sets
+the ATR target ladder.
+
 ## AI Assessment (`17-egx-ai-assessment`)
 
 A third, deliberately distinct signal, alongside the ATR estimate above and
@@ -591,6 +677,19 @@ The `similar_*` cohort rates and the AI columns are still returned on each
 row as measured / model context, not as filters. A day with nothing that
 clears the bar returns fewer than 3 rows, down to zero — accuracy over
 filling slots.
+
+Since 2026-09-11 this tab is the dashboard's default view. A capital-
+recycling simulation on the EGX history (10 slots of 100k each, every slot
+redeployed into the best-ranked unheld pick the day it frees, 2025-11-12 →
+2026-09-09, stored outcomes, fills at the levels) gives, after a 0.4%
+round-trip cost: Top-10 slots +59.6% (729 trades, max drawdown 12.8%),
+Trade Ideas slots +93.5% (787 trades, drawdown 10.1%), Trade Ideas with 3
+slots +126.5% (246 trades, drawdown 16.5%). The single-pot "wait for the
+slowest pick" model that was compared against EGX30 earlier gave +31%
+because the pot idled more than half the time; redeploying per slot is
+what closes the gap to buy-and-hold (+40% over the same dates) and beyond.
+An execution rule, not a scoring change, and the usual caveats apply
+(no slippage, best regime in the data inside the window).
 
 ## Liquidity filter (spec section 19)
 

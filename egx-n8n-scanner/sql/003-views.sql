@@ -669,10 +669,21 @@ SELECT
     ctx.parent_sample_size AS context_parent_sample_size,
     ctx.cell AS context_cell,
     (CASE WHEN ctx.target1_hit_pct IS NOT NULL THEN 'context'
-          WHEN ps.sample_size > 0 THEN 'setup' END)::text AS probability_source
+          WHEN ps.sample_size > 0 THEN 'setup' END)::text AS probability_source,
+    -- Net-of-cost EV (2026-09-11, append-only as above): the same EV minus
+    -- markets.round_trip_cost_pct, i.e. what the trade would keep after
+    -- commissions and fees. Display only.
+    mk.round_trip_cost_pct::float8 AS round_trip_cost_pct,
+    (CASE WHEN res.entry_price > 0 AND res.invalidation_price > 0
+               AND res.invalidation_price < res.entry_price AND res.target1_gain_pct IS NOT NULL
+               AND (ctx.target1_hit_pct IS NOT NULL OR ps.sample_size > 0)
+          THEN COALESCE(ctx.target1_hit_pct, ps.target1_hit_pct::float8) / 100 * res.target1_gain_pct
+             - COALESCE(ctx.stop_hit_pct, ps.stop_hit_pct::float8) / 100 * ((res.entry_price - res.invalidation_price) / res.entry_price * 100)
+             - mk.round_trip_cost_pct END)::float8 AS expected_value_net_pct
 FROM scanner_results res
 JOIN scanner_runs run ON run.id = res.scanner_run_id
 JOIN stocks s ON s.id = res.stock_id
+LEFT JOIN markets mk ON mk.code = run.market
 -- Price columns are AS OF THE RUN DATE, not the latest session. This used to
 -- be v_latest_prices, which made Close / Chg % / Volume / Traded Value show
 -- the newest session next to scan-date scores and targets whenever a past
