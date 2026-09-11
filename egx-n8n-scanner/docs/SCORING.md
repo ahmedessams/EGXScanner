@@ -691,6 +691,14 @@ what closes the gap to buy-and-hold (+40% over the same dates) and beyond.
 An execution rule, not a scoring change, and the usual caveats apply
 (no slippage, best regime in the data inside the window).
 
+The dashboard's **My Slots** panel (2026-09-11) is the tool for that rule:
+"+ slot" on a Top 10 / Top 3 row records the pick with its published entry,
+Target 1, stop and window; "Check status" reads the pick's scan-date row
+from `/top` (actual window high/low, sessions elapsed, evaluated outcome)
+and reports Target hit / Stop hit / Window ended / Open; the free-slot count
+lists the top-ranked picks on the current table that are not already held.
+State lives in the browser's localStorage only (per device, per viewer).
+
 ## Liquidity filter (spec section 19)
 
 Computed once per stock in `11`, from the trailing 20 `daily_prices` rows:

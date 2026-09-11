@@ -312,6 +312,22 @@
   .columns-menu label.disabled { color: var(--text-faint); cursor: default; }
   .columns-menu label.disabled:hover { background: none; }
   .columns-menu input[type="checkbox"] { cursor: pointer; }
+
+  /* My Slots (2026-09-11): the per-position redeployment rule, tracked in this browser only. */
+  .slots { margin: 12px 0; padding: 12px 14px; }
+  .slots-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .slots-head h3 { margin: 0; font-size: 14px; }
+  .slots-head .muted { color: var(--text-muted); font-size: 12px; }
+  .slots-head input { width: 52px; padding: 3px 6px; }
+  .slots-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+  @media (max-width: 900px) { .slots-grid { grid-template-columns: 1fr; } }
+  .slots table { font-size: 12px; }
+  .slots td, .slots th { padding: 5px 8px; }
+  .slot-btn, .slot-close, .slot-suggest { font-size: 11px; padding: 2px 7px; cursor: pointer; }
+  .slot-status-open { color: var(--text-muted); }
+  .slot-status-tp { color: var(--pos, #1a7f37); font-weight: 600; }
+  .slot-status-sl { color: var(--neg, #b42318); font-weight: 600; }
+  .slot-status-end { color: var(--accent); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -354,6 +370,17 @@
     <span class="filter-note">Applies to every tab. Rows missing a valid target1/gain projection are hidden while a filter is active.</span>
   </div>
 
+  <div class="card slots" id="slotsCard">
+    <div class="slots-head">
+      <h3>My Slots</h3>
+      <span class="muted" id="slotsSummary"></span>
+      <label class="muted">slots <input type="number" min="1" max="30" id="slotsN"></label>
+      <button class="filter-reset" id="slotsCheckBtn" type="button">Check status</button>
+      <button class="filter-reset" id="slotsToggleBtn" type="button">Hide</button>
+      <span class="muted">Rule: each slot holds one pick to its TP, SL or window end; the moment it frees, put it into the top-ranked pick you do not already hold. Stored in this browser only.</span>
+    </div>
+    <div class="slots-grid" id="slotsBody"></div>
+  </div>
   <div class="table-progress" id="tableProgress"><div class="bar"></div></div>
   <div class="card table-scroll">
     <table id="dataTable">
@@ -407,13 +434,24 @@ const state = {
   clientSort: null,
 };
 
-const PINNED_COLUMN_KEYS = new Set(['_detail', 'symbol']);
+const PINNED_COLUMN_KEYS = new Set(['_detail', '_slot', 'symbol']);
 
 const DETAIL_BUTTON_COLUMN = {
   key: '_detail',
   label: '',
   sortKey: null,
   render: (r) => `<button class="detail-btn" data-symbol="${esc(r.symbol)}" title="View ${esc(r.symbol)} details" type="button">🔍</button>`,
+};
+
+// "+ slot" column (2026-09-11): adds the pick to My Slots with its published
+// entry / Target 1 / stop / window. Shown on the Top 10 and Top 3 tables only.
+const SLOT_BUTTON_COLUMN = {
+  key: '_slot',
+  label: 'Slot',
+  sortKey: null,
+  render: (r) => slotsHas(r.symbol)
+    ? `<span class="slot-status-open" title="Already in My Slots">held</span>`
+    : `<button class="slot-btn" data-symbol="${esc(r.symbol)}" title="Add ${esc(r.symbol)} to My Slots" type="button">+ slot</button>`,
 };
 
 const DAYS_FILTER_OPTIONS = [
@@ -470,6 +508,7 @@ const TABS = [
 
 const RANKED_COLUMNS = [
   DETAIL_BUTTON_COLUMN,
+  SLOT_BUTTON_COLUMN,
   { key: 'overall_rank', label: '#', render: (r) => rankBadge(r.overall_rank) },
   { key: 'symbol', label: 'Symbol', render: (r) => symbolCell(r) },
   { key: 'name', label: 'Name', render: (r) => `<span style="color:var(--text-muted)">${esc(r.name || '')}</span>` },
@@ -534,6 +573,7 @@ const RANKED_COLUMNS = [
 // 2026-09-04 both are context, not filters.
 const TOP_PICKS_COLUMNS = [
   DETAIL_BUTTON_COLUMN,
+  SLOT_BUTTON_COLUMN,
   { key: 'overall_rank', label: '#', render: (r) => rankBadge(r.overall_rank) },
   { key: 'symbol', label: 'Symbol', render: (r) => symbolCell(r) },
   { key: 'name', label: 'Name', render: (r) => `<span style="color:var(--text-muted)">${esc(r.name || '')}</span>` },
@@ -1346,6 +1386,7 @@ async function loadTab() {
   setTableProgress(false);
   renderTable();
   renderStatRow();
+  renderSlots();
 }
 
 async function refreshAll() {
@@ -1717,6 +1758,110 @@ async function checkForNewRun() {
 }
 setInterval(checkForNewRun, NEW_RUN_POLL_MS);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForNewRun(); });
+
+// ---------------------------------------------------------------------
+// My Slots — the per-position redeployment rule (2026-09-11). State lives in
+// localStorage only; status comes from the scan-date row of GET /top, which
+// carries the actual window high/low, sessions elapsed and, once workflow 16
+// has evaluated the pick, the final outcome. Same-bar TP+SL counts as SL,
+// as in the evaluator.
+const SLOTS_KEY = 'egx_slots_v1';
+function slotsLoad() {
+  try { const v = JSON.parse(localStorage.getItem(SLOTS_KEY) || 'null'); if (v && Array.isArray(v.positions)) return v; } catch (e) {}
+  return { n: 10, positions: [], closed: [] };
+}
+let slots = slotsLoad();
+function slotsSave() { try { localStorage.setItem(SLOTS_KEY, JSON.stringify(slots)); } catch (e) {} }
+function slotsHas(symbol) { return slots.positions.some((p) => p.symbol === symbol && p.market === state.marketCode); }
+function slotsAddFromRow(r) {
+  if (!r || slotsHas(r.symbol)) return;
+  const open = slots.positions.filter((p) => p.market === state.marketCode && p.status !== 'closed').length;
+  if (open >= slots.n) { showBanner(`All ${slots.n} slots are taken. Close a position first or raise the slot count.`, true); return; }
+  slots.positions.push({
+    market: state.marketCode, symbol: r.symbol, scanDate: r.trading_date, entry: Number(r.entry_price),
+    target1: Number(r.target1), stop: Number(r.invalidation_price), estDays: Number(r.target1_estimated_days) || null,
+    addedAt: new Date().toISOString(), status: 'open', statusText: 'not checked yet',
+  });
+  slotsSave(); renderTable(); renderSlots(); checkSlotStatuses();
+}
+function slotsClose(idx) {
+  const p = slots.positions[idx]; if (!p) return;
+  slots.closed = (slots.closed || []).concat([{ ...p, closedAt: new Date().toISOString() }]).slice(-50);
+  slots.positions.splice(idx, 1); slotsSave(); renderTable(); renderSlots();
+}
+const slotRowCache = new Map(); // `${market}|${date}` -> rows of /top for that scan date
+async function slotScanRows(market, date) {
+  const k = `${market}|${date}`;
+  if (!slotRowCache.has(k)) {
+    const data = await apiGet(`/top?limit=10&market=${encodeURIComponent(market)}&date=${encodeURIComponent(date)}`);
+    slotRowCache.set(k, data.results || []);
+  }
+  return slotRowCache.get(k);
+}
+function slotStatusFromRow(p, row) {
+  const gain = p.entry > 0 ? (p.target1 / p.entry - 1) * 100 : null;
+  const risk = p.entry > 0 ? (p.entry - p.stop) / p.entry * 100 : null;
+  if (!row) return { status: 'open', text: 'scan row not found for that date' };
+  const hi = Number(row.actual_window_high), lo = Number(row.actual_window_low), n = Number(row.window_sessions_elapsed) || 0;
+  const est = p.estDays || Number(row.target1_estimated_days) || null;
+  const out = row.window_outcome;
+  if (out === 'STOP_HIT' || (Number.isFinite(lo) && lo <= p.stop)) return { status: 'sl', text: `Stop hit — sell at ${fmt(p.stop)} (${risk !== null ? '−' + risk.toFixed(1) + '%' : ''})` };
+  if (out === 'TARGET1_HIT' || (Number.isFinite(hi) && hi >= p.target1)) return { status: 'tp', text: `Target hit — sell at ${fmt(p.target1)} (+${gain !== null ? gain.toFixed(1) : '?'}%)` };
+  if (out === 'EXPIRED_NO_HIT' || (est && n >= est)) return { status: 'end', text: `Window ended (${n}/${est} sessions) — sell at the close, slot is free` };
+  return { status: 'open', text: `Open — day ${n}${est ? ' of ' + est : ''}` };
+}
+let slotsChecking = false;
+async function checkSlotStatuses() {
+  if (slotsChecking) return; slotsChecking = true;
+  try {
+    for (const p of slots.positions) {
+      try {
+        const rows = await slotScanRows(p.market, p.scanDate);
+        const row = rows.find((r) => r.symbol === p.symbol);
+        const st = slotStatusFromRow(p, row);
+        p.status = st.status; p.statusText = st.text; p.checkedAt = new Date().toISOString();
+      } catch (e) { p.statusText = 'status check failed: ' + e.message; }
+    }
+    slotsSave(); renderSlots();
+  } finally { slotsChecking = false; }
+}
+function renderSlots() {
+  const card = document.getElementById('slotsCard'); if (!card) return;
+  const positions = slots.positions.filter((p) => p.market === state.marketCode);
+  const busy = positions.filter((p) => p.status === 'open').length;
+  const free = Math.max(0, slots.n - busy);
+  document.getElementById('slotsN').value = slots.n;
+  document.getElementById('slotsSummary').textContent = `${state.marketCode}: ${positions.length} position${positions.length === 1 ? '' : 's'}, ${busy} open, ${free} free`;
+  const held = new Set(positions.map((p) => p.symbol));
+  const candidates = (state.tab === 'top' || state.tab === 'top-picks') ? state.rows.filter((r) => !held.has(r.symbol)).slice(0, free) : [];
+  const cls = (st) => ({ tp: 'slot-status-tp', sl: 'slot-status-sl', end: 'slot-status-end' }[st] || 'slot-status-open');
+  const posHtml = positions.length ? `<table><thead><tr><th>Stock</th><th>Scan</th><th class="num">Entry</th><th class="num">TP</th><th class="num">SL</th><th>Status</th><th></th></tr></thead><tbody>` +
+    positions.map((p) => { const i = slots.positions.indexOf(p); return `<tr><td><b>${esc(p.symbol)}</b></td><td>${esc(p.scanDate || '')}</td><td class="num">${fmt(p.entry)}</td><td class="num">${fmt(p.target1)}</td><td class="num">${fmt(p.stop)}</td><td class="${cls(p.status)}">${esc(p.statusText || '')}</td><td><button class="slot-close" data-idx="${i}" type="button" title="Remove from My Slots">${p.status === 'open' ? 'Close' : 'Done'}</button></td></tr>`; }).join('') +
+    `</tbody></table>` : `<div class="muted">No positions yet. Use "+ slot" on a row of the Top 10 or Top 3 tables.</div>`;
+  const sugHtml = free === 0 ? `<div class="muted">All ${slots.n} slots are in use. Check status to see which have closed.</div>`
+    : (candidates.length ? `<div class="muted">Next picks for the ${free} free slot${free === 1 ? '' : 's'} (top-ranked on this table, not already held):</div><table><tbody>` +
+      candidates.map((r) => `<tr><td><b>${esc(r.symbol)}</b> #${esc(String(r.overall_rank ?? ''))}</td><td class="num">entry ${fmt(r.entry_price)}</td><td class="num">TP ${fmt(r.target1)} (${gainCell(r.target1_gain_pct)})</td><td class="num">SL ${fmt(r.invalidation_price)}</td><td>${fmtDays(r.target1_estimated_days)}</td><td><button class="slot-suggest" data-symbol="${esc(r.symbol)}" type="button">+ slot</button></td></tr>`).join('') + `</tbody></table>`
+      : `<div class="muted">${free} free slot${free === 1 ? '' : 's'}. Open the Top 10 or Top 3 tab to see today's candidates.</div>`);
+  document.getElementById('slotsBody').innerHTML = `<div><b>Positions</b>${posHtml}</div><div><b>Free slots</b>${sugHtml}</div>`;
+}
+document.addEventListener('click', (ev) => {
+  const add = ev.target.closest('.slot-btn, .slot-suggest');
+  if (add) { const r = state.rows.find((x) => x.symbol === add.dataset.symbol); slotsAddFromRow(r); return; }
+  const close = ev.target.closest('.slot-close');
+  if (close) { slotsClose(Number(close.dataset.idx)); return; }
+});
+document.getElementById('slotsCheckBtn').addEventListener('click', () => { slotRowCache.clear(); checkSlotStatuses(); });
+document.getElementById('slotsToggleBtn').addEventListener('click', (ev) => {
+  const body = document.getElementById('slotsBody'); const hidden = body.style.display === 'none';
+  body.style.display = hidden ? '' : 'none'; ev.target.textContent = hidden ? 'Hide' : 'Show';
+  try { localStorage.setItem('egx_slots_hidden', hidden ? '0' : '1'); } catch (e) {}
+});
+document.getElementById('slotsN').addEventListener('change', (ev) => {
+  const n = Math.max(1, Math.min(30, Number(ev.target.value) || 10)); slots.n = n; slotsSave(); renderSlots();
+});
+try { if (localStorage.getItem('egx_slots_hidden') === '1') { document.getElementById('slotsBody').style.display = 'none'; document.getElementById('slotsToggleBtn').textContent = 'Show'; } } catch (e) {}
+renderSlots();
+if (slots.positions.length) checkSlotStatuses();
 </script>
 </body>
 </html>
