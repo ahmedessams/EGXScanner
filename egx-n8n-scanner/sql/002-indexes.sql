@@ -57,6 +57,18 @@ CREATE INDEX IF NOT EXISTS idx_scanner_results_stock
     ON scanner_results (stock_id);
 CREATE INDEX IF NOT EXISTS idx_scanner_results_eligible
     ON scanner_results (scanner_run_id, eligible);
+-- 2026-09-13 Report API latency. (a) v_scanner_top exposes
+-- scanner_run_id::int; every API filter on it is '(scanner_run_id)::integer =
+-- $1', which the plain indexes above cannot serve (465k-row seq scan, ~15 s
+-- per /top). (b) /top-picks' "similar picks" cohort selects Top-10 rows by
+-- setup and target-gain band across the whole history; a partial index on
+-- the ~3% of rows that are ranked turns that from a walk over every run into a
+-- range scan (16.6 s -> sub-second for the Trade Ideas tab).
+CREATE INDEX IF NOT EXISTS idx_scanner_results_run_id_int
+    ON scanner_results ((scanner_run_id::integer));
+CREATE INDEX IF NOT EXISTS idx_scanner_results_top10_setup_gain
+    ON scanner_results (setup_type, target1_gain_pct) INCLUDE (scanner_run_id)
+    WHERE overall_rank <= 10;
 
 -- prediction_evaluation --------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_prediction_evaluation_result
