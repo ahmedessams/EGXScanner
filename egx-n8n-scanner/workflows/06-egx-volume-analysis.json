@@ -164,7 +164,8 @@
         "operation": "executeQuery",
         "query": "INSERT INTO volume_analysis (\n  stock_id, trading_date, volume_change_1d_pct, volume_change_vs_20d_pct, volume_change_vs_50d_pct,\n  volume_rank, traded_value_rank, relative_volume20_rank, relative_volume50_rank, accumulation_score\n)\nVALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)\nON CONFLICT (stock_id, trading_date) DO UPDATE SET\n  volume_change_1d_pct = EXCLUDED.volume_change_1d_pct,\n  volume_change_vs_20d_pct = EXCLUDED.volume_change_vs_20d_pct,\n  volume_change_vs_50d_pct = EXCLUDED.volume_change_vs_50d_pct,\n  volume_rank = EXCLUDED.volume_rank, traded_value_rank = EXCLUDED.traded_value_rank,\n  relative_volume20_rank = EXCLUDED.relative_volume20_rank,\n  relative_volume50_rank = EXCLUDED.relative_volume50_rank,\n  accumulation_score = EXCLUDED.accumulation_score;",
         "options": {
-          "queryReplacement": "={{ [\n  $json.stockId, $json.tradingDate, $json.volumeChange1dPct, $json.volumeChangeVs20dPct, $json.volumeChangeVs50dPct,\n  $json.volumeRank, $json.tradedValueRank, $json.rvol20Rank, $json.rvol50Rank, $json.accumulationScore\n] }}"
+          "queryReplacement": "={{ [\n  $json.stockId, $json.tradingDate, $json.volumeChange1dPct, $json.volumeChangeVs20dPct, $json.volumeChangeVs50dPct,\n  $json.volumeRank, $json.tradedValueRank, $json.rvol20Rank, $json.rvol50Rank, $json.accumulationScore\n] }}",
+          "queryBatching": "independently"
         }
       },
       "onError": "continueRegularOutput",

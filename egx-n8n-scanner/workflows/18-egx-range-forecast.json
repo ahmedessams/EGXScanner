@@ -135,7 +135,8 @@
         "operation": "executeQuery",
         "query": "INSERT INTO range_forecast (stock_id, trading_date, close, next_high_estimate, next_low_estimate, accuracy_pct, sample_size)\nSELECT $1, r.\"tradingDate\"::date, r.close, r.\"nextHighEstimate\", r.\"nextLowEstimate\", r.\"accuracyPct\", r.\"sampleSize\"\nFROM jsonb_to_recordset($2::jsonb) AS r(\"tradingDate\" text, close numeric, \"nextHighEstimate\" numeric, \"nextLowEstimate\" numeric, \"accuracyPct\" numeric, \"sampleSize\" int)\nON CONFLICT (stock_id, trading_date) DO UPDATE SET\n  close = EXCLUDED.close,\n  next_high_estimate = EXCLUDED.next_high_estimate,\n  next_low_estimate = EXCLUDED.next_low_estimate,\n  accuracy_pct = EXCLUDED.accuracy_pct,\n  sample_size = EXCLUDED.sample_size;",
         "options": {
-          "queryReplacement": "={{ [$json.stockId, $json.rowsJson] }}"
+          "queryReplacement": "={{ [$json.stockId, $json.rowsJson] }}",
+          "queryBatching": "independently"
         }
       },
       "id": "dadbe9de-0eb4-40e4-88e9-bcba50936191",

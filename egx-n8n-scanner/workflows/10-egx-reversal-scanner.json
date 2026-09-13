@@ -149,7 +149,8 @@
         "operation": "executeQuery",
         "query": "INSERT INTO scanner_results (scanner_run_id, stock_id, reversal_score, reasons_json, warnings_json)\nVALUES ($1, $2, $3, $4::jsonb, $5::jsonb)\nON CONFLICT (scanner_run_id, stock_id) DO UPDATE SET\n  reversal_score = EXCLUDED.reversal_score,\n  reasons_json = COALESCE(scanner_results.reasons_json, '[]'::jsonb) || EXCLUDED.reasons_json,\n  warnings_json = COALESCE(scanner_results.warnings_json, '[]'::jsonb) || EXCLUDED.warnings_json;",
         "options": {
-          "queryReplacement": "={{ [$json.scannerRunId, $json.stockId, $json.score, JSON.stringify($json.reasons), JSON.stringify($json.warnings)] }}"
+          "queryReplacement": "={{ [$json.scannerRunId, $json.stockId, $json.score, JSON.stringify($json.reasons), JSON.stringify($json.warnings)] }}",
+          "queryBatching": "independently"
         }
       },
       "onError": "continueRegularOutput",
