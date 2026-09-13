@@ -216,6 +216,9 @@ function emptyStructure() {
 //   noOverextPenalty (2026-09-11) undo momentumScore.js's >2.5 ATR overextension
 //                    penalty (min(20, (ext-2.5)*8), re-added and clamped to 100):
 //                    ext>=4 x RVOL>=2.5 hit 61% in EGX, the penalty points the wrong way
+//   overextPenalty   (2026-09-13) the reverse: APPLY the >2.5 ATR penalty to a stored
+//                    momentum_score that was computed without it (EGX rows scored after
+//                    2026-09-11, i.e. the whole rescored BACKTEST slice)
 const PRODUCTION_EXCLUDED_SETUPS = ["BREAKOUT"];
 
 const VARIANTS = [
@@ -347,6 +350,10 @@ function scoreRow(row, cfg, v, probs, ctx = {}) {
   if (v.noOverextPenalty && isNumber(row.ema20) && isNumber(row.atr14) && row.atr14 > 0) {
     const ext = (close - row.ema20) / row.atr14;
     if (ext > 2.5) momentum = clamp(momentum + Math.min(20, (ext - 2.5) * 8), 0, 100);
+  }
+  if (v.overextPenalty && isNumber(row.ema20) && isNumber(row.atr14) && row.atr14 > 0) {
+    const ext = (close - row.ema20) / row.atr14;
+    if (ext > 2.5) momentum = clamp(momentum - Math.min(20, (ext - 2.5) * 8), 0, 100);
   }
   const subScores = {
     breakoutScore: row.breakout_score || 0, momentumScore: momentum,
