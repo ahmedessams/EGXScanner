@@ -556,7 +556,7 @@
       "typeVersion": 2.5,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($2, $3))\n  AND eligible = TRUE\nORDER BY overall_rank ASC\nLIMIT COALESCE(NULLIF($1, 0), 10);",
+        "query": "-- overall_rank <= limit is redundant with ORDER BY .. LIMIT (ranks are a gapless\n-- ROW_NUMBER over eligible rows) but lets the planner drop to N rows BEFORE the\n-- view's per-row joins (candles, TA, S/R, dividends, context probability, range\n-- forecast) instead of joining all ~195 eligible rows and sorting afterwards.\nSELECT * FROM v_scanner_top\nWHERE scanner_run_id = (SELECT id FROM scanner_run_as_of($2, $3))\n  AND eligible = TRUE\n  AND overall_rank <= COALESCE(NULLIF($1, 0), 10)\nORDER BY overall_rank ASC\nLIMIT COALESCE(NULLIF($1, 0), 10);",
         "options": {
           "queryReplacement": "={{ [ Number((( $json.query || {} ).limit)) || Number($env.TOP_N) || 10, $json.dateParam, $json.marketParam ] }}"
         }

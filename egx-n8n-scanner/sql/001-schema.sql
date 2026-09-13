@@ -372,6 +372,17 @@ CREATE TABLE IF NOT EXISTS scanner_results (
 
 COMMENT ON TABLE scanner_results IS 'Per-stock scoring output for a given scanner_run';
 
+-- 2026-09-13: v_scanner_top exposes `res.scanner_run_id::int AS scanner_run_id`
+-- (n8n's Postgres node returns BIGINT as a string, the dashboard wants a
+-- number). Every Report API query filters the view on that column, so the
+-- planner saw `(scanner_run_id)::integer = $1`, could not use the
+-- (scanner_run_id, stock_id) unique index, and seq-scanned the whole table
+-- (465k rows, 98k buffers, ~15 s per /top request after the 2021-2026 replays;
+-- ~2 s before them). This expression index matches the cast exactly and turns
+-- the request into an index scan.
+CREATE INDEX IF NOT EXISTS idx_scanner_results_run_id_int
+  ON scanner_results ((scanner_run_id::integer));
+
 -- CREATE TABLE IF NOT EXISTS above is a no-op on any database where
 -- scanner_results already existed before this AI Assessment addition — it
 -- does NOT retroactively add new columns to an existing table. These
