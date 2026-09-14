@@ -233,39 +233,52 @@ touching any workflow):
 ## Entry Quality (`code/entryQuality.js`)
 
 The setup score answers "is this a good stock to be in?"; Entry Quality
-answers the separate question "is TODAY a good day to get in?". A strong
-setup that has already run 3 ATR above its EMA20 and closed at the low of a
-wide bar is a good stock and a bad entry, and one number cannot say both.
-Computed in workflow 11's scoring node alongside the overall score, stored
-per pick (`entry_quality_score` plus its three raw inputs `extension_atr`,
-`close_position_pct`, `rsi_slope3`) and shown next to the setup score on
-`/top`, `/top-picks`, `/stocks` and in the dashboard. Three parts, 0–100:
+answers the separate question "is TODAY a good day to get in?". Computed in
+workflow 11's scoring node alongside the overall score, stored per pick
+(`entry_quality_score` plus the raw inputs `extension_atr`,
+`close_position_pct`, `rsi_slope3`) and shown after Score and EV net on
+`/top`, `/top-picks`, `/stocks` and in the dashboard. **Display-only**: not
+a ranking factor (see the lab verdicts below).
 
-- **Extension vs trend (40 pts)** — `(close − EMA20) / ATR14`. Full marks in
-  the −0.5 … +1.0 ATR band; fades linearly to 0 at +3 ATR (chasing) and at
-  −2 ATR (falling knife).
-- **Close position in range (30 pts)** — `(close − low) / (high − low)` ×
-  30. A close near the high says buyers finished the day in control.
-- **RSI 3-session slope (30 pts)** — `15 + (rsi14 − rsi14 three sessions
-  ago) × 1.5`, clamped 0–30. Momentum building, not fading.
+**v2 (2026-09-14) — empirical.** Points come from the measured EGX record
+(13,404 evaluated Top-10 picks 2021–2026), derived on 2021–2024 and checked
+out of sample on 2025–2026:
 
-A missing input sits at its midpoint rather than at 0, so a stock with no
-EMA yet is "unknown", not "bad". **Display-only for now**: it is not a
-ranking factor. Blending it into the score is variants `V13`/`V14`/`V15`
-in `scripts/scoring-lab.js` and only ships if both slices improve.
+- **Extension vs trend (30 pts)** — `(close − EMA20) / ATR14`: <0 → 0 ·
+  0–1 → 8 · 1–2 → 14 · 2–3 → 18 · 3–4 → 25 · 4+ → 30. Target-1 hit rate by
+  bucket was 24 / 31 / 34 / 35 / 40 / 49% — extended names hit MORE often,
+  the opposite of v1's assumption.
+- **Relative volume 20d (20 pts)** — <1 → 0 · 1–2.5 → 10 · 2.5+ → 20.
+- **RSI 3-session slope (20 pts)** — <−5 → 0 · −5..5 → 6 · 5..10 → 13 ·
+  >10 → 20.
+- **Close position in range (15 pts)** — `(close − low) / (high − low)` × 15.
+- **SMC zone (15 pts)** — DISCOUNT 0 · PREMIUM 15 · unknown 8 (discount
+  entries hit 25.5% vs 35.8%, and it holds inside extension × RVOL buckets).
 
-**Lab verdict 2026-09-02: the blend HURTS.** EGX (64 dates, 510 backtest
-/ 82 live Top-10 picks): 10% blend took BACKTEST hit 48.2 → 47.6% and LIVE
-50.0 → 46.3% with the live stop rate up 15.9 → 18.3% and mean realized
-+2.19 → +1.39%; 20% blend was worse still (45.5% / 47.6%, live median
-gain-to-T1 9.65 → 5.96%). US (54 dates, 437 / 68): backtest improved
-marginally (fwd-10 mean −0.79 → −0.45/−0.19%) but LIVE hit fell 26.5 →
-23.5% (10%) and 19.1% (20%) with expectancy −0.055 → −0.079/−0.140 R —
-fails the two-slice rule. The likely reason: Entry Quality rewards
-"already moving" (close near high, rising RSI), which overlaps with the
-momentum score and de-ranks the pullback-type entries that actually
-carried the EGX edge. It stays a separate displayed number, which is
-what it was designed to be.
+Out of sample (2025–26): 85+ scored 48.7% hit / +3.01% realized per pick;
+the middle buckets 31–36%. **US**: only relative volume carried a signal
+(15.7% hit below 1×, 27.5% at 1–2.5×, 33.3% at 2.5×+; the other four
+components were flat or inverted), so the US score is relative volume alone
+(15 / 50 / 85). A missing input sits at its midpoint, so a stock with no
+EMA yet is "unknown", not "bad". Rows scored before 2026-09-14 hold v1
+values unless backfilled (BACKTEST rows were; LIVE rows are only rewritten
+with the user's OK).
+
+**v1 (2026-09-02 → 2026-09-14) and why it was replaced.** v1 gave 40 pts
+for sitting −0.5..+1 ATR above the EMA20 (fading to 0 at +3 ATR), 30 for
+close position and 30 for RSI slope. Bucketed on the full record its top
+band (85+) was the WORST band by realized return (+0.93%/pick vs +1.61%
+mid) — a hump, not a ladder — because the extension term punished exactly
+the entries that worked. Its components were re-measured one by one and
+only those with a monotonic, out-of-sample lift were kept (v2 above).
+
+**Ranking blend — still rejected.** Lab 2026-09-02 (v1, variants
+`V13`/`V14`/`V15`): 10% blend took EGX BACKTEST hit 48.2 → 47.6% and LIVE
+50.0 → 46.3%, live stop rate 15.9 → 18.3%, mean realized +2.19 → +1.39%;
+20% worse; US LIVE hit 26.5 → 23.5% / 19.1% — fails the two-slice rule.
+Whether the v2 score should influence ranking is a separate lab run and
+has not been done; until it passes both slices it stays a displayed
+number.
 
 ## Expected value (`expected_value_pct`)
 

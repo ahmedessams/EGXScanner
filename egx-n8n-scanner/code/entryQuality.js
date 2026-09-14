@@ -3,65 +3,87 @@
  *
  * Entry Quality (0-100): how good is TODAY as an entry into this stock, kept
  * separate from Setup Quality (the scanner sub-scores and overall_score,
- * which say how good the pattern is). A strong setup can still be a poor
- * entry — price already 3 ATR above its 20-day mean, closing on the day's
- * low, RSI rolling over — and the two questions were previously blended into
- * one number. Added 2026-09-02; stored on scanner_results and shown next to
- * the score. It is NOT a ranking factor until it passes the two-slice
- * walk-forward rule in scripts/scoring-lab.js (see docs/SCORING.md).
+ * which say how good the pattern is). Stored on scanner_results and shown
+ * next to the setup score. Display-only: NOT a ranking factor until it passes
+ * the two-slice walk-forward rule in scripts/scoring-lab.js.
  *
- * Also computes Relative Strength vs the market: the stock's 20-day return
- * minus the median 20-day return of the market's active universe on the same
- * date (percentage points). The market median is used instead of the index
- * because index_prices only accumulates forward from when the index endpoint
- * was configured (Aug 2026) — the median is computable for every date in the
- * backtest history and is the same benchmark for every stock on a given day.
+ * v2 (2026-09-14) — EMPIRICAL. v1 (2026-09-02) awarded 40 of its 100 points
+ * for sitting -0.5..+1 ATR above the EMA20 and 0 points at +3 ATR. The
+ * measured EGX record says the opposite: on 13,404 evaluated Top-10 picks
+ * (2021-2026), Target-1 hit rate by extension was <0 ATR 24% · 0-1 31% ·
+ * 1-2 34% · 2-3 35% · 3-4 40% · 4+ 49%, and v1's top bucket (85+) was the
+ * WORST bucket (+0.93%/pick vs +1.61% mid). v2 keeps only inputs that
+ * predicted outcomes, with points proportional to the measured lift in
+ * realized return, derived on 2021-2024 and checked out of sample on
+ * 2025-2026 (hit 31-36% in the middle buckets, 48.7% / +3.01%/pick at 85+).
+ * See docs/SCORING.md "Entry Quality".
  *
- * Components of the score (each missing input sits at its neutral midpoint
- * and is listed in `missing`):
- *  - extension (40 pts): (close - ema20) / atr14. -0.5..+1.0 ATR = 40 (on or
- *    just above the trend); linear decay to 0 at +3.0 ATR (chasing) and at
- *    -2.0 ATR (well below trend — a falling knife, not a pullback).
- *  - close position (30 pts): (close - low) / (high - low) of the scan day,
- *    0..1 mapped to 0..30. A zero-range day is neutral (15).
- *  - RSI slope (30 pts): rsi14 today minus rsi14 three sessions earlier.
- *    Flat = 15; +10 points or more = 30; -10 or less = 0, linear between.
+ * Components and points (EGX):
+ *  - extension (30): (close - ema20) / atr14 → <0: 0 · 0-1: 8 · 1-2: 14 ·
+ *    2-3: 18 · 3-4: 25 · 4+: 30
+ *  - relative volume 20d (20): <1: 0 · 1-2.5: 10 · 2.5+: 20
+ *  - RSI 3-session slope (20): <-5: 0 · -5..5: 6 · 5..10: 13 · >10: 20
+ *  - close position in the day's range (15): (close - low) / (high - low) x 15
+ *  - SMC zone (15): DISCOUNT 0 · PREMIUM 15 · unknown 8
+ * US: only relative volume carried a signal (hit 15.7% below 1x, 27.5% at
+ * 1-2.5x, 33.3% at 2.5x+; every other component was flat or inverted), so
+ * the US score is relative volume alone (15 / 50 / 85).
+ * A missing input sits at its component's midpoint and is listed in
+ * `missing`, so a stock with no EMA yet is "unknown", not "bad".
  *
- * Pure functions, no I/O — pasted verbatim into workflow 11's "Compute
- * Overall Score & Trade Structure" Code node (drop the require/exports).
+ * Pure functions, no I/O. Embedded copy lives in workflow 11's scoring node.
  */
 
 const { isNumber, round, clamp } = require("./helpers");
 
-function extensionPoints(extAtr) {
-  if (!isNumber(extAtr)) return 20;
-  if (extAtr >= -0.5 && extAtr <= 1.0) return 40;
-  if (extAtr > 1.0) return clamp(40 * (1 - (extAtr - 1.0) / 2.0), 0, 40);
-  return clamp(40 * (1 - (-0.5 - extAtr) / 1.5), 0, 40);
-}
+const EGX_COMPONENTS = {
+  extension: { midpoint: 15, points: (e) => (e < 0 ? 0 : e < 1 ? 8 : e < 2 ? 14 : e < 3 ? 18 : e < 4 ? 25 : 30) },
+  relativeVolume: { midpoint: 10, points: (v) => (v < 1 ? 0 : v < 2.5 ? 10 : 20) },
+  rsiSlope: { midpoint: 10, points: (s) => (s < -5 ? 0 : s < 5 ? 6 : s < 10 ? 13 : 20) },
+  closePosition: { midpoint: 7.5, points: (p) => clamp(p, 0, 1) * 15 },
+  zone: { midpoint: 8, points: (z) => (z === "DISCOUNT" ? 0 : z === "PREMIUM" ? 15 : 8) },
+};
 
-function closePositionPoints(pos) {
-  if (!isNumber(pos)) return 15;
-  return clamp(pos, 0, 1) * 30;
-}
+const US_COMPONENTS = {
+  extension: { midpoint: 0, points: () => 0 },
+  relativeVolume: { midpoint: 50, points: (v) => (v < 1 ? 15 : v < 2.5 ? 50 : 85) },
+  rsiSlope: { midpoint: 0, points: () => 0 },
+  closePosition: { midpoint: 0, points: () => 0 },
+  zone: { midpoint: 0, points: () => 0 },
+};
 
-function rsiSlopePoints(slope) {
-  if (!isNumber(slope)) return 15;
-  return clamp(15 + slope * 1.5, 0, 30);
+/** smc_bias is 'BULLISH_PREMIUM' / 'BEARISH_DISCOUNT' etc.; only the zone half matters here. */
+function zoneOf(smcBias) {
+  if (typeof smcBias !== "string") return null;
+  if (smcBias.endsWith("DISCOUNT")) return "DISCOUNT";
+  if (smcBias.endsWith("PREMIUM")) return "PREMIUM";
+  return null;
 }
 
 /**
- * `close`, `high`, `low` — the scan day's bar; `ema20`, `atr14`, `rsi14` —
- * as of the scan day; `rsi14Prev3` — rsi14 three sessions before the scan day.
- * Returns { entryQualityScore, extensionAtr, closePositionPct, rsiSlope3, missing }.
+ * `close`, `high`, `low` — the scan day's bar; `ema20`, `atr14`, `rsi14`,
+ * `relativeVolume20`, `smcBias` — as of the scan day; `rsi14Prev3` — rsi14
+ * three sessions before the scan day; `market` — 'EGX' (default) or 'US'.
+ * Returns { entryQualityScore, extensionAtr, closePositionPct, rsiSlope3, missing, components }.
  */
-function calculateEntryQuality({ close, high, low, ema20, atr14, rsi14, rsi14Prev3 }) {
+function calculateEntryQuality({ close, high, low, ema20, atr14, rsi14, rsi14Prev3, relativeVolume20, smcBias, market = "EGX" }) {
+  const table = market === "US" ? US_COMPONENTS : EGX_COMPONENTS;
   const missing = [];
+  const components = {};
 
   const extensionAtr = isNumber(close) && isNumber(ema20) && isNumber(atr14) && atr14 > 0
     ? (close - ema20) / atr14
     : null;
   if (extensionAtr === null) missing.push("extension");
+  components.extension = extensionAtr === null ? table.extension.midpoint : table.extension.points(extensionAtr);
+
+  const rvol = isNumber(relativeVolume20) ? relativeVolume20 : null;
+  if (rvol === null) missing.push("relativeVolume");
+  components.relativeVolume = rvol === null ? table.relativeVolume.midpoint : table.relativeVolume.points(rvol);
+
+  const rsiSlope3 = isNumber(rsi14) && isNumber(rsi14Prev3) ? rsi14 - rsi14Prev3 : null;
+  if (rsiSlope3 === null) missing.push("rsiSlope");
+  components.rsiSlope = rsiSlope3 === null ? table.rsiSlope.midpoint : table.rsiSlope.points(rsiSlope3);
 
   let closePosition = null;
   if (isNumber(close) && isNumber(high) && isNumber(low)) {
@@ -70,11 +92,13 @@ function calculateEntryQuality({ close, high, low, ema20, atr14, rsi14, rsi14Pre
   } else {
     missing.push("closePosition");
   }
+  components.closePosition = closePosition === null ? table.closePosition.midpoint : table.closePosition.points(closePosition);
 
-  const rsiSlope3 = isNumber(rsi14) && isNumber(rsi14Prev3) ? rsi14 - rsi14Prev3 : null;
-  if (rsiSlope3 === null) missing.push("rsiSlope");
+  const zone = zoneOf(smcBias);
+  if (zone === null) missing.push("zone");
+  components.zone = zone === null ? table.zone.midpoint : table.zone.points(zone);
 
-  const score = extensionPoints(extensionAtr) + closePositionPoints(closePosition) + rsiSlopePoints(rsiSlope3);
+  const score = Object.values(components).reduce((a, b) => a + b, 0);
 
   return {
     entryQualityScore: clamp(round(score, 2), 0, 100),
@@ -82,6 +106,7 @@ function calculateEntryQuality({ close, high, low, ema20, atr14, rsi14, rsi14Pre
     closePositionPct: closePosition === null ? null : round(closePosition * 100, 2),
     rsiSlope3: round(rsiSlope3, 4),
     missing,
+    components,
   };
 }
 
@@ -103,4 +128,4 @@ function medianReturn(values) {
   return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
 }
 
-module.exports = { calculateEntryQuality, calculateRelativeStrength, medianReturn };
+module.exports = { calculateEntryQuality, calculateRelativeStrength, medianReturn, zoneOf };

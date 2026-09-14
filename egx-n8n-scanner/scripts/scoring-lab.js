@@ -289,23 +289,23 @@ const VARIANTS = [
   { key: "V42_stop3.5_noOverext", profile: "default", stopAtrMult: 3.5, noOverextPenalty: true },
 ];
 
-// Entry Quality — same arithmetic as code/entryQuality.js (extension 40 /
-// close position 30 / RSI 3-session slope 30; missing inputs sit at midpoint).
-function entryQualityScore(row) {
+// Entry Quality — same arithmetic as code/entryQuality.js v2 (empirical points;
+// missing inputs sit at their midpoint). Rows need relative_volume20 + smc_bias.
+function entryQualityScore(row, market = "EGX") {
+  // v2 (2026-09-14): empirical points, see code/entryQuality.js. US = RVOL only.
   const close = row.close;
-  let ext = 20;
-  if (isNumber(close) && isNumber(row.ema20) && isNumber(row.atr14) && row.atr14 > 0) {
-    const e = (close - row.ema20) / row.atr14;
-    ext = e >= -0.5 && e <= 1.0 ? 40 : e > 1.0 ? clamp(40 * (1 - (e - 1.0) / 2.0), 0, 40) : clamp(40 * (1 - (-0.5 - e) / 1.5), 0, 40);
-  }
-  let pos = 15;
-  if (isNumber(close) && isNumber(row.high) && isNumber(row.low)) {
-    const range = row.high - row.low;
-    pos = (range > 0 ? clamp((close - row.low) / range, 0, 1) : 0.5) * 30;
-  }
-  let slope = 15;
-  if (isNumber(row.rsi14) && isNumber(row.rsi14_3d_ago)) slope = clamp(15 + (row.rsi14 - row.rsi14_3d_ago) * 1.5, 0, 30);
-  return clamp(round(ext + pos + slope, 2), 0, 100);
+  const ext = isNumber(close) && isNumber(row.ema20) && isNumber(row.atr14) && row.atr14 > 0 ? (close - row.ema20) / row.atr14 : null;
+  const rvol = isNumber(row.relative_volume20) ? row.relative_volume20 : null;
+  const slope = isNumber(row.rsi14) && isNumber(row.rsi14_3d_ago) ? row.rsi14 - row.rsi14_3d_ago : null;
+  const pos = isNumber(close) && isNumber(row.high) && isNumber(row.low) ? (row.high - row.low > 0 ? clamp((close - row.low) / (row.high - row.low), 0, 1) : 0.5) : null;
+  const zone = typeof row.smc_bias === "string" ? (row.smc_bias.endsWith("DISCOUNT") ? "DISCOUNT" : row.smc_bias.endsWith("PREMIUM") ? "PREMIUM" : null) : null;
+  if (market === "US") return rvol === null ? 50 : rvol < 1 ? 15 : rvol < 2.5 ? 50 : 85;
+  const pExt = ext === null ? 15 : ext < 0 ? 0 : ext < 1 ? 8 : ext < 2 ? 14 : ext < 3 ? 18 : ext < 4 ? 25 : 30;
+  const pRvol = rvol === null ? 10 : rvol < 1 ? 0 : rvol < 2.5 ? 10 : 20;
+  const pSlope = slope === null ? 10 : slope < -5 ? 0 : slope < 5 ? 6 : slope < 10 ? 13 : 20;
+  const pPos = pos === null ? 7.5 : pos * 15;
+  const pZone = zone === null ? 8 : zone === "DISCOUNT" ? 0 : 15;
+  return clamp(round(pExt + pRvol + pSlope + pPos + pZone, 2), 0, 100);
 }
 
 function scoreRow(row, cfg, v, probs, ctx = {}) {
@@ -394,7 +394,7 @@ function scoreRow(row, cfg, v, probs, ctx = {}) {
     // Entry Quality (code/entryQuality.js, stored as entry_quality_score) blended
     // into the setup score: eqBlend = 0.1 means 90% setup / 10% entry timing.
     if (eqBlend > 0) {
-      const eq = entryQualityScore(row);
+      const eq = entryQualityScore(row, cfg.market);
       if (isNumber(eq)) s = s * (1 - eqBlend) + eq * eqBlend;
     }
     if (usRsiPenalty && cfg.market === "US" && isNumber(row.rsi14) && row.rsi14 > 70) s -= Math.min((row.rsi14 - 70) * 0.8, 16);
