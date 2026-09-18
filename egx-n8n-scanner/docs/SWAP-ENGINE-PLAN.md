@@ -56,3 +56,9 @@ beyond dividends.
   EMAs, SMC alone, Ichimoku alone, candles alone) is absorbed by the
   existing context cell. US: avoid-cells only (near resistance + index up).
   Gate to Phase 3 met.
+- 2026-09-18 — Phase 3 gate: walk-forward Brier EGX HOLDOUT ERM 0.2358 →
+  ERMH 0.2354 (ERH 0.2338); LIVE ERM 0.2591 → ERMH 0.2611 (ERH 0.2572).
+  Rare cell (5–10% of picks) → aggregate Brier is the wrong yardstick; hi
+  picks predicted 47% vs actual 50% holdout, 40% vs 70% live. Decision
+  pending with user: (a) ship as separate measured flag + swap input
+  (recommended, additive), or (b) restructure grid to ext×rvol×hi.
