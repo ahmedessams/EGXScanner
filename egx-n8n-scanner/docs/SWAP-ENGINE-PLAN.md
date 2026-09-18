@@ -45,5 +45,14 @@ beyond dividends.
   signals, coverage, vocabularies, quartiles). Phase 1 DONE: `lab_features`
   built live in 4 min (49,426 Top-30 picks: EGX TRAIN 28,585 / HOLDOUT 11,683 /
   LIVE 670; US backtest 7,860 [starts 2025-08 → split at 2026-04-01 for the
-  lab] / LIVE 628; 97 bits, 0 malformed). Phase 2 lab launched
-  (scripts/confluence-lab.js in ZZ Confluence lab).
+  lab] / LIVE 628; 97 bits, 0 malformed). Phase 2 DONE (7.5 s): EGX tested
+  194 literals / 18,624 pairs / 25,503 triples → replicated 6 / 140 / 919
+  (correlated). ONE new signal family: close_at_high20 / close_at_high50
+  (Donchian breakout close): lift +1.2..+2.1 over the pick's ext×RVOL×ms
+  cell, 52% hit vs 34%, +3.3% vs +0.5% MTM; holds in EVERY year 2021–26,
+  both liquidity tiers, LIVE 70% hit (n23). Ichimoku cloud_dist≥20 adds
+  incrementally on top (+1.3..1.7). Avoid-state: volatility top quartile &
+  not ≥10% above cloud (negative 5 of 6 years). Everything else (RSI, MACD,
+  EMAs, SMC alone, Ichimoku alone, candles alone) is absorbed by the
+  existing context cell. US: avoid-cells only (near resistance + index up).
+  Gate to Phase 3 met.
