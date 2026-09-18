@@ -955,7 +955,7 @@ const TIER_META = {
   1: { label: 'Breakout close', cls: 'setup-BREAKOUT', why: 'closed at its 20 or 50-day high — the one extra signal that held up in every year 2021–2026' },
   2: { label: 'Volume + extended', cls: 'setup-MOMENTUM', why: 'relative volume ≥ 2.5× and ≥ 3 ATR above its 20-day average — the strongest cell of the existing context grid' },
   3: { label: 'Standard', cls: 'setup-NEUTRAL', why: 'a normal Top-10 pick, taken in score order after tiers 1 and 2' },
-  4: { label: 'Caution', cls: 'setup-AVOID', why: 'very volatile and not clearly above the Ichimoku cloud — picks like this lost money in 5 of the last 6 years; taken last, or skipped' },
+  4: { label: 'Caution', cls: 'setup-AVOID', why: 'very volatile and not clearly above the Ichimoku cloud. Its hit rate is ordinary, but picks like this lost about 1.2% per trade on average (2021–2026) because the ones that miss drift down before the window ends; taken last, or skipped', noRate: true },
 };
 function signalsCell(r) {
   const t = Number(r.pick_tier);
@@ -964,7 +964,10 @@ function signalsCell(r) {
   const pct = (v) => (v === null || v === undefined || v === '') ? '?' : `${Number(v).toFixed(0)}%`;
   const n = r.tier_n ?? '?';
   const tip = `Tier ${t} · ${m.label}: ${m.why}. Measured on past Top-10 picks in this market: ${pct(r.tier_hit_pct)} reached Target 1, ${pct(r.tier_stop_pct)} were stopped (n=${n}). Rows are ordered by tier, then by score. Base rates, not a forecast.`;
-  return `<span class="setup-badge ${m.cls}" title="${esc(tip)}">${t} · ${esc(m.label)} · ${pct(r.tier_hit_pct)} hit</span>`;
+  // Tier 4 is ranked last on realized return, not on hit rate (its hit rate is
+  // ordinary) — showing a hit % there would contradict the order.
+  const tail = m.noRate ? 'avoid' : `${pct(r.tier_hit_pct)} hit`;
+  return `<span class="setup-badge ${m.cls}" title="${esc(tip)}">${t} · ${esc(m.label)} · ${tail}</span>`;
 }
 function rankBadge(n) {
   if (n === null || n === undefined) return '—';
