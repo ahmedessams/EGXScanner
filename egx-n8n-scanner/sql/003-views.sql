@@ -471,6 +471,37 @@ RETURNS TABLE (ext_bucket VARCHAR, rvol_bucket VARCHAR, ms_bucket VARCHAR) AS $$
     (CASE WHEN p_ms IS NULL THEN 'na' WHEN p_ms < 40 THEN 'm1' WHEN p_ms < 60 THEN 'm2' ELSE 'm3' END)::varchar;
 $$ LANGUAGE SQL IMMUTABLE;
 
+-- Validated context flags (2026-09-18, docs/SWAP-ENGINE-PLAN.md phase 3).
+-- breakout_flag: scan-day close at/above its 50-day high (h50), its 20-day
+-- high (h20) or neither (h0). caution_flag: v1 when annual volatility is in
+-- the market's top quartile (markets.volatility_caution_pct) AND the close is
+-- not >= 10% above the Ichimoku cloud (a missing cloud distance counts as
+-- "not above", exactly as the lab measured it). flag_rate reads the measured
+-- hit/stop rate for a flag from probability_context_stats levels H / V.
+CREATE OR REPLACE FUNCTION breakout_flag(p_close FLOAT8, p_high20 FLOAT8, p_high50 FLOAT8)
+RETURNS VARCHAR AS $$
+  SELECT (CASE WHEN p_close IS NULL THEN 'na'
+               WHEN p_high50 IS NOT NULL AND p_close >= p_high50 THEN 'h50'
+               WHEN p_high20 IS NOT NULL AND p_close >= p_high20 THEN 'h20'
+               ELSE 'h0' END)::varchar;
+$$ LANGUAGE SQL IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION caution_flag(p_vol FLOAT8, p_cloud_dist FLOAT8, p_threshold FLOAT8)
+RETURNS VARCHAR AS $$
+  SELECT (CASE WHEN p_vol IS NULL OR p_threshold IS NULL THEN 'na'
+               WHEN p_vol >= p_threshold AND COALESCE(p_cloud_dist, 0) < 10 THEN 'v1'
+               ELSE 'v0' END)::varchar;
+$$ LANGUAGE SQL IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION flag_rate(p_market VARCHAR, p_level VARCHAR, p_bucket VARCHAR)
+RETURNS TABLE (target1_hit_pct FLOAT8, stop_hit_pct FLOAT8, sample_size INT) AS $$
+  SELECT ROUND((100.0 * s.target1_hits / NULLIF(s.sample_size, 0))::numeric, 1)::float8,
+         ROUND((100.0 * s.stop_hits / NULLIF(s.sample_size, 0))::numeric, 1)::float8,
+         s.sample_size
+  FROM probability_context_stats s
+  WHERE s.market = p_market AND s.level = p_level AND s.flag_bucket = p_bucket;
+$$ LANGUAGE SQL STABLE;
+
 -- P(T1) / P(stop) for one pick's context, from probability_context_stats.
 -- Hierarchical shrinkage with k = 20 pseudo-picks per level:
 --   p_all = market-wide rate
@@ -679,7 +710,22 @@ SELECT
                AND (ctx.target1_hit_pct IS NOT NULL OR ps.sample_size > 0)
           THEN COALESCE(ctx.target1_hit_pct, ps.target1_hit_pct::float8) / 100 * res.target1_gain_pct
              - COALESCE(ctx.stop_hit_pct, ps.stop_hit_pct::float8) / 100 * ((res.entry_price - res.invalidation_price) / res.entry_price * 100)
-             - mk.round_trip_cost_pct END)::float8 AS expected_value_net_pct
+             - mk.round_trip_cost_pct END)::float8 AS expected_value_net_pct,
+    -- Validated context flags (2026-09-18, append-only; docs/SWAP-ENGINE-PLAN.md
+    -- phase 3, option 1). breakout_close: the scan-day close sits at/above its
+    -- 50-day (or 20-day) high — the one new cell the confluence lab replicated on
+    -- train, holdout and LIVE in every year 2021-2026 (EGX Top-10 hit 52% vs 34%,
+    -- +3.3% vs +0.5% per pick). Shown with its own measured rate; NOT folded into
+    -- P(T1) / EV. caution_flag: top-quartile volatility while not >= 10% above the
+    -- Ichimoku cloud — negative realized return in 5 of 6 years.
+    (CASE bf.flag WHEN 'h50' THEN '50D_HIGH' WHEN 'h20' THEN '20D_HIGH' END)::text AS breakout_close,
+    bfr.target1_hit_pct AS breakout_hit_pct,
+    bfr.stop_hit_pct AS breakout_stop_pct,
+    bfr.sample_size AS breakout_n,
+    (cf.flag = 'v1') AS caution_flag,
+    cfr.target1_hit_pct AS caution_hit_pct,
+    cfr.stop_hit_pct AS caution_stop_pct,
+    cfr.sample_size AS caution_n
 FROM scanner_results res
 JOIN scanner_runs run ON run.id = res.scanner_run_id
 JOIN stocks s ON s.id = res.stock_id
@@ -738,7 +784,12 @@ LEFT JOIN LATERAL (
         ORDER BY dp.trading_date ASC
         LIMIT GREATEST(COALESCE(res.target1_estimated_days, 0), 0)
     ) w
-) win ON TRUE;
+) win ON TRUE
+-- Validated context flags (2026-09-18): same inputs workflow 16 counts with.
+LEFT JOIN LATERAL (SELECT breakout_flag(lp.close::float8, ta.high20::float8, ta.high50::float8) AS flag) bf ON TRUE
+LEFT JOIN LATERAL flag_rate(run.market, 'H', bf.flag) bfr ON TRUE
+LEFT JOIN LATERAL (SELECT caution_flag(ta.volatility_annual_pct::float8, ta.ichimoku_cloud_dist_pct::float8, mk.volatility_caution_pct::float8) AS flag) cf ON TRUE
+LEFT JOIN LATERAL flag_rate(run.market, 'V', cf.flag) cfr ON TRUE;
 
 COMMENT ON VIEW v_scanner_top IS 'Flattened scanner_results for the latest or any given run/market, used by ranking webhook endpoints — callers scope both via scanner_run_as_of(p_date, p_market)';
 

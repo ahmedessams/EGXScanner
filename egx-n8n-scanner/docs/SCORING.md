@@ -280,6 +280,42 @@ Whether the v2 score should influence ranking is a separate lab run and
 has not been done; until it passes both slices it stays a displayed
 number.
 
+## Validated context flags (2026-09-18)
+
+Output of the swap-engine confluence lab (docs/SWAP-ENGINE-PLAN.md phases
+0–3; `sql/lab/features.sql`, `scripts/confluence-lab.js`). 97 binary
+features and their complements, all pairs and triples, tested on EGX Top-10
+picks 2021–2024, replicated on 2025–26 and checked against LIVE, always
+against the pick's own extension × RVOL × market-score cell. Everything the
+scanner already looks at (RSI, MACD, EMAs, SMC alone, Ichimoku alone,
+candlesticks alone) was absorbed by that cell. Two things were not:
+
+- **Breakout close** (`breakout_close` = `50D_HIGH` / `20D_HIGH`): the
+  scan-day close is at or above its 50-day (or 20-day) high. EGX Top-10:
+  52% hit vs 34%, +3.3% vs +0.5% realized per pick (mark-to-market);
+  positive in every single year 2021–2026 including the 2022/2024 loss
+  years, in liquid and thin names alike, LIVE 70% hit (n=23). Ichimoku adds
+  value only on top of it (cloud distance ≥ 20%: 57% hit vs 46%).
+- **Caution** (`caution_flag`): annual volatility in the market's top
+  quartile (`markets.volatility_caution_pct`, EGX 59.6 / US 41.3) while not
+  ≥ 10% above the Ichimoku cloud. Negative realized return in 5 of 6 years.
+
+Both are stored as extra levels of `probability_context_stats` (level `H`,
+`flag_bucket` h50/h20/h0; level `V`, v1/v0), refreshed by workflow 16 with
+the grid, read by `flag_rate()` and exposed on `v_scanner_top` with their
+own measured hit/stop rate and sample size. **They are deliberately NOT
+folded into `context_probability()` / EV**: adding the breakout dimension
+to the grid moved walk-forward Brier by 0.0004 on holdout and slightly
+worsened LIVE (a 5–10% cell cannot move an aggregate score), while the
+variant that helped on both slices did so by dropping market score — a
+restructure not justified until market score gets the same per-year audit.
+Decision 2026-09-18 (user): additive flags now, grid audit later. The
+dashboard shows them as one "Signals" column next to EV net.
+
+US: no positive cell replicated; only avoid-states (near resistance while
+the index is up; non-momentum/accumulation setups). US ranking remains
+indistinguishable from random.
+
 ## Expected value (`expected_value_pct`)
 
 `EV = P(T1) × gain_to_T1 − P(stop) × risk_to_stop`, all in % of entry,

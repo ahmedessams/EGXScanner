@@ -741,6 +741,37 @@ CREATE TABLE IF NOT EXISTS probability_context_stats (
 
 COMMENT ON TABLE probability_context_stats IS 'Outcome counts of evaluated Top-10 picks (LIVE + BACKTEST, gain >= markets.min_target_gain_pct) per market x extension-from-EMA20-in-ATR bucket x relative-volume bucket x market-score band. A measured track record, not a forecast; read via context_probability(), which shrinks sparse cells toward their parent level. Refreshed by workflow 16.';
 
+-- Validated context flags (2026-09-18, docs/SWAP-ENGINE-PLAN.md phase 3,
+-- option 1 = ADDITIVE). Two extra levels live in the same table so
+-- workflow 16 refreshes them with the grid:
+--   level 'H', flag_bucket h50 / h20 / h0  — scan-day close at/above its
+--     50-day high, its 20-day high, or neither (breakout_flag()). The one
+--     new cell the confluence lab replicated on train, holdout and LIVE in
+--     every year 2021-2026 (EGX Top-10: 52% hit vs 34%, +3.3% vs +0.5%).
+--   level 'V', flag_bucket v1 / v0        — top-quartile annual volatility
+--     while not >= 10% above the Ichimoku cloud (caution_flag()); negative
+--     realized return in 5 of 6 years.
+-- They are shown next to EV with their own measured rate and feed the swap
+-- comparator; they are NOT folded into context_probability() / EV (the
+-- grid restructure was measured and deliberately not taken).
+ALTER TABLE probability_context_stats ADD COLUMN IF NOT EXISTS flag_bucket VARCHAR(4) NOT NULL DEFAULT '*';
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c WHERE c.conname = 'pk_probability_context_stats' AND array_length(c.conkey, 1) = 6
+  ) THEN
+    ALTER TABLE probability_context_stats DROP CONSTRAINT IF EXISTS pk_probability_context_stats;
+    ALTER TABLE probability_context_stats ADD CONSTRAINT pk_probability_context_stats
+      PRIMARY KEY (market, level, ext_bucket, rvol_bucket, ms_bucket, flag_bucket);
+  END IF;
+END $$;
+COMMENT ON COLUMN probability_context_stats.flag_bucket IS 'Level H: h50 / h20 / h0 (close at 50-day high / 20-day high / neither). Level V: v1 / v0 (caution: top-quartile volatility and not >=10% above the Ichimoku cloud). ''*'' for the ALL/ER/ERM grid levels.';
+
+ALTER TABLE markets ADD COLUMN IF NOT EXISTS volatility_caution_pct NUMERIC(6,2);
+UPDATE markets SET volatility_caution_pct = CASE code WHEN 'EGX' THEN 59.6 WHEN 'US' THEN 41.3 END
+WHERE volatility_caution_pct IS NULL AND code IN ('EGX', 'US');
+COMMENT ON COLUMN markets.volatility_caution_pct IS 'Top-quartile threshold of technical_analysis.volatility_annual_pct among Top-30 picks (2024->, docs/FEATURES.md) used by caution_flag(). EGX 59.6, US 41.3.';
+
 -- ---------------------------------------------------------------------
 -- Horizon estimates (2026-09-01): drift + volatility projection per
 -- stock/date (the standard "expected move" framework: mu/sigma of daily

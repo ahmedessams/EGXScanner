@@ -62,3 +62,10 @@ beyond dividends.
   picks predicted 47% vs actual 50% holdout, 40% vs 70% live. Decision
   pending with user: (a) ship as separate measured flag + swap input
   (recommended, additive), or (b) restructure grid to ext×rvol×hi.
+- 2026-09-18 — user chose OPTION 1 (additive). Phase 3 SHIPPED: flag levels H/V
+  in probability_context_stats (flag_bucket + 6-column PK), markets.
+  volatility_caution_pct, breakout_flag()/caution_flag()/flag_rate(),
+  v_scanner_top +8 columns (breakout_close, breakout_hit/stop_pct, breakout_n,
+  caution_flag, caution_hit/stop_pct, caution_n), wf16 refresh counts H/V,
+  dashboard "Signals" column after EV net, docs/SCORING.md section. P(T1)/EV
+  untouched. Next: Phase 4 swap comparator; market-score per-year audit.
