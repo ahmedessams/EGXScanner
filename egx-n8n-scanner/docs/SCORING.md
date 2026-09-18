@@ -298,7 +298,12 @@ candlesticks alone) was absorbed by that cell. Two things were not:
   value only on top of it (cloud distance ≥ 20%: 57% hit vs 46%).
 - **Caution** (`caution_flag`): annual volatility in the market's top
   quartile (`markets.volatility_caution_pct`, EGX 59.6 / US 41.3) while not
-  ≥ 10% above the Ichimoku cloud. Negative realized return in 5 of 6 years.
+  ≥ 10% above the Ichimoku cloud. Negative realized (mark-to-market) return
+  in 5 of 6 years — but its HIT RATE is flat (EGX 35.0% vs 35.3%, n=1,265;
+  US 31.8% vs 26.4%, n=223): the damage is in how expired trades drift, not
+  in reaching the target. It is therefore NOT shown as a badge (a "caution"
+  next to a normal hit rate would mislead); the columns stay on the API for
+  the swap comparator, which works in realized return.
 
 Both are stored as extra levels of `probability_context_stats` (level `H`,
 `flag_bucket` h50/h20/h0; level `V`, v1/v0), refreshed by workflow 16 with
@@ -310,7 +315,7 @@ worsened LIVE (a 5–10% cell cannot move an aggregate score), while the
 variant that helped on both slices did so by dropping market score — a
 restructure not justified until market score gets the same per-year audit.
 Decision 2026-09-18 (user): additive flags now, grid audit later. The
-dashboard shows them as one "Signals" column next to EV net.
+dashboard shows the breakout close as one "Signals" column next to EV net.
 
 US: no positive cell replicated; only avoid-states (near resistance while
 the index is up; non-momentum/accumulation setups). US ranking remains
