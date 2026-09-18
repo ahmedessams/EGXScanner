@@ -321,6 +321,31 @@ US: no positive cell replicated; only avoid-states (near resistance while
 the index is up; non-momentum/accumulation setups). US ranking remains
 indistinguishable from random.
 
+## Pick order (2026-09-18, phase 4)
+
+The order a non-expert should take the day's picks in, measured on every
+evaluated EGX pick 2021→today (train / holdout 2025–26 / live):
+
+| Tier | Rule | Hit rate | Picks/day |
+|---|---|---|---|
+| 1 Breakout close | Top 10, close at its 20/50-day high, not caution | 52% / 50% / 70% | ~1.5 |
+| 2 Volume + extended | Top 10, RVOL ≥ 2.5× and extension ≥ 3 ATR | 45% / 47% / 46% | ~2.5 |
+| 3 Standard | rest of the Top 10 in score order | 34% / 38% / 44% | ~6 |
+| 4 Caution | top-quartile volatility, not ≥ 10% above the cloud | 30% hit, −1.2%/pick | ~0.4 |
+
+`pick_tier()` (sql/003-views.sql) computes the tier from the same inputs
+workflow 16 counts with; level `T` of `probability_context_stats` stores each
+tier's measured hit/stop rate, exposed as `tier_hit_pct` / `tier_stop_pct` /
+`tier_n` next to `pick_tier` / `pick_tier_label` on `v_scanner_top`. `/top`
+returns rows ORDER BY pick_tier, overall_rank with `accuracy_rank` = that
+position; `/top-picks` applies the same order before its structural gate.
+US: nothing replicated, so every US pick is tier 3 and the order is
+unchanged. The Score and overall_rank are untouched — this is an ORDER laid
+over the ranking, not a change to it. Ten-slot simulation, 1M EGP, per-year
+restart: plain Top 10 3.30M → breakout-first 5.70M → breakout-first + skip
+caution 6.08M (index 4.96M); 2021–2024 in-sample for the tier-1 rule,
+2025–26 out of sample (+79% vs +53%, +52% vs +43%).
+
 ## Expected value (`expected_value_pct`)
 
 `EV = P(T1) × gain_to_T1 − P(stop) × risk_to_stop`, all in % of entry,

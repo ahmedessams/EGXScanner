@@ -502,6 +502,23 @@ RETURNS TABLE (target1_hit_pct FLOAT8, stop_hit_pct FLOAT8, sample_size INT) AS 
   WHERE s.market = p_market AND s.level = p_level AND s.flag_bucket = p_bucket;
 $$ LANGUAGE SQL STABLE;
 
+-- Pick quality tier (2026-09-18, docs/SWAP-ENGINE-PLAN.md phase 4). The order
+-- a non-expert should take the day's picks in, from the measured EGX ladder
+-- (docs/SCORING.md "Pick order"): 1 = breakout close (close at its 20/50-day
+-- high), 2 = relative volume >= 2.5x AND extension >= 3 ATR, 3 = standard,
+-- 4 = caution (top-quartile volatility, not >= 10% above the cloud). Nothing
+-- replicated on US, so US is always tier 3. Used by v_scanner_top and by
+-- workflow 16's refresh (level 'T' rates), so the label and its measured
+-- hit rate always agree.
+CREATE OR REPLACE FUNCTION pick_tier(p_market VARCHAR, p_hflag VARCHAR, p_vflag VARCHAR, p_rvol FLOAT8, p_ext FLOAT8)
+RETURNS INT AS $$
+  SELECT CASE WHEN p_market <> 'EGX' THEN 3
+              WHEN p_vflag = 'v1' THEN 4
+              WHEN p_hflag IN ('h50', 'h20') THEN 1
+              WHEN p_rvol >= 2.5 AND p_ext >= 3 THEN 2
+              ELSE 3 END;
+$$ LANGUAGE SQL IMMUTABLE;
+
 -- P(T1) / P(stop) for one pick's context, from probability_context_stats.
 -- Hierarchical shrinkage with k = 20 pseudo-picks per level:
 --   p_all = market-wide rate
@@ -725,7 +742,15 @@ SELECT
     (cf.flag = 'v1') AS caution_flag,
     cfr.target1_hit_pct AS caution_hit_pct,
     cfr.stop_hit_pct AS caution_stop_pct,
-    cfr.sample_size AS caution_n
+    cfr.sample_size AS caution_n,
+    -- Pick quality tier (2026-09-18, append-only; phase 4): the order to take the
+    -- day's picks in, with the tier's own measured rate (level 'T'). /top and
+    -- /top-picks ORDER BY pick_tier, overall_rank.
+    pt.tier AS pick_tier,
+    (CASE pt.tier WHEN 1 THEN 'BREAKOUT_CLOSE' WHEN 2 THEN 'VOLUME_EXTENDED' WHEN 3 THEN 'STANDARD' WHEN 4 THEN 'CAUTION' END)::text AS pick_tier_label,
+    tr.target1_hit_pct AS tier_hit_pct,
+    tr.stop_hit_pct AS tier_stop_pct,
+    tr.sample_size AS tier_n
 FROM scanner_results res
 JOIN scanner_runs run ON run.id = res.scanner_run_id
 JOIN stocks s ON s.id = res.stock_id
@@ -789,7 +814,9 @@ LEFT JOIN LATERAL (
 LEFT JOIN LATERAL (SELECT breakout_flag(lp.close::float8, ta.high20::float8, ta.high50::float8) AS flag) bf ON TRUE
 LEFT JOIN LATERAL flag_rate(run.market, 'H', bf.flag) bfr ON TRUE
 LEFT JOIN LATERAL (SELECT caution_flag(ta.volatility_annual_pct::float8, ta.ichimoku_cloud_dist_pct::float8, mk.volatility_caution_pct::float8) AS flag) cf ON TRUE
-LEFT JOIN LATERAL flag_rate(run.market, 'V', cf.flag) cfr ON TRUE;
+LEFT JOIN LATERAL flag_rate(run.market, 'V', cf.flag) cfr ON TRUE
+LEFT JOIN LATERAL (SELECT pick_tier(run.market, bf.flag, cf.flag, ta.relative_volume20::float8, res.extension_atr::float8) AS tier) pt ON TRUE
+LEFT JOIN LATERAL flag_rate(run.market, 'T', 't' || pt.tier::text) tr ON TRUE;
 
 COMMENT ON VIEW v_scanner_top IS 'Flattened scanner_results for the latest or any given run/market, used by ranking webhook endpoints — callers scope both via scanner_run_as_of(p_date, p_market)';
 

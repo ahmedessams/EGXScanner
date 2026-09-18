@@ -765,7 +765,7 @@ BEGIN
       PRIMARY KEY (market, level, ext_bucket, rvol_bucket, ms_bucket, flag_bucket);
   END IF;
 END $$;
-COMMENT ON COLUMN probability_context_stats.flag_bucket IS 'Level H: h50 / h20 / h0 (close at 50-day high / 20-day high / neither). Level V: v1 / v0 (caution: top-quartile volatility and not >=10% above the Ichimoku cloud). ''*'' for the ALL/ER/ERM grid levels.';
+COMMENT ON COLUMN probability_context_stats.flag_bucket IS 'Level H: h50 / h20 / h0 (close at 50-day high / 20-day high / neither). Level V: v1 / v0 (caution: top-quartile volatility and not >=10% above the Ichimoku cloud). Level T: t1..t4 (pick_tier(): breakout close / volume+extended / standard / caution). ''*'' for the ALL/ER/ERM grid levels.';
 
 ALTER TABLE markets ADD COLUMN IF NOT EXISTS volatility_caution_pct NUMERIC(6,2);
 UPDATE markets SET volatility_caution_pct = CASE code WHEN 'EGX' THEN 59.6 WHEN 'US' THEN 41.3 END

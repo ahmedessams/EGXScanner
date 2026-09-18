@@ -69,3 +69,10 @@ beyond dividends.
   caution_flag, caution_hit/stop_pct, caution_n), wf16 refresh counts H/V,
   dashboard "Signals" column after EV net, docs/SCORING.md section. P(T1)/EV
   untouched. Next: Phase 4 swap comparator; market-score per-year audit.
+- 2026-09-18 — Phase 4a: pick_tier() + level T rates + v_scanner_top
+  pick_tier/pick_tier_label/tier_hit_pct/tier_stop_pct/tier_n; /top and
+  /top-picks ORDER BY pick_tier, overall_rank (+ accuracy_rank); dashboard
+  "Pick order" column right after #. My Slots suggestions follow table order,
+  so a freed slot now takes tier 1 first. Phase 4b (swap OUT of a held
+  position when a better-tier candidate appears, edge > 2 round trips) is
+  next.
