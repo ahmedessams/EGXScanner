@@ -389,8 +389,14 @@ Measured after the backfill (2026-09-19, Top-10 evaluated picks): EGX rule C
 32.1% reach TP1 / 18.4% exit at breakeven / 9.3% stopped (n 13,566) vs the
 fixed stop 35.3% / 10.5%; US 24.9 / 15.0 / 23.9 vs 27.2 / 25.5. The rule
 trades a few would-be winners for far fewer losers — its edge is realized
-return per trade, NOT hit rate, and the UI says so. Advisory — the scanner's
-own targets and stops are unchanged.
+return per trade, NOT hit rate, and the UI says so. **Portfolio check
+(2026-09-19, 10 slots, 1M, per-year restart, median of 3 offsets, tier-
+ordered fills): fixed stop 1M → 14.5M, rule C 1M → 10.0M.** The per-pick
+edge (+0.03/pick) does not survive slot recycling: each breakeven exit still
+pays the round trip and frees a slot into a new pick that on average earns
+less than the trade it replaced. Rule C is therefore a RISK preference (fewer
+losing trades, 36% vs 46%), not a return improvement, and the UI says that
+too. Advisory — the scanner's own targets and stops are unchanged.
 
 ## Expected value (`expected_value_pct`)
 
