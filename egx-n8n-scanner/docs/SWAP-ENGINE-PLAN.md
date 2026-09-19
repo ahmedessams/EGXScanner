@@ -83,3 +83,16 @@ beyond dividends.
   positions into unplaced tier-1 picks (edge ≈ +1.5% after 0.8% cost).
   Advisory only. Phase 4 COMPLETE. Next: market-score per-year audit
   (phase 6 prerequisite), rule-C exit as parallel wf16 outcome (phase 5).
+- 2026-09-19 — Market-score audit: monotonic and strong 2021–2024 (it is the
+  axis that separates the 2022/2024 loss years) but INVERTED in 2025–26
+  (low band 52%/45% hit on n=90/109) and walk-forward Brier says the level
+  slightly hurts (HOLDOUT 0.2347 ER vs 0.2358 ERM; LIVE 0.2559 vs 0.2591).
+  Decision: grid unchanged — neither promote nor drop a regime-dependent
+  axis; revisit when the low band has ≥300 out-of-sample picks. Phase 5 next.
+- 2026-09-19 — Phase 5: exit rule C as a PARALLEL label. target_window_evaluation
+  gains outcome_be / resolved_day_number_be; wf16 computes it next to the
+  fixed-stop outcome (entry_price added to the load query, upsert +2 params,
+  refresh counts level X/'c'); exit_rule_c_rate(); v_scanner_top adds
+  breakeven_trigger + be_rule_* ; Trade Ideas column "Move stop to entry at"
+  with the measured rates. Backfill of existing Top-10 rows launched.
+  Fixed-stop `outcome` and every statistic on it are unchanged.

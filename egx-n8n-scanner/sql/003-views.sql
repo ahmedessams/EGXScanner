@@ -519,6 +519,19 @@ RETURNS INT AS $$
               ELSE 3 END;
 $$ LANGUAGE SQL IMMUTABLE;
 
+-- Exit rule C measured rates per market (level 'X', flag_bucket 'c' of
+-- probability_context_stats, refreshed by workflow 16 from outcome_be):
+-- target1_hit_pct / breakeven_pct / stop_hit_pct / sample_size. Display only.
+CREATE OR REPLACE FUNCTION exit_rule_c_rate(p_market VARCHAR)
+RETURNS TABLE (target1_hit_pct FLOAT8, breakeven_pct FLOAT8, stop_hit_pct FLOAT8, sample_size INT) AS $$
+  SELECT ROUND((100.0 * s.target1_hits / NULLIF(s.sample_size, 0))::numeric, 1)::float8,
+         ROUND((100.0 * (s.sample_size - s.target1_hits - s.stop_hits - s.expired) / NULLIF(s.sample_size, 0))::numeric, 1)::float8,
+         ROUND((100.0 * s.stop_hits / NULLIF(s.sample_size, 0))::numeric, 1)::float8,
+         s.sample_size
+  FROM probability_context_stats s
+  WHERE s.market = p_market AND s.level = 'X' AND s.flag_bucket = 'c';
+$$ LANGUAGE SQL STABLE;
+
 -- P(T1) / P(stop) for one pick's context, from probability_context_stats.
 -- Hierarchical shrinkage with k = 20 pseudo-picks per level:
 --   p_all = market-wide rate
@@ -750,7 +763,17 @@ SELECT
     (CASE pt.tier WHEN 1 THEN 'BREAKOUT_CLOSE' WHEN 2 THEN 'VOLUME_EXTENDED' WHEN 3 THEN 'STANDARD' WHEN 4 THEN 'CAUTION' END)::text AS pick_tier_label,
     tr.target1_hit_pct AS tier_hit_pct,
     tr.stop_hit_pct AS tier_stop_pct,
-    tr.sample_size AS tier_n
+    tr.sample_size AS tier_n,
+    -- Exit rule C (2026-09-19, append-only; phase 5): the price at which to move
+    -- the stop to the entry (half-way to Target 1) and the measured rates of
+    -- doing so in this market, from outcome_be via exit_rule_c_rate().
+    (CASE WHEN res.entry_price > 0 AND res.target1 > res.entry_price
+          THEN res.entry_price + 0.5 * (res.target1 - res.entry_price) END)::float8 AS breakeven_trigger,
+    twe.outcome_be AS window_outcome_be,
+    xc.target1_hit_pct AS be_rule_hit_pct,
+    xc.breakeven_pct AS be_rule_breakeven_pct,
+    xc.stop_hit_pct AS be_rule_stop_pct,
+    xc.sample_size AS be_rule_n
 FROM scanner_results res
 JOIN scanner_runs run ON run.id = res.scanner_run_id
 JOIN stocks s ON s.id = res.stock_id
@@ -816,7 +839,8 @@ LEFT JOIN LATERAL flag_rate(run.market, 'H', bf.flag) bfr ON TRUE
 LEFT JOIN LATERAL (SELECT caution_flag(ta.volatility_annual_pct::float8, ta.ichimoku_cloud_dist_pct::float8, mk.volatility_caution_pct::float8) AS flag) cf ON TRUE
 LEFT JOIN LATERAL flag_rate(run.market, 'V', cf.flag) cfr ON TRUE
 LEFT JOIN LATERAL (SELECT pick_tier(run.market, bf.flag, cf.flag, ta.relative_volume20::float8, res.extension_atr::float8) AS tier) pt ON TRUE
-LEFT JOIN LATERAL flag_rate(run.market, 'T', 't' || pt.tier::text) tr ON TRUE;
+LEFT JOIN LATERAL flag_rate(run.market, 'T', 't' || pt.tier::text) tr ON TRUE
+LEFT JOIN LATERAL exit_rule_c_rate(run.market) xc ON TRUE;
 
 COMMENT ON VIEW v_scanner_top IS 'Flattened scanner_results for the latest or any given run/market, used by ranking webhook endpoints — callers scope both via scanner_run_as_of(p_date, p_market)';
 

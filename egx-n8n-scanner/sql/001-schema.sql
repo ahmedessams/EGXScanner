@@ -627,6 +627,22 @@ ALTER TABLE target_window_evaluation ADD COLUMN IF NOT EXISTS gap_pct        NUM
 
 COMMENT ON COLUMN target_window_evaluation.gapped_through IS 'TRUE when the resolving session opened already beyond the level (open >= target1 on TARGET1_HIT, open <= invalidation on STOP_HIT), so the level itself was never tradeable; FALSE when it was crossed intraday; NULL for EXPIRED_NO_HIT or when the open is unknown.';
 COMMENT ON COLUMN target_window_evaluation.resolved_open IS 'Open of the session the outcome resolved on — the realistic fill when gapped_through is TRUE.';
+
+-- Exit rule C (2026-09-19, docs/SWAP-ENGINE-PLAN.md phase 5): the same window
+-- re-evaluated with the stop moved to the entry price once a session's high
+-- has reached half the distance to Target 1 (armed from the NEXT session).
+-- Measured on 13,403 EGX Top-10 picks it was the only exit rule that beat
+-- the fixed stop on BOTH slices (net/pick +0.31 vs +0.28 backtest, +0.38 vs
+-- +0.08 live; losers 36% vs 46%). Stored as a PARALLEL label: `outcome` and
+-- every statistic built on it are unchanged. Filled by workflow 16 for new
+-- rows and backfilled once for existing ones.
+ALTER TABLE target_window_evaluation ADD COLUMN IF NOT EXISTS outcome_be VARCHAR(20);
+ALTER TABLE target_window_evaluation ADD COLUMN IF NOT EXISTS resolved_day_number_be INTEGER;
+ALTER TABLE target_window_evaluation DROP CONSTRAINT IF EXISTS chk_target_window_evaluation_outcome_be;
+ALTER TABLE target_window_evaluation ADD CONSTRAINT chk_target_window_evaluation_outcome_be
+    CHECK (outcome_be IS NULL OR outcome_be IN ('TARGET1_HIT', 'BREAKEVEN_EXIT', 'STOP_HIT', 'EXPIRED_NO_HIT'));
+COMMENT ON COLUMN target_window_evaluation.outcome_be IS 'Exit rule C outcome for the same window: TARGET1_HIT / BREAKEVEN_EXIT (stop moved to entry after price reached half-way to Target 1, then touched) / STOP_HIT / EXPIRED_NO_HIT. Parallel label; `outcome` is the fixed-stop truth.';
+COMMENT ON COLUMN target_window_evaluation.resolved_day_number_be IS 'Trading day (1-indexed from the scan date) the rule-C outcome resolved on; NULL for EXPIRED_NO_HIT.';
 COMMENT ON COLUMN target_window_evaluation.gap_pct IS '(resolved_open - level) / level * 100 for the level that resolved the outcome: positive on a target gap (extra gain), negative on a stop gap (slippage beyond the planned risk); 0 when not gapped.';
 
 -- Invalidate evaluations when a forward candle is REVISED (2026-09-03).
@@ -765,7 +781,7 @@ BEGIN
       PRIMARY KEY (market, level, ext_bucket, rvol_bucket, ms_bucket, flag_bucket);
   END IF;
 END $$;
-COMMENT ON COLUMN probability_context_stats.flag_bucket IS 'Level H: h50 / h20 / h0 (close at 50-day high / 20-day high / neither). Level V: v1 / v0 (caution: top-quartile volatility and not >=10% above the Ichimoku cloud). Level T: t1..t4 (pick_tier(): breakout close / volume+extended / standard / caution). ''*'' for the ALL/ER/ERM grid levels.';
+COMMENT ON COLUMN probability_context_stats.flag_bucket IS 'Level H: h50 / h20 / h0 (close at 50-day high / 20-day high / neither). Level V: v1 / v0 (caution: top-quartile volatility and not >=10% above the Ichimoku cloud). Level T: t1..t4 (pick_tier(): breakout close / volume+extended / standard / caution). Level X: ''c'' = exit rule C counts (target1_hits / stop_hits / expired from outcome_be; breakeven exits = the remainder). ''*'' for the ALL/ER/ERM grid levels.';
 
 ALTER TABLE markets ADD COLUMN IF NOT EXISTS volatility_caution_pct NUMERIC(6,2);
 UPDATE markets SET volatility_caution_pct = CASE code WHEN 'EGX' THEN 59.6 WHEN 'US' THEN 41.3 END

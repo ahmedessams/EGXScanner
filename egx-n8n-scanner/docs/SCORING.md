@@ -365,6 +365,28 @@ My Slots shows two kinds of suggested action, both advisory, EGX only:
   path effects (a swap changes every later slot assignment), not the swap
   edge, and are not quoted. Nothing is executed automatically.
 
+## Exit rule C: stop to breakeven at half-way (phase 5, 2026-09-19)
+
+Seven exit rules were measured on the same 13,403 EGX and 2,620 US evaluated
+Top-10 picks (expired trades marked at the last window close, cost
+subtracted). Every rule that shortens the target (half TP1, 75% TP1,
+scale-outs, half stop) lost money against the fixed stop. The one rule that
+beat it on BOTH EGX slices: keep the full Target 1, move the stop to the
+entry once a session's high reaches half the distance to Target 1 (armed
+from the next session). Net per pick +0.31 vs +0.28 (backtest), +0.38 vs
++0.08 (live); losing trades 36% vs 46%; per slot-day 0.101 vs 0.086 (BT),
+0.196 vs 0.042 (live). US: equal on backtest, least bad on live.
+
+Stored as a PARALLEL label, `target_window_evaluation.outcome_be`
+(TARGET1_HIT / BREAKEVEN_EXIT / STOP_HIT / EXPIRED_NO_HIT) with
+`resolved_day_number_be`, computed by workflow 16 next to the fixed-stop
+`outcome`, which stays the truth for every hit-rate statistic. Level `X` /
+`c` of `probability_context_stats` holds the rule-C counts per market;
+`exit_rule_c_rate()` reads them; `v_scanner_top` exposes
+`breakeven_trigger` (= entry + 0.5 × (T1 − entry)) and `be_rule_*`. Trade
+Ideas shows "Move stop to entry at" with the measured rates in the tooltip.
+Advisory — the scanner's own targets and stops are unchanged.
+
 ## Expected value (`expected_value_pct`)
 
 `EV = P(T1) × gain_to_T1 − P(stop) × risk_to_stop`, all in % of entry,

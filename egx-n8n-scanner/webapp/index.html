@@ -615,6 +615,7 @@ const TOP_PICKS_COLUMNS = [
   { key: 'target1', label: 'TP1', num: true, render: (r) => fmt(r.target1) },
   { key: 'target2', label: 'TP2', num: true, render: (r) => fmt(r.target2) },
   { key: 'invalidation_price', label: 'Stop Loss', num: true, render: (r) => fmt(r.invalidation_price) },
+  { key: 'breakeven_trigger', label: 'Move stop to entry at', num: true, title: 'Exit rule: once the price reaches this level (half-way to TP1), move your stop-loss up to your entry price. Measured on past picks in this market this was the only exit rule that beat the fixed stop on both the backtest and the live record: fewer losing trades, same winners. Hover a row for the measured rates.', render: (r) => breakevenCell(r) },
   { key: 'target1_gain_pct', label: 'Profit Margin', num: true, title: 'Potential gain to Target 1 if reached — not a forecast. This table keeps the picks whose Target 1 is structurally within reach (ACCUMULATION / MOMENTUM setup, Est. Days T1 ≤ 5, R:R T1 < 1.5); the market\'s minimum target gain still applies.', render: (r) => gainCell(r.target1_gain_pct) },
   { key: 'target1_estimated_days', label: 'Est. Days T1', num: true, title: 'Rough ATR-based projection, not a historical statistic or guarantee. Gate: ≤ 5 — targets further out were reached far less often (EGX 16% vs 42%, US 10% vs 30% of past Top-10 picks).', render: (r) => fmtDays(r.target1_estimated_days) },
   { key: 'risk_reward_t1', label: 'R:R T1', num: true, title: 'Reward to Target 1 divided by risk to the stop. Gate: < 1.5 — a stop that is tiny next to the target was hit first 20–50% of the time in every measured slice.', render: (r) => fmt(r.risk_reward_t1, 2) },
@@ -969,6 +970,14 @@ function signalsCell(r) {
   // ordinary) — showing a hit % there would contradict the order.
   const tail = m.noRate ? 'avoid' : `${pct(r.tier_hit_pct)} hit`;
   return `<span class="setup-badge ${m.cls}" title="${esc(tip)}">${t} · ${esc(m.label)} · ${tail}</span>`;
+}
+// Exit rule C (2026-09-19, docs/SWAP-ENGINE-PLAN.md phase 5): breakeven trigger with the
+// market's measured rates from v_scanner_top (be_rule_*), refreshed weekly by workflow 16.
+function breakevenCell(r) {
+  if (r.breakeven_trigger === null || r.breakeven_trigger === undefined) return '—';
+  const pct = (v) => (v === null || v === undefined || v === '') ? '?' : `${Number(v).toFixed(0)}%`;
+  const tip = r.be_rule_n ? `With the stop moved to entry at this level, past picks here: ${pct(r.be_rule_hit_pct)} reached TP1, ${pct(r.be_rule_breakeven_pct)} exited flat at entry, ${pct(r.be_rule_stop_pct)} were stopped (n=${r.be_rule_n}). Base rates, not a forecast.` : 'Measured rates not yet available.';
+  return `<span title="${esc(tip)}">${fmt(r.breakeven_trigger)}</span>`;
 }
 function rankBadge(n) {
   if (n === null || n === undefined) return '—';
