@@ -76,3 +76,10 @@ beyond dividends.
   so a freed slot now takes tier 1 first. Phase 4b (swap OUT of a held
   position when a better-tier candidate appears, edge > 2 round trips) is
   next.
+- 2026-09-19 — Phase 4b: remaining-expectancy table by tier × day held
+  (holdout+LIVE); swap-policy portfolio sim (52 swaps, +1.87% new vs −0.14%
+  replaced; path effects dominate the compounded totals → not quoted). My
+  Slots "Suggested actions": exit open caution positions, swap open standard
+  positions into unplaced tier-1 picks (edge ≈ +1.5% after 0.8% cost).
+  Advisory only. Phase 4 COMPLETE. Next: market-score per-year audit
+  (phase 6 prerequisite), rule-C exit as parallel wf16 outcome (phase 5).

@@ -346,6 +346,25 @@ restart: plain Top 10 3.30M → breakout-first 5.70M → breakout-first + skip
 caution 6.08M (index 4.96M); 2021–2024 in-sample for the tier-1 rule,
 2025–26 out of sample (+79% vs +53%, +52% vs +43%).
 
+### Swap advisor (phase 4b, 2026-09-19)
+
+My Slots shows two kinds of suggested action, both advisory, EGX only:
+
+- **Exit** an open caution (tier 4) position after its first session. Measured
+  remaining return of open caution positions (2025–26): −2.5% after day 1,
+  −4.1% after day 2, −6.2% after day 3 (n = 75 / 51 / 37).
+- **Swap** an open standard (tier 3) position for an unplaced tier-1 pick when
+  no slot is free. Basis: a new tier-1 pick returns +2.76% over its window
+  (n = 387); an open tier 1–3 position returns only +0.1..+1.0% over the rest
+  of its window (we use +0.5); two round trips cost 0.8%. Edge ≈ +1.5%. In
+  the six-year portfolio simulation the rule fired 52 times: the replaced
+  positions were sold at +0.16% (they would have finished at −0.14%) and the
+  tier-1 picks earned +1.87%. Roughly nine events a year, so about +2% a year
+  for a ten-slot portfolio — real but modest. The much larger compounded
+  differences the simulation shows between swap and no-swap variants are
+  path effects (a swap changes every later slot assignment), not the swap
+  edge, and are not quoted. Nothing is executed automatically.
+
 ## Expected value (`expected_value_pct`)
 
 `EV = P(T1) × gain_to_T1 − P(stop) × risk_to_stop`, all in % of entry,

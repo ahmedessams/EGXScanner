@@ -328,6 +328,7 @@
   .slot-status-tp { color: var(--pos, #1a7f37); font-weight: 600; }
   .slot-status-sl { color: var(--neg, #b42318); font-weight: 600; }
   .slot-status-end { color: var(--accent); font-weight: 600; }
+  .slot-advice { margin: 6px 0 4px 18px; padding: 0; } .slot-advice li { margin: 3px 0; font-weight: 500; }
 
   /* Chart tab (2026-09-11): candlestick chart with OHLC readout + period table. */
   .chart-panel { padding: 12px 14px; margin-top: 8px; }
@@ -2004,10 +2005,39 @@ async function checkSlotStatuses() {
         const row = rows.find((r) => r.symbol === p.symbol);
         const st = slotStatusFromRow(p, row);
         p.status = st.status; p.statusText = st.text; p.checkedAt = new Date().toISOString();
+        if (row) { p.tier = Number(row.pick_tier) || null; p.daysHeld = Number(row.window_sessions_elapsed) || 0; }
       } catch (e) { p.statusText = 'status check failed: ' + e.message; }
     }
     slotsSave(); renderSlots();
   } finally { slotsChecking = false; }
+}
+// Swap advisor (2026-09-19, docs/SWAP-ENGINE-PLAN.md phase 4b). Measured on EGX Top-10
+// picks 2025-26 (holdout + live), remaining return over the rest of the window given the
+// position is still open after its first session: tier 1-3 held +0.1..+1.0% (use +0.5),
+// caution (tier 4) held -2.5% and worsening; a NEW tier-1 pick +2.76% (n=387). Two round
+// trips = 0.8%. Swap edge = 2.76 - 0.5 - 0.8 = +1.5%. In the 6-year portfolio sim the 52
+// swaps this rule produced earned +1.87% each vs -0.14% for the positions they replaced.
+// Small sample, so it is an advisory with its basis shown, never automatic. EGX only.
+const SWAP_RULE = { newTier1Pct: 2.76, heldRemainingPct: 0.5, cautionRemainingPct: -2.5, costPct: 0.8, market: 'EGX' };
+function swapAdvice(positions, candidates, free) {
+  if (state.marketCode !== SWAP_RULE.market) return [];
+  const out = [];
+  for (const p of positions) {
+    if (p.status === 'open' && p.tier === 4 && (p.daysHeld || 0) >= 1) {
+      out.push({ kind: 'exit', p, text: `Exit <b>${esc(p.symbol)}</b> (caution pick, day ${p.daysHeld}) — positions like this lose about ${Math.abs(SWAP_RULE.cautionRemainingPct).toFixed(1)}% more from here on average and it gets worse each day.` });
+    }
+  }
+  if (free > 0) return out; // a free slot takes the tier-1 pick directly; no swap needed
+  const held = new Set(positions.map((p) => p.symbol));
+  const t1 = candidates.filter((r) => Number(r.pick_tier) === 1 && !held.has(r.symbol)).sort((a, b) => a.overall_rank - b.overall_rank);
+  const victims = positions.filter((p) => p.status === 'open' && (p.tier || 3) >= 3 && (p.daysHeld || 0) >= 1 && !out.some((o) => o.p === p))
+    .sort((a, b) => ((b.tier || 3) - (a.tier || 3)) || ((b.daysHeld || 0) - (a.daysHeld || 0)));
+  const edge = SWAP_RULE.newTier1Pct - SWAP_RULE.heldRemainingPct - SWAP_RULE.costPct;
+  for (let i = 0; i < Math.min(t1.length, victims.length); i++) {
+    const v = victims[i], c = t1[i];
+    out.push({ kind: 'swap', p: v, c, text: `Swap: sell <b>${esc(v.symbol)}</b> (${v.tier === 4 ? 'caution' : 'standard'}, day ${v.daysHeld}) at the close → buy <b>${esc(c.symbol)}</b> (breakout close, #${esc(String(c.overall_rank ?? ''))}) at the open. Expected about +${edge.toFixed(1)}% after two round trips.` });
+  }
+  return out;
 }
 function renderSlots() {
   const card = document.getElementById('slotsCard'); if (!card) return;
@@ -2017,7 +2047,11 @@ function renderSlots() {
   document.getElementById('slotsN').value = slots.n;
   document.getElementById('slotsSummary').textContent = `${state.marketCode}: ${positions.length} position${positions.length === 1 ? '' : 's'}, ${busy} open, ${free} free`;
   const held = new Set(positions.map((p) => p.symbol));
-  const candidates = (state.tab === 'top' || state.tab === 'top-picks') ? state.rows.filter((r) => !held.has(r.symbol)).slice(0, free) : [];
+  const tableRows = (state.tab === 'top' || state.tab === 'top-picks') ? state.rows : [];
+  const candidates = tableRows.filter((r) => !held.has(r.symbol)).slice(0, free);
+  const advice = swapAdvice(positions, tableRows, free);
+  const adviceHtml = advice.length ? `<div><b>Suggested actions</b><ul class="slot-advice">` + advice.map((a) => `<li class="${a.kind === 'exit' ? 'slot-status-sl' : 'slot-status-end'}">${a.text}</li>`).join('') +
+    `</ul><div class="muted">Measured base rates on past picks (2025–2026), not a forecast for these stocks. You decide.</div></div>` : '';
   const cls = (st) => ({ tp: 'slot-status-tp', sl: 'slot-status-sl', end: 'slot-status-end' }[st] || 'slot-status-open');
   const posHtml = positions.length ? `<table><thead><tr><th>Stock</th><th>Scan</th><th class="num">Entry</th><th class="num">TP</th><th class="num">SL</th><th>Status</th><th></th></tr></thead><tbody>` +
     positions.map((p) => { const i = slots.positions.indexOf(p); return `<tr><td><b>${esc(p.symbol)}</b></td><td>${esc(p.scanDate || '')}</td><td class="num">${fmt(p.entry)}</td><td class="num">${fmt(p.target1)}</td><td class="num">${fmt(p.stop)}</td><td class="${cls(p.status)}">${esc(p.statusText || '')}</td><td><button class="slot-close" data-idx="${i}" type="button" title="Remove from My Slots">${p.status === 'open' ? 'Close' : 'Done'}</button></td></tr>`; }).join('') +
@@ -2026,7 +2060,7 @@ function renderSlots() {
     : (candidates.length ? `<div class="muted">Next picks for the ${free} free slot${free === 1 ? '' : 's'} (top-ranked on this table, not already held):</div><table><tbody>` +
       candidates.map((r) => `<tr><td><b>${esc(r.symbol)}</b> #${esc(String(r.overall_rank ?? ''))}</td><td class="num">entry ${fmt(r.entry_price)}</td><td class="num">TP ${fmt(r.target1)} (${gainCell(r.target1_gain_pct)})</td><td class="num">SL ${fmt(r.invalidation_price)}</td><td>${fmtDays(r.target1_estimated_days)}</td><td><button class="slot-suggest" data-symbol="${esc(r.symbol)}" type="button">+ slot</button></td></tr>`).join('') + `</tbody></table>`
       : `<div class="muted">${free} free slot${free === 1 ? '' : 's'}. Open the Top 10 or Top 3 tab to see today's candidates.</div>`);
-  document.getElementById('slotsBody').innerHTML = `<div><b>Positions</b>${posHtml}</div><div><b>Free slots</b>${sugHtml}</div>`;
+  document.getElementById('slotsBody').innerHTML = `<div><b>Positions</b>${posHtml}</div>${adviceHtml}<div><b>Free slots</b>${sugHtml}</div>`;
 }
 document.addEventListener('click', (ev) => {
   const add = ev.target.closest('.slot-btn, .slot-suggest');
