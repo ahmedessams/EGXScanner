@@ -1267,7 +1267,9 @@ function resetColumnsForTab() {
 // Trade Ideas tables show only what decides the trade — pick order, symbol,
 // entry, target, stop, days, EV net. Everything else is still one tap away in
 // the Columns menu, which overrides this when the user has customised columns.
-const PHONE_COLUMN_KEYS = new Set(['_detail', '_slot', 'signals', 'symbol', 'entry_price', 'target1', 'target1_gain_pct', 'invalidation_price', 'target1_estimated_days', 'expected_value_net_pct']);
+const PHONE_COLUMN_KEYS = new Set(['_detail', '_slot', 'signals', 'symbol', 'entry_price', 'target1', 'target1_gain_pct', 'invalidation_price', 'target1_estimated_days', 'expected_value_net_pct',
+  // Result columns (what actually happened inside the window) stay on the phone too.
+  'actual_window_high', 'actual_window_low', 'window_outcome']);
 function isPhone() { return typeof window !== 'undefined' && window.innerWidth <= 700; }
 function visibleColumnsForTab() {
   const hidden = hiddenSetForTab();
