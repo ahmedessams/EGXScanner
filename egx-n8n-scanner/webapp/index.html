@@ -177,6 +177,15 @@
   tbody tr:hover { background: var(--bg-inset); cursor: pointer; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .table-scroll { overflow-x: auto; border-radius: var(--radius); }
+  /* Phone (2026-09-20): tighter cells so entry / TP / SL fit without scrolling;
+     the column set itself is trimmed in phoneColumnKeys(). */
+  @media (max-width: 700px) {
+    main { padding: 10px; }
+    thead th, tbody td { padding: 7px 6px; font-size: 12px; }
+    .setup-badge { font-size: 10px; padding: 1px 5px; }
+    .rank-badge { width: 20px; height: 20px; font-size: 10px; }
+    #slotsCard table td, #slotsCard table th { padding: 6px 4px; font-size: 12px; }
+  }
 
   .detail-btn {
     display: inline-flex; align-items: center; justify-content: center;
@@ -540,7 +549,7 @@ const TABS = [
 const RANKED_COLUMNS = [
   DETAIL_BUTTON_COLUMN,
   SLOT_BUTTON_COLUMN,
-  { key: 'overall_rank', label: '#', render: (r) => rankBadge(r.overall_rank) },
+  { key: 'overall_rank', label: '#', render: (r) => rankBadge(r.overall_rank, r) },
   { key: 'signals', label: 'Pick order', title: 'Why this row sits where it does. Rows are ordered by pick quality tier (1 breakout close, 2 volume + extended, 3 standard, 4 caution) and then by score; each tier shows its own measured hit rate. Separate from the Score.', render: (r) => signalsCell(r) },
   { key: 'symbol', label: 'Symbol', render: (r) => symbolCell(r) },
   { key: 'name', label: 'Name', render: (r) => `<span style="color:var(--text-muted)">${esc(r.name || '')}</span>` },
@@ -606,7 +615,7 @@ const RANKED_COLUMNS = [
 const TOP_PICKS_COLUMNS = [
   DETAIL_BUTTON_COLUMN,
   SLOT_BUTTON_COLUMN,
-  { key: 'overall_rank', label: '#', render: (r) => rankBadge(r.overall_rank) },
+  { key: 'overall_rank', label: '#', render: (r) => rankBadge(r.overall_rank, r) },
   { key: 'signals', label: 'Pick order', title: 'Why this row sits where it does. Rows are ordered by pick quality tier (1 breakout close, 2 volume + extended, 3 standard, 4 caution) and then by score; each tier shows its own measured hit rate. Separate from the Score.', render: (r) => signalsCell(r) },
   { key: 'symbol', label: 'Symbol', render: (r) => symbolCell(r) },
   { key: 'name', label: 'Name', render: (r) => `<span style="color:var(--text-muted)">${esc(r.name || '')}</span>` },
@@ -979,9 +988,16 @@ function breakevenCell(r) {
   const tip = r.be_rule_n ? `With the stop moved to entry at this level, past picks here: ${pct(r.be_rule_hit_pct)} reached TP1, ${pct(r.be_rule_breakeven_pct)} exited flat at entry, ${pct(r.be_rule_stop_pct)} were stopped (n=${r.be_rule_n}). Base rates, not a forecast.` : 'Measured rates not yet available.';
   return `<span title="${esc(tip)}">${fmt(r.breakeven_trigger)}</span>`;
 }
-function rankBadge(n) {
-  if (n === null || n === undefined) return '—';
-  return `<span class="rank-badge ${n <= 3 ? 'top3' : ''}">${n}</span>`;
+function rankBadge(n, r) {
+  // Pick order first (the position a non-expert should read), score rank as the
+  // reason in the tooltip. /top returns accuracy_rank; other tables fall back to
+  // the row's position in the loaded order (which the API already tier-sorts).
+  const order = r && r.accuracy_rank != null ? Number(r.accuracy_rank)
+    : (r && Array.isArray(state.rows) ? state.rows.indexOf(r) + 1 : null);
+  const shown = order || n;
+  if (shown === null || shown === undefined) return '—';
+  const tip = order && n != null && order !== Number(n) ? `Pick order ${order} · score rank ${n}` : `Pick order ${shown}`;
+  return `<span class="rank-badge ${shown <= 3 ? 'top3' : ''}" title="${esc(tip)}">${shown}</span>`;
 }
 function regimeLabel(r) { return (r || 'UNKNOWN').replace(/_/g, ' '); }
 // Ichimoku signal reuses the regime pill colours (same five-state vocabulary).
@@ -1239,10 +1255,23 @@ function resetColumnsForTab() {
   renderTable();
 }
 
+// Phone view (2026-09-20, "UI for dummies"): on a narrow screen the Top 10 and
+// Trade Ideas tables show only what decides the trade — pick order, symbol,
+// entry, target, stop, days, EV net. Everything else is still one tap away in
+// the Columns menu, which overrides this when the user has customised columns.
+const PHONE_COLUMN_KEYS = new Set(['_detail', '_slot', 'signals', 'symbol', 'entry_price', 'target1', 'target1_gain_pct', 'invalidation_price', 'target1_estimated_days', 'expected_value_net_pct']);
+function isPhone() { return typeof window !== 'undefined' && window.innerWidth <= 700; }
 function visibleColumnsForTab() {
   const hidden = hiddenSetForTab();
-  return columnsForTab().filter((c) => PINNED_COLUMN_KEYS.has(c.key) || !hidden.has(c.key));
+  const cols = columnsForTab().filter((c) => PINNED_COLUMN_KEYS.has(c.key) || !hidden.has(c.key));
+  const customised = Array.isArray(state.hiddenColumns[state.tab]);
+  if (isPhone() && !customised && (state.tab === 'top' || state.tab === 'top-picks')) {
+    return cols.filter((c) => PHONE_COLUMN_KEYS.has(c.key));
+  }
+  return cols;
 }
+let phoneResizeTimer = null;
+window.addEventListener('resize', () => { clearTimeout(phoneResizeTimer); phoneResizeTimer = setTimeout(() => { if (state.rows && state.rows.length) renderTable(); }, 200); });
 
 function saveHiddenColumns() {
   localStorage.setItem('egx_hidden_columns_v2', JSON.stringify(state.hiddenColumns));
@@ -2067,7 +2096,7 @@ function renderSlots() {
     `</tbody></table>` : `<div class="muted">No positions yet. Use "+ slot" on a row of the Top 10 or Top 3 tables.</div>`;
   const sugHtml = free === 0 ? `<div class="muted">All ${slots.n} slots are in use. Check status to see which have closed.</div>`
     : (candidates.length ? `<div class="muted">Next picks for the ${free} free slot${free === 1 ? '' : 's'} (top-ranked on this table, not already held):</div><table><tbody>` +
-      candidates.map((r) => `<tr><td><b>${esc(r.symbol)}</b> #${esc(String(r.overall_rank ?? ''))}</td><td class="num">entry ${fmt(r.entry_price)}</td><td class="num">TP ${fmt(r.target1)} (${gainCell(r.target1_gain_pct)})</td><td class="num">SL ${fmt(r.invalidation_price)}</td><td>${fmtDays(r.target1_estimated_days)}</td><td><button class="slot-suggest" data-symbol="${esc(r.symbol)}" type="button">+ slot</button></td></tr>`).join('') + `</tbody></table>`
+      candidates.map((r) => `<tr><td><b>${esc(r.symbol)}</b> <span class="muted">#${esc(String(r.accuracy_rank ?? (state.rows.indexOf(r) + 1)))}</span></td><td class="num">entry ${fmt(r.entry_price)}</td><td class="num">TP ${fmt(r.target1)} (${gainCell(r.target1_gain_pct)})</td><td class="num">SL ${fmt(r.invalidation_price)}</td><td>${fmtDays(r.target1_estimated_days)}</td><td><button class="slot-suggest" data-symbol="${esc(r.symbol)}" type="button">+ slot</button></td></tr>`).join('') + `</tbody></table>`
       : `<div class="muted">${free} free slot${free === 1 ? '' : 's'}. Open the Top 10 or Top 3 tab to see today's candidates.</div>`);
   document.getElementById('slotsBody').innerHTML = `<div><b>Positions</b>${posHtml}</div>${adviceHtml}<div><b>Free slots</b>${sugHtml}</div>`;
 }
