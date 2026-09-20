@@ -175,6 +175,14 @@
   tbody td { padding: 9px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
   tbody tr:last-child td { border-bottom: none; }
   tbody tr:hover { background: var(--bg-inset); cursor: pointer; }
+  /* Evaluated outcome tint for past-date rows (2026-09-20): success green, stop red,
+     expired grey. Applies to every ranked table. */
+  tbody tr.row-hit td { background: var(--green-weak); }
+  tbody tr.row-hit td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+  tbody tr.row-stop td { background: var(--red-weak); }
+  tbody tr.row-stop td:first-child { box-shadow: inset 3px 0 0 var(--red); }
+  tbody tr.row-expired td { background: var(--bg-inset); opacity: 0.85; }
+  tbody tr.row-hit:hover td, tbody tr.row-stop:hover td { filter: brightness(0.96); }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .table-scroll { overflow-x: auto; border-radius: var(--radius); }
   /* Phone (2026-09-20): tighter cells so entry / TP / SL fit without scrolling;
@@ -1396,7 +1404,12 @@ function renderTable() {
   empty.style.display = 'none';
   body.innerHTML = rows.map((r) => {
     const cells = cols.map((c) => `<td class="${c.num ? 'num' : ''}">${c.render(r)}</td>`).join('');
-    return `<tr data-symbol="${esc(r.symbol)}">${cells}</tr>`;
+    // Past-date rows carry their evaluated result: tint the whole row so a
+    // glance at any earlier scan shows which estimates succeeded (green) and
+    // which were stopped (red). Expired windows are grey; unresolved rows plain.
+    const oc = r.window_outcome === 'TARGET1_HIT' ? ' row-hit' : r.window_outcome === 'STOP_HIT' ? ' row-stop' : r.window_outcome === 'EXPIRED_NO_HIT' ? ' row-expired' : '';
+    const ocTitle = oc === ' row-hit' ? 'Target reached' : oc === ' row-stop' ? 'Stopped out' : oc === ' row-expired' ? 'Window ended without reaching target or stop' : '';
+    return `<tr class="${oc.trim()}" data-symbol="${esc(r.symbol)}"${ocTitle ? ` title="${ocTitle}"` : ''}>${cells}</tr>`;
   }).join('');
 
   body.querySelectorAll('tr').forEach((tr) => {
